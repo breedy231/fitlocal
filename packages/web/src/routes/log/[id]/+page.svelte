@@ -3,6 +3,9 @@
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
+  import ExerciseDetail from '$lib/ExerciseDetail.svelte';
+
+  let detailExerciseId: number | null = $state(null);
 
   interface SetData {
     id: number;
@@ -137,7 +140,12 @@
             onclick={() => ex.expanded = !ex.expanded}
             class="w-full text-left p-4 flex justify-between items-center"
           >
-            <span class="font-medium">{ex.exercise?.name ?? 'Exercise'}</span>
+            <span class="font-medium">
+              <button
+                onclick={(e) => { e.stopPropagation(); detailExerciseId = ex.exerciseId; }}
+                class="underline decoration-neutral-600 underline-offset-2 hover:text-green-400 transition-colors"
+              >{ex.exercise?.name ?? 'Exercise'}</button>
+            </span>
             <svg class="w-5 h-5 text-neutral-500 transition-transform {ex.expanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
             </svg>
@@ -218,4 +226,6 @@
       <a href="/log" class="text-green-400 mt-2 inline-block">← Back</a>
     </div>
   {/if}
+
+  <ExerciseDetail bind:exerciseId={detailExerciseId} />
 </div>

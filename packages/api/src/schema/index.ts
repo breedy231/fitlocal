@@ -15,6 +15,9 @@ export const exercises = sqliteTable('exercises', {
   secondaryMuscles: text('secondary_muscles', { mode: 'json' }).$type<string[]>().default(sql`'[]'`),
   equipment: text('equipment', { mode: 'json' }).$type<string[]>().default(sql`'[]'`),
   movementType: text('movement_type'),
+  description: text('description'),
+  imageUrl: text('image_url'),
+  wgerId: integer('wger_id'),
 });
 
 export const workoutExercises = sqliteTable('workout_exercises', {
