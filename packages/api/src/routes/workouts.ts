@@ -55,4 +55,17 @@ export async function workoutRoutes(app: FastifyInstance) {
     db.delete(schema.workouts).where(eq(schema.workouts.id, id)).run();
     return reply.status(204).send();
   });
+
+  // Create workout_exercise (link exercise to workout)
+  app.post<{
+    Body: { workoutId: number; exerciseId: number; displayOrder?: number };
+  }>('/workout-exercises', async (req, reply) => {
+    const { workoutId, exerciseId, displayOrder = 0 } = req.body;
+    const result = db
+      .insert(schema.workoutExercises)
+      .values({ workoutId, exerciseId, displayOrder })
+      .returning()
+      .get();
+    return reply.status(201).send(result);
+  });
 }
