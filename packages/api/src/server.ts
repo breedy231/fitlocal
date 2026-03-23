@@ -14,7 +14,7 @@ await import('./migrate.js');
 const app = Fastify({ logger: true });
 
 await app.register(cors, {
-  origin: ['http://localhost:5173', 'http://localhost:4173'],
+  origin: true, // allow all origins for local network use
 });
 
 // Parse plain text bodies for CSV import

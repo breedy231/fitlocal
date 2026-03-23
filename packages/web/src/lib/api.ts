@@ -1,4 +1,6 @@
-const API_BASE = 'http://localhost:3001';
+const API_BASE = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+  ? `http://${window.location.hostname}:3001`
+  : 'http://localhost:3001';
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {

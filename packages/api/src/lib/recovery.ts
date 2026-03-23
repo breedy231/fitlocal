@@ -18,6 +18,7 @@ const MUSCLE_KEYWORDS: Record<string, RegExp> = {
   hamstrings: /deadlift|hamstring.?curl|rdl|romanian|stiff.?leg/i,
   glutes: /hip.?thrust|glute|hip.?extension|cable.?pull.?through/i,
   calves: /calf|standing.?calf/i,
+  core: /crunch|plank|dead.?bug|windshield.?wiper|russian.?twist|toe.?toucher|vertical.?knee.?raise|abs/i,
 };
 
 export function getMusclesForExercise(exerciseName: string): string[] {

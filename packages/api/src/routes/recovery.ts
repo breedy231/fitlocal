@@ -4,7 +4,7 @@ import { computeMuscleRecovery } from '../lib/recovery.js';
 
 const MUSCLE_GROUPS = [
   'chest', 'shoulders', 'triceps', 'back', 'biceps',
-  'quads', 'hamstrings', 'glutes', 'calves',
+  'quads', 'hamstrings', 'glutes', 'calves', 'core',
 ];
 
 export async function recoveryRoutes(app: FastifyInstance) {

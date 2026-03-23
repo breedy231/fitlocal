@@ -9,6 +9,9 @@
     suggestedReps: number;
     suggestedWeightKg: number;
     lastPerformedDaysAgo: number;
+    isFocus: boolean;
+    isCardio: boolean;
+    suggestedDurationSec?: number;
   }
 
   interface GeneratedWorkout {
@@ -30,6 +33,11 @@
   function kgToLbs(kg: number): string {
     const lbs = kg * 2.20462;
     return String(Math.round(lbs / 2.5) * 2.5);
+  }
+
+  function formatDuration(sec: number): string {
+    const min = Math.round(sec / 60);
+    return `${min} min`;
   }
 
   async function generate() {
@@ -110,7 +118,7 @@
 
   <!-- Day Type Buttons -->
   <div class="grid grid-cols-3 gap-3 mb-6">
-    {#each [['push', '💪 Push'], ['pull', '🔙 Pull'], ['legs', '🦵 Legs']] as [type, label]}
+    {#each [['upper', 'Upper'], ['lower', 'Lower'], ['fullbody', 'Full Body']] as [type, label]}
       <button
         onclick={() => selectDay(type)}
         class="py-4 rounded-xl text-center font-semibold transition-all min-h-[48px]
@@ -145,12 +153,21 @@
 
     <div class="space-y-3 mb-6">
       {#each workout.exercises as ex}
-        <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
+        <div class="rounded-xl p-4 relative" style="background-color: #1a1a1a;">
+          {#if ex.isFocus}
+            <span class="absolute top-3 right-3 text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #f59e0b20; color: #f59e0b;">
+              FOCUS EXERCISE
+            </span>
+          {/if}
           <div class="font-medium mb-1">{ex.name}</div>
           <div class="text-sm text-neutral-400">
-            {ex.suggestedSets} × {ex.suggestedReps}
-            {#if ex.suggestedWeightKg > 0}
-              @ {kgToLbs(ex.suggestedWeightKg)} lbs
+            {#if ex.isCardio && ex.suggestedDurationSec}
+              {formatDuration(ex.suggestedDurationSec)}
+            {:else}
+              {ex.suggestedSets} × {ex.suggestedReps}
+              {#if ex.suggestedWeightKg > 0}
+                @ {kgToLbs(ex.suggestedWeightKg)} lbs
+              {/if}
             {/if}
           </div>
           <div class="text-xs text-neutral-600 mt-1">

@@ -3,14 +3,22 @@ import { db } from '../db.js';
 import { generateWorkout } from '../lib/generator.js';
 import { getMFPNutrition } from '../lib/mfp.js';
 
+const DAY_TYPE_ALIASES: Record<string, string> = {
+  push: 'upper',
+  pull: 'upper',
+  legs: 'lower',
+};
+
 export async function generateRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { dayType: string; equipment?: string } }>(
     '/generate-workout',
     async (req, reply) => {
-      const { dayType, equipment = 'full' } = req.query;
+      let { dayType, equipment = 'full' } = req.query;
       if (!dayType) {
-        return reply.status(400).send({ error: 'dayType query param required (push, pull, or legs)' });
+        return reply.status(400).send({ error: 'dayType query param required (upper, lower, or fullbody)' });
       }
+      // Map legacy day types
+      dayType = DAY_TYPE_ALIASES[dayType] ?? dayType;
       try {
         const workout = generateWorkout(dayType, equipment, db);
 
