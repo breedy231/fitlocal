@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, '../fitlocal.db');
+const dbPath = path.join(__dirname, '../../../fitlocal.db');
 const db = new Database(dbPath);
 
 const exercises = db.prepare('SELECT id, name, wger_id FROM exercises WHERE wger_id IS NOT NULL').all() as any[];
