@@ -31,6 +31,7 @@ export const sets = sqliteTable('sets', {
   weightKg: real('weight_kg'),
   isWarmup: integer('is_warmup', { mode: 'boolean' }).default(false),
   rpe: real('rpe'),
+  multiplier: real('multiplier').default(1.0),
 });
 
 export const muscleGroups = sqliteTable('muscle_groups', {

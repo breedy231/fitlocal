@@ -34,7 +34,8 @@ sqlite.exec(`
     reps INTEGER,
     weight_kg REAL,
     is_warmup INTEGER DEFAULT 0,
-    rpe REAL
+    rpe REAL,
+    multiplier REAL DEFAULT 1.0
   );
 
   CREATE TABLE IF NOT EXISTS muscle_groups (
@@ -58,6 +59,13 @@ sqlite.exec(`
     protein_g REAL
   );
 `);
+
+// Add multiplier column if not present (Phase 2 migration)
+try {
+  sqlite.exec(`ALTER TABLE sets ADD COLUMN multiplier REAL DEFAULT 1.0`);
+} catch {
+  // Column already exists
+}
 
 console.log('Database migrated successfully');
 sqlite.close();
