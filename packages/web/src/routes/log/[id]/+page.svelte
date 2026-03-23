@@ -2,7 +2,7 @@
   import { page } from '$app/stores';
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import ExerciseDetail from '$lib/ExerciseDetail.svelte';
 
   let detailExerciseId: number | null = $state(null);
@@ -18,8 +18,9 @@
   interface WorkoutExercise {
     id: number;
     exerciseId: number;
-    exercise: { id: number; name: string };
+    exercise: { id: number; name: string; primaryMuscles?: string[] };
     sets: SetData[];
+    restSeconds?: number;
     expanded?: boolean;
   }
 
@@ -30,9 +31,30 @@
     exercises: WorkoutExercise[];
   }
 
+  interface StretchData {
+    name: string;
+    muscles: string[];
+    duration: number;
+    instructions: string;
+  }
+
   let workout: Workout | null = $state(null);
   let loading = $state(true);
   let finishing = $state(false);
+
+  // Rest timer state
+  let restTimeLeft = $state(0);
+  let restTimerActive = $state(false);
+  let restTimerInterval: ReturnType<typeof setInterval> | null = null;
+  let hasVibrated10s = false;
+
+  // Cool-down state
+  let showCoolDown = $state(false);
+  let stretches: StretchData[] = $state([]);
+  let activeStretchIndex = $state(0);
+  let stretchTimeLeft = $state(0);
+  let stretchTimerActive = $state(false);
+  let stretchTimerInterval: ReturnType<typeof setInterval> | null = null;
 
   const KG_TO_LBS = 2.20462;
 
@@ -49,7 +71,6 @@
     try {
       const id = $page.params.id;
       workout = await api<Workout>(`/workouts/${id}`);
-      // Initialize UI state
       if (workout?.exercises) {
         for (const ex of workout.exercises) {
           ex.expanded = true;
@@ -65,6 +86,11 @@
     }
   });
 
+  onDestroy(() => {
+    if (restTimerInterval) clearInterval(restTimerInterval);
+    if (stretchTimerInterval) clearInterval(stretchTimerInterval);
+  });
+
   function adjustReps(set: SetData, delta: number) {
     set.reps = Math.max(0, (set.reps ?? 0) + delta);
   }
@@ -74,8 +100,46 @@
     set.weightKg = lbsToKg(lbs);
   }
 
-  function toggleComplete(set: SetData) {
+  function toggleComplete(set: SetData, ex: WorkoutExercise) {
     set.completed = !set.completed;
+    // Start rest timer when completing a set
+    if (set.completed && ex.restSeconds && ex.restSeconds > 0) {
+      startRestTimer(ex.restSeconds);
+    }
+  }
+
+  function startRestTimer(seconds: number) {
+    if (restTimerInterval) clearInterval(restTimerInterval);
+    restTimeLeft = seconds;
+    restTimerActive = true;
+    hasVibrated10s = false;
+    restTimerInterval = setInterval(() => {
+      restTimeLeft--;
+      if (restTimeLeft === 10 && !hasVibrated10s) {
+        hasVibrated10s = true;
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate([200, 100, 200]);
+        }
+      }
+      if (restTimeLeft <= 0) {
+        dismissRestTimer();
+      }
+    }, 1000);
+  }
+
+  function dismissRestTimer() {
+    restTimerActive = false;
+    restTimeLeft = 0;
+    if (restTimerInterval) {
+      clearInterval(restTimerInterval);
+      restTimerInterval = null;
+    }
+  }
+
+  function formatTime(seconds: number): string {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
   async function addSet(exercise: WorkoutExercise) {
@@ -100,7 +164,6 @@
     if (!workout) return;
     finishing = true;
     try {
-      // Save all set data
       for (const ex of workout.exercises) {
         for (const set of ex.sets) {
           await api(`/sets/${set.id}`, {
@@ -113,12 +176,68 @@
         method: 'PUT',
         body: JSON.stringify({ notes: workout.notes || 'Completed' }),
       });
-      goto('/history');
+
+      // Load stretches for cool-down
+      const muscles = new Set<string>();
+      for (const ex of workout.exercises) {
+        if (ex.exercise.primaryMuscles) {
+          for (const m of ex.exercise.primaryMuscles) muscles.add(m);
+        }
+      }
+      if (muscles.size > 0) {
+        try {
+          stretches = await api<StretchData[]>(`/stretches?muscleGroups=${[...muscles].join(',')}`);
+        } catch {
+          stretches = [];
+        }
+      }
+
+      if (stretches.length > 0) {
+        showCoolDown = true;
+        activeStretchIndex = 0;
+        stretchTimeLeft = stretches[0].duration;
+        stretchTimerActive = false;
+      } else {
+        goto('/history');
+      }
     } catch (e: any) {
       alert('Failed to save workout');
     } finally {
       finishing = false;
     }
+  }
+
+  function startStretchTimer() {
+    if (stretchTimerInterval) clearInterval(stretchTimerInterval);
+    stretchTimerActive = true;
+    stretchTimerInterval = setInterval(() => {
+      stretchTimeLeft--;
+      if (stretchTimeLeft <= 0) {
+        clearInterval(stretchTimerInterval!);
+        stretchTimerInterval = null;
+        stretchTimerActive = false;
+        advanceStretch();
+      }
+    }, 1000);
+  }
+
+  function advanceStretch() {
+    if (stretchTimerInterval) {
+      clearInterval(stretchTimerInterval);
+      stretchTimerInterval = null;
+    }
+    stretchTimerActive = false;
+    if (activeStretchIndex < stretches.length - 1) {
+      activeStretchIndex++;
+      stretchTimeLeft = stretches[activeStretchIndex].duration;
+    } else {
+      goto('/history');
+    }
+  }
+
+  function skipCoolDown() {
+    if (stretchTimerInterval) clearInterval(stretchTimerInterval);
+    goto('/history');
   }
 </script>
 
@@ -126,6 +245,50 @@
   {#if loading}
     <div class="flex justify-center py-12">
       <div class="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  {:else if showCoolDown}
+    <!-- Cool Down Screen -->
+    <div class="py-6">
+      <div class="flex items-center justify-between mb-8">
+        <h1 class="text-2xl font-bold">Cool Down</h1>
+        <button onclick={skipCoolDown} class="text-sm text-neutral-500 hover:text-neutral-300">Skip Cool Down</button>
+      </div>
+
+      <div class="space-y-4">
+        {#each stretches as stretch, idx}
+          <div class="rounded-xl p-5 transition-all {idx === activeStretchIndex ? 'ring-1 ring-green-500/50' : 'opacity-50'}" style="background-color: #1a1a1a;">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="font-semibold text-lg {idx === activeStretchIndex ? 'text-green-400' : 'text-neutral-300'}">{stretch.name}</h3>
+              {#if idx === activeStretchIndex}
+                <span class="text-2xl font-mono font-bold text-green-400">{formatTime(stretchTimeLeft)}</span>
+              {:else if idx < activeStretchIndex}
+                <span class="text-sm text-green-500">Done</span>
+              {:else}
+                <span class="text-sm text-neutral-600">{stretch.duration}s</span>
+              {/if}
+            </div>
+            <p class="text-sm text-neutral-400 mb-3">{stretch.instructions}</p>
+            <div class="flex gap-2 text-xs">
+              {#each stretch.muscles as muscle}
+                <span class="px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">{muscle}</span>
+              {/each}
+            </div>
+            {#if idx === activeStretchIndex}
+              <div class="mt-4 flex gap-3">
+                {#if !stretchTimerActive}
+                  <button onclick={startStretchTimer} class="flex-1 py-2.5 rounded-lg font-medium text-sm" style="background-color: #22c55e; color: #0f0f0f;">
+                    Start
+                  </button>
+                {:else}
+                  <button onclick={advanceStretch} class="flex-1 py-2.5 rounded-lg font-medium text-sm bg-neutral-700 text-neutral-200">
+                    {idx < stretches.length - 1 ? 'Next Stretch' : 'Finish'}
+                  </button>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
     </div>
   {:else if workout}
     <div class="flex items-center justify-between mb-6">
@@ -136,9 +299,8 @@
     <div class="space-y-4 mb-6">
       {#each workout.exercises as ex}
         <div class="rounded-xl overflow-hidden" style="background-color: #1a1a1a;">
-          <button
-            onclick={() => ex.expanded = !ex.expanded}
-            class="w-full text-left p-4 flex justify-between items-center"
+          <div
+            class="w-full text-left p-4 flex justify-between items-center cursor-pointer"
           >
             <span class="font-medium">
               <button
@@ -146,10 +308,15 @@
                 class="underline decoration-neutral-600 underline-offset-2 hover:text-green-400 transition-colors"
               >{ex.exercise?.name ?? 'Exercise'}</button>
             </span>
-            <svg class="w-5 h-5 text-neutral-500 transition-transform {ex.expanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-            </svg>
-          </button>
+            <button
+              onclick={() => ex.expanded = !ex.expanded}
+              class="p-1"
+            >
+              <svg class="w-5 h-5 text-neutral-500 transition-transform {ex.expanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </button>
+          </div>
 
           {#if ex.expanded}
             <div class="px-4 pb-4 space-y-2">
@@ -189,7 +356,7 @@
 
                   <!-- Checkmark -->
                   <button
-                    onclick={() => toggleComplete(set)}
+                    onclick={() => toggleComplete(set, ex)}
                     class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors
                       {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
                   >
@@ -229,3 +396,19 @@
 
   <ExerciseDetail bind:exerciseId={detailExerciseId} />
 </div>
+
+<!-- Rest Timer Bottom Sheet -->
+{#if restTimerActive}
+  <div class="fixed inset-0 z-50 flex items-end justify-center" style="background-color: rgba(0,0,0,0.5);">
+    <div class="w-full max-w-lg rounded-t-2xl p-6 pb-10 text-center" style="background-color: #1a1a1a;">
+      <p class="text-sm text-neutral-400 uppercase tracking-wider mb-2">Rest</p>
+      <p class="text-6xl font-mono font-bold text-white mb-6">{formatTime(restTimeLeft)}</p>
+      <button
+        onclick={dismissRestTimer}
+        class="px-8 py-3 rounded-xl font-medium text-sm bg-neutral-700 text-neutral-200 hover:bg-neutral-600 transition-colors"
+      >
+        Skip Rest
+      </button>
+    </div>
+  </div>
+{/if}
