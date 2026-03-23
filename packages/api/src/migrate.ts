@@ -76,5 +76,29 @@ for (const col of [
   try { sqlite.exec(col); } catch { /* Column already exists */ }
 }
 
+// Add rest_seconds column (rest timer feature)
+try { sqlite.exec('ALTER TABLE exercises ADD COLUMN rest_seconds INTEGER DEFAULT 60'); } catch { /* exists */ }
+
+// Set rest_seconds defaults by exercise type
+sqlite.exec(`
+  UPDATE exercises SET rest_seconds = 120
+  WHERE lower(name) GLOB '*squat*' OR lower(name) GLOB '*deadlift*' OR lower(name) GLOB '*bench*'
+    OR lower(name) GLOB '*row*' OR lower(name) GLOB '*pulldown*' OR lower(name) GLOB '*press*'
+    OR lower(name) GLOB '*pull*up*' OR lower(name) GLOB '*chin*up*';
+
+  UPDATE exercises SET rest_seconds = 45
+  WHERE lower(name) GLOB '*crunch*' OR lower(name) GLOB '*plank*' OR lower(name) GLOB '*dead*bug*'
+    OR lower(name) GLOB '*russian*twist*' OR lower(name) GLOB '*windshield*' OR lower(name) GLOB '*knee*raise*'
+    OR lower(name) GLOB '*toe*toucher*';
+
+  UPDATE exercises SET rest_seconds = 0
+  WHERE lower(name) GLOB '*treadmill*' OR lower(name) GLOB '*elliptical*'
+    OR lower(name) GLOB '*cycling*' OR lower(name) GLOB '*rowing*';
+
+  UPDATE exercises SET rest_seconds = 60
+  WHERE lower(name) GLOB '*curl*' OR lower(name) GLOB '*raise*' OR lower(name) GLOB '*extension*'
+    OR lower(name) GLOB '*kickback*' OR lower(name) GLOB '*fly*' OR lower(name) GLOB '*flye*';
+`);
+
 console.log('Database migrated successfully');
 sqlite.close();

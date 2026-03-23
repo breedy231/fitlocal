@@ -24,7 +24,7 @@ export async function workoutRoutes(app: FastifyInstance) {
       wExercises.map(async (we) => {
         const exercise = await db.select().from(schema.exercises).where(eq(schema.exercises.id, we.exerciseId)).get();
         const setsData = await db.select().from(schema.sets).where(eq(schema.sets.workoutExerciseId, we.id));
-        return { ...we, exercise, sets: setsData };
+        return { ...we, exercise, sets: setsData, restSeconds: exercise?.restSeconds ?? 60 };
       })
     );
 

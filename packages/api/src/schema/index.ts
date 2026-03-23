@@ -18,6 +18,7 @@ export const exercises = sqliteTable('exercises', {
   description: text('description'),
   imageUrl: text('image_url'),
   wgerId: integer('wger_id'),
+  restSeconds: integer('rest_seconds').default(60),
 });
 
 export const workoutExercises = sqliteTable('workout_exercises', {

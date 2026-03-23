@@ -35,6 +35,7 @@ const TRAVEL_KEYWORDS = /dumbbell|bodyweight|band|trx|cardio/i;
 interface ExerciseRow {
   id: number;
   name: string;
+  rest_seconds: number | null;
 }
 
 interface LastSetRow {
@@ -56,6 +57,7 @@ export interface GeneratedExercise {
   isFocus: boolean;
   isCardio: boolean;
   suggestedDurationSec?: number;
+  restSeconds: number;
 }
 
 export interface GeneratedWorkout {
@@ -131,7 +133,7 @@ export function generateWorkout(dayType: string, equipment: string, db: DB): Gen
     throw new Error(`Unknown day type: ${dayType}. Use upper, lower, or fullbody.`);
   }
 
-  const allExercises = db.all<ExerciseRow>(sql`SELECT id, name FROM exercises`);
+  const allExercises = db.all<ExerciseRow>(sql`SELECT id, name, rest_seconds FROM exercises`);
 
   // Filter to exercises matching target muscles (excluding core/cardio - those are added separately)
   let candidates = allExercises.filter(e => {
@@ -196,6 +198,7 @@ export function generateWorkout(dayType: string, equipment: string, db: DB): Gen
       lastPerformedDaysAgo: Math.round(e.daysSince * 10) / 10,
       isFocus: false,
       isCardio,
+      restSeconds: e.rest_seconds ?? 60,
       ...(isCardio ? { suggestedDurationSec: 900 } : {}),
     };
   };
