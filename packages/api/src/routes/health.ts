@@ -19,4 +19,22 @@ export async function healthRoutes(app: FastifyInstance) {
     const result = db.insert(schema.healthSnapshots).values(req.body).returning().get();
     return reply.status(201).send(result);
   });
+
+  // iOS Shortcut sync endpoint
+  app.post<{
+    Body: {
+      hrv?: number;
+      restingHr?: number;
+      sleepHours?: number;
+    };
+  }>('/health/sync', async (req, reply) => {
+    const date = new Date().toISOString().split('T')[0];
+    const { hrv, restingHr, sleepHours } = req.body;
+    const result = db
+      .insert(schema.healthSnapshots)
+      .values({ date, hrv, restingHr, sleepHours })
+      .returning()
+      .get();
+    return reply.status(201).send(result);
+  });
 }
