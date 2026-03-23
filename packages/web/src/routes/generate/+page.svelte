@@ -1,6 +1,9 @@
 <script lang="ts">
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
+  import ExerciseDetail from '$lib/ExerciseDetail.svelte';
+
+  let detailExerciseId: number | null = $state(null);
 
   interface GeneratedExercise {
     id: number;
@@ -159,7 +162,10 @@
               FOCUS EXERCISE
             </span>
           {/if}
-          <div class="font-medium mb-1">{ex.name}</div>
+          <button
+            onclick={() => detailExerciseId = ex.id}
+            class="font-medium mb-1 text-left underline decoration-neutral-600 underline-offset-2 hover:text-green-400 transition-colors"
+          >{ex.name}</button>
           <div class="text-sm text-neutral-400">
             {#if ex.isCardio && ex.suggestedDurationSec}
               {formatDuration(ex.suggestedDurationSec)}
@@ -186,4 +192,6 @@
       {starting ? 'Starting...' : 'Start Workout'}
     </button>
   {/if}
+
+  <ExerciseDetail bind:exerciseId={detailExerciseId} />
 </div>

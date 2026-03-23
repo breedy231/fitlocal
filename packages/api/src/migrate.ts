@@ -67,5 +67,14 @@ try {
   // Column already exists
 }
 
+// Add exercise detail columns (exercise detail feature)
+for (const col of [
+  'ALTER TABLE exercises ADD COLUMN description TEXT',
+  'ALTER TABLE exercises ADD COLUMN image_url TEXT',
+  'ALTER TABLE exercises ADD COLUMN wger_id INTEGER',
+]) {
+  try { sqlite.exec(col); } catch { /* Column already exists */ }
+}
+
 console.log('Database migrated successfully');
 sqlite.close();
