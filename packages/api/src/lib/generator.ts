@@ -119,9 +119,10 @@ function getLastSetInfo(exerciseId: number, db: DB): LastSetRow | null {
   const lastSet = db.all<LastSetRow>(sql`
     SELECT s.reps, s.weight_kg FROM sets s
     JOIN workout_exercises we ON s.workout_exercise_id = we.id
+    JOIN workouts w ON we.workout_id = w.id
     WHERE we.exercise_id = ${exerciseId}
       AND s.is_warmup = 0
-    ORDER BY s.id DESC
+    ORDER BY w.date DESC, s.id DESC
     LIMIT 1
   `);
   return lastSet.length > 0 ? lastSet[0] : null;
