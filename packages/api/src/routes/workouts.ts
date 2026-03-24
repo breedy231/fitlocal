@@ -3,9 +3,39 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 
 export async function workoutRoutes(app: FastifyInstance) {
-  // List all workouts
-  app.get('/workouts', async () => {
-    return db.select().from(schema.workouts).orderBy(schema.workouts.date);
+  // List all workouts with exercise/set counts
+  app.get<{ Querystring: { detail?: string } }>('/workouts', async (req) => {
+    const workouts = await db.select().from(schema.workouts).orderBy(schema.workouts.date);
+
+    const enriched = await Promise.all(
+      workouts.map(async (w) => {
+        const wExercises = await db
+          .select()
+          .from(schema.workoutExercises)
+          .where(eq(schema.workoutExercises.workoutId, w.id));
+
+        let setCount = 0;
+        let exerciseNames: string[] = [];
+
+        for (const we of wExercises) {
+          const sets = await db.select().from(schema.sets).where(eq(schema.sets.workoutExerciseId, we.id));
+          setCount += sets.length;
+          if (req.query.detail === 'true') {
+            const ex = await db.select().from(schema.exercises).where(eq(schema.exercises.id, we.exerciseId)).get();
+            if (ex) exerciseNames.push(ex.name);
+          }
+        }
+
+        return {
+          ...w,
+          exerciseCount: wExercises.length,
+          setCount,
+          ...(req.query.detail === 'true' ? { exerciseNames } : {}),
+        };
+      })
+    );
+
+    return enriched;
   });
 
   // Get single workout with exercises and sets
@@ -38,7 +68,7 @@ export async function workoutRoutes(app: FastifyInstance) {
     return reply.status(201).send(result);
   });
 
-  // Update workout
+  // Update workout (PUT)
   app.put<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string } }>(
     '/workouts/:id',
     async (req, reply) => {
@@ -46,6 +76,32 @@ export async function workoutRoutes(app: FastifyInstance) {
       const result = db.update(schema.workouts).set(req.body).where(eq(schema.workouts.id, id)).returning().get();
       if (!result) return reply.status(404).send({ error: 'Not found' });
       return result;
+    }
+  );
+
+  // Update workout (PATCH)
+  app.patch<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string } }>(
+    '/workouts/:id',
+    async (req, reply) => {
+      const id = parseInt(req.params.id);
+      const result = db.update(schema.workouts).set(req.body).where(eq(schema.workouts.id, id)).returning().get();
+      if (!result) return reply.status(404).send({ error: 'Not found' });
+      return result;
+    }
+  );
+
+  // Add exercise to existing workout
+  app.post<{ Params: { id: string }; Body: { exerciseId: number; displayOrder?: number } }>(
+    '/workouts/:id/exercises',
+    async (req, reply) => {
+      const workoutId = parseInt(req.params.id);
+      const { exerciseId, displayOrder = 0 } = req.body;
+      const result = db
+        .insert(schema.workoutExercises)
+        .values({ workoutId, exerciseId, displayOrder })
+        .returning()
+        .get();
+      return reply.status(201).send(result);
     }
   );
 
@@ -64,6 +120,27 @@ export async function workoutRoutes(app: FastifyInstance) {
     const result = db
       .insert(schema.workoutExercises)
       .values({ workoutId, exerciseId, displayOrder })
+      .returning()
+      .get();
+    return reply.status(201).send(result);
+  });
+
+  // Delete workout_exercise (cascades sets)
+  app.delete<{ Params: { id: string } }>('/workout-exercises/:id', async (req, reply) => {
+    const id = parseInt(req.params.id);
+    db.delete(schema.workoutExercises).where(eq(schema.workoutExercises.id, id)).run();
+    return reply.status(204).send();
+  });
+
+  // Add set to workout exercise
+  app.post<{
+    Params: { id: string };
+    Body: { reps?: number; weightKg?: number; isWarmup?: boolean; multiplier?: number };
+  }>('/workout-exercises/:id/sets', async (req, reply) => {
+    const workoutExerciseId = parseInt(req.params.id);
+    const result = db
+      .insert(schema.sets)
+      .values({ workoutExerciseId, ...req.body })
       .returning()
       .get();
     return reply.status(201).send(result);

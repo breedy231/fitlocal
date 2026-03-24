@@ -1,10 +1,22 @@
 import { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, like } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 
 export async function exerciseRoutes(app: FastifyInstance) {
   app.get('/exercises', async () => {
     return db.select().from(schema.exercises).orderBy(schema.exercises.name);
+  });
+
+  // Search exercises by name
+  app.get<{ Querystring: { q?: string } }>('/exercises/search', async (req) => {
+    const q = req.query.q?.trim();
+    if (!q) return [];
+    return db
+      .select()
+      .from(schema.exercises)
+      .where(like(schema.exercises.name, `%${q}%`))
+      .orderBy(schema.exercises.name)
+      .limit(20);
   });
 
   app.get<{ Params: { id: string } }>('/exercises/:id', async (req, reply) => {
