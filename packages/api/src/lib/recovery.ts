@@ -11,12 +11,12 @@ const LOOKBACK_DAYS = 14;
 const MUSCLE_KEYWORDS: Record<string, RegExp> = {
   chest: /bench|fly|pushup|push.?up|crossover|pec|(?:machine|cable|dumbbell|barbell)\s+press(?!\s+(?:leg|shoulder|calf|hip))/i,
   shoulders: /shoulder.?press|lateral.?raise|front.?raise|face.?pull|rear.?delt|upright.?row|ohp|military/i,
-  triceps: /tricep|skullcrusher|skull.?crusher|(?<!glute\s)kickback(?!\s*machine)|dip(?!\s*belt)|overhead.?extension/i,
+  triceps: /tricep|skullcrusher|skull.?crusher|(?:dumbbell|cable).?kickback|dip(?!\s*belt)|overhead.?extension/i,
   back: /row(?!.*upright)|pulldown|pull.?up|lat\b|good.?morning|chin.?up/i,
   biceps: /curl|hammer|preacher|ez.?bar/i,
   quads: /squat|leg.?press|leg.?extension|lunge|front.?squat|step.?up/i,
   hamstrings: /deadlift|hamstring.?curl|rdl|romanian|stiff.?leg/i,
-  glutes: /hip.?thrust|glute|hip.?extension|cable.?pull.?through/i,
+  glutes: /hip.?thrust|glute|hip.?extension|cable.?pull.?through|(?:single.?leg|standing).?kickback/i,
   calves: /calf|standing.?calf/i,
   core: /crunch|plank|dead.?bug|windshield.?wiper|russian.?twist|toe.?toucher|vertical.?knee.?raise|abs/i,
 };
