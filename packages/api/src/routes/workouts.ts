@@ -1,11 +1,16 @@
 import { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 
 export async function workoutRoutes(app: FastifyInstance) {
   // List all workouts with exercise/set counts
-  app.get<{ Querystring: { detail?: string } }>('/workouts', async (req) => {
-    const workouts = await db.select().from(schema.workouts).orderBy(schema.workouts.date);
+  app.get<{ Querystring: { detail?: string; limit?: string; offset?: string } }>('/workouts', async (req) => {
+    const limit = Math.min(parseInt(req.query.limit || '50'), 200);
+    const offset = parseInt(req.query.offset || '0');
+    const workouts = await db.select().from(schema.workouts)
+      .orderBy(desc(schema.workouts.date))
+      .limit(limit)
+      .offset(offset);
 
     const enriched = await Promise.all(
       workouts.map(async (w) => {
