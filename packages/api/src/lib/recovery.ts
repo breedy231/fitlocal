@@ -9,7 +9,7 @@ const LOOKBACK_DAYS = 14;
 
 // Keyword-based muscle mapping for exercises
 const MUSCLE_KEYWORDS: Record<string, RegExp> = {
-  chest: /bench|fly|press(?!.*shoulder)|pushup|push.?up|crossover|pec/i,
+  chest: /bench|fly|pushup|push.?up|crossover|pec|(?:machine|cable|dumbbell|barbell)\s+press(?!\s+(?:leg|shoulder|calf|hip))/i,
   shoulders: /shoulder.?press|lateral.?raise|front.?raise|face.?pull|rear.?delt|upright.?row|ohp|military/i,
   triceps: /tricep|skullcrusher|skull.?crusher|kickback|dip|overhead.?extension/i,
   back: /row(?!.*upright)|pulldown|pull.?up|lat\b|good.?morning|chin.?up/i,
