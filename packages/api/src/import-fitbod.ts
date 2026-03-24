@@ -61,6 +61,10 @@ let setsCreated = 0;
 const exerciseNames = new Set<string>();
 
 for (const [date, rows] of byDate) {
+  // Skip if workout for this date already exists (idempotent import)
+  const existing = db.select().from(schema.workouts).where(eq(schema.workouts.date, date)).get();
+  if (existing) continue;
+
   // Create workout
   const workout = db.insert(schema.workouts).values({ date }).returning().get();
   workoutsCreated++;
