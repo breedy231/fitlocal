@@ -30,7 +30,7 @@
   async function loadWorkouts() {
     try {
       const data = await api<Workout[]>('/workouts');
-      workouts = [...data].reverse();
+      workouts = data;
       // Fetch details for expanded views
       const detailed = await Promise.all(
         workouts.slice(0, 20).map(w => api<Workout>(`/workouts/${w.id}`).catch(() => w))
