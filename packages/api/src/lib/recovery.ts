@@ -11,7 +11,7 @@ const LOOKBACK_DAYS = 14;
 const MUSCLE_KEYWORDS: Record<string, RegExp> = {
   chest: /bench|fly|pushup|push.?up|crossover|pec|(?:machine|cable|dumbbell|barbell)\s+press(?!\s+(?:leg|shoulder|calf|hip))/i,
   shoulders: /shoulder.?press|lateral.?raise|front.?raise|face.?pull|rear.?delt|upright.?row|ohp|military/i,
-  triceps: /tricep|skullcrusher|skull.?crusher|kickback|dip|overhead.?extension/i,
+  triceps: /tricep|skullcrusher|skull.?crusher|(?<!glute\s)kickback(?!\s*machine)|dip(?!\s*belt)|overhead.?extension/i,
   back: /row(?!.*upright)|pulldown|pull.?up|lat\b|good.?morning|chin.?up/i,
   biceps: /curl|hammer|preacher|ez.?bar/i,
   quads: /squat|leg.?press|leg.?extension|lunge|front.?squat|step.?up/i,
