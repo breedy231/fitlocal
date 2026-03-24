@@ -42,8 +42,13 @@ for (const row of records) {
   const weight = parseFloat(row['Weight(kg)']) || 0;
   const reps = parseInt(row.Reps) || 0;
 
-  // Skip rows where weight=0 AND reps=0 (pure stretches/holds)
-  if (weight === 0 && reps === 0) continue;
+  const duration = parseFloat(row['Duration(s)']) || 0;
+  const name = row.Exercise.toLowerCase();
+  const isCardio = /treadmill|elliptical|cycling|rowing|stationary|walking/.test(name);
+  
+  // Keep cardio even if weight=0 and reps=0 (they use duration instead)
+  // Skip pure stretches/holds (weight=0, reps=0, not cardio)
+  if (weight === 0 && reps === 0 && !isCardio) continue;
 
   const date = row.Date.split(' ')[0]; // take date part only
   if (!byDate.has(date)) byDate.set(date, []);
