@@ -79,6 +79,14 @@ for (const col of [
 // Add rest_seconds column (rest timer feature)
 try { sqlite.exec('ALTER TABLE exercises ADD COLUMN rest_seconds INTEGER DEFAULT 60'); } catch { /* exists */ }
 
+// Add steps and body_weight_kg to health_snapshots
+for (const col of [
+  'ALTER TABLE health_snapshots ADD COLUMN steps INTEGER',
+  'ALTER TABLE health_snapshots ADD COLUMN body_weight_kg REAL',
+]) {
+  try { sqlite.exec(col); } catch { /* Column already exists */ }
+}
+
 // Set rest_seconds defaults by exercise type
 sqlite.exec(`
   UPDATE exercises SET rest_seconds = 120

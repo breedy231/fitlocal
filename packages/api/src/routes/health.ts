@@ -14,6 +14,8 @@ export async function healthRoutes(app: FastifyInstance) {
       sleepHours?: number;
       calories?: number;
       proteinG?: number;
+      steps?: number;
+      bodyWeightKg?: number;
     };
   }>('/health-snapshots', async (req, reply) => {
     const result = db.insert(schema.healthSnapshots).values(req.body).returning().get();
@@ -26,13 +28,15 @@ export async function healthRoutes(app: FastifyInstance) {
       hrv?: number;
       restingHr?: number;
       sleepHours?: number;
+      steps?: number;
+      bodyWeightKg?: number;
     };
   }>('/health/sync', async (req, reply) => {
     const date = new Date().toISOString().split('T')[0];
-    const { hrv, restingHr, sleepHours } = req.body;
+    const { hrv, restingHr, sleepHours, steps, bodyWeightKg } = req.body;
     const result = db
       .insert(schema.healthSnapshots)
-      .values({ date, hrv, restingHr, sleepHours })
+      .values({ date, hrv, restingHr, sleepHours, steps, bodyWeightKg })
       .returning()
       .get();
     return reply.status(201).send(result);
