@@ -82,10 +82,19 @@
     <!-- Apple Health -->
     <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
       <h2 class="font-medium mb-3">Apple Health Sync</h2>
-      <p class="text-sm text-neutral-400">
-        Set up an iOS Shortcut to sync HRV, resting heart rate, and sleep data daily.
-        See README for setup instructions.
+      <p class="text-sm text-neutral-400 mb-2">
+        Set up an iOS Shortcut to sync health data daily via <code class="text-neutral-300">POST /health/sync</code>.
       </p>
+      <div class="text-xs text-neutral-500 space-y-1">
+        <p>Supported fields:</p>
+        <ul class="list-disc list-inside ml-2 space-y-0.5">
+          <li><span class="text-neutral-400">hrv</span> — Heart Rate Variability (ms)</li>
+          <li><span class="text-neutral-400">restingHr</span> — Resting heart rate (bpm)</li>
+          <li><span class="text-neutral-400">sleepHours</span> — Hours of sleep</li>
+          <li><span class="text-neutral-400">steps</span> — Daily step count</li>
+          <li><span class="text-neutral-400">bodyWeightKg</span> — Body weight (kg)</li>
+        </ul>
+      </div>
     </div>
 
     <!-- About -->

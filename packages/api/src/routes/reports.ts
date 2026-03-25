@@ -1,0 +1,267 @@
+import { FastifyInstance } from 'fastify';
+import { eq, desc, sql } from 'drizzle-orm';
+import { db, schema } from '../db.js';
+
+export async function reportRoutes(app: FastifyInstance) {
+  // Weekly workout frequency (last 12 weeks)
+  app.get('/reports/frequency', async () => {
+    const rows = db.all(sql`
+      SELECT
+        strftime('%Y-W%W', date) as week,
+        MIN(date) as weekStart,
+        COUNT(*) as count
+      FROM workouts
+      WHERE date >= date('now', '-84 days')
+      GROUP BY strftime('%Y-W%W', date)
+      ORDER BY week ASC
+    `) as { week: string; weekStart: string; count: number }[];
+
+    return { weeks: rows };
+  });
+
+  // Volume over time (total kg lifted per workout, last 30 workouts)
+  app.get('/reports/volume', async () => {
+    const rows = db.all(sql`
+      SELECT
+        w.id,
+        w.date,
+        w.notes,
+        COALESCE(SUM(
+          CASE WHEN s.is_warmup = 0 THEN s.reps * s.weight_kg * s.multiplier ELSE 0 END
+        ), 0) as totalVolume,
+        COUNT(DISTINCT we.id) as exerciseCount,
+        COUNT(s.id) as setCount
+      FROM workouts w
+      LEFT JOIN workout_exercises we ON we.workout_id = w.id
+      LEFT JOIN sets s ON s.workout_exercise_id = we.id
+      GROUP BY w.id
+      ORDER BY w.date DESC
+      LIMIT 30
+    `) as { id: number; date: string; notes: string | null; totalVolume: number; exerciseCount: number; setCount: number }[];
+
+    return { workouts: rows.reverse() };
+  });
+
+  // Muscle group distribution (last 30 days)
+  app.get('/reports/muscle-distribution', async () => {
+    const workouts = db.all(sql`
+      SELECT w.id FROM workouts w
+      WHERE w.date >= date('now', '-30 days')
+    `) as { id: number }[];
+
+    const muscleMap: Record<string, number> = {};
+
+    for (const w of workouts) {
+      const wExercises = await db
+        .select()
+        .from(schema.workoutExercises)
+        .where(eq(schema.workoutExercises.workoutId, w.id));
+
+      for (const we of wExercises) {
+        const exercise = await db
+          .select()
+          .from(schema.exercises)
+          .where(eq(schema.exercises.id, we.exerciseId))
+          .get();
+        if (!exercise) continue;
+
+        const sets = await db
+          .select()
+          .from(schema.sets)
+          .where(eq(schema.sets.workoutExerciseId, we.id));
+
+        const workingSets = sets.filter((s) => !s.isWarmup).length;
+        const primary = (exercise.primaryMuscles as string[]) || [];
+        const secondary = (exercise.secondaryMuscles as string[]) || [];
+
+        for (const m of primary) {
+          muscleMap[m] = (muscleMap[m] || 0) + workingSets;
+        }
+        for (const m of secondary) {
+          muscleMap[m] = (muscleMap[m] || 0) + workingSets * 0.5;
+        }
+      }
+    }
+
+    const muscles = Object.entries(muscleMap)
+      .map(([name, sets]) => ({ name, sets: Math.round(sets * 10) / 10 }))
+      .sort((a, b) => b.sets - a.sets);
+
+    return { muscles };
+  });
+
+  // Personal records (heaviest working set per exercise)
+  app.get('/reports/personal-records', async () => {
+    const rows = db.all(sql`
+      SELECT
+        e.name as exerciseName,
+        MAX(s.weight_kg) as maxWeightKg,
+        s.reps as repsAtMax,
+        w.date as dateAchieved
+      FROM sets s
+      JOIN workout_exercises we ON we.id = s.workout_exercise_id
+      JOIN exercises e ON e.id = we.exercise_id
+      JOIN workouts w ON w.id = we.workout_id
+      WHERE s.is_warmup = 0
+        AND s.weight_kg > 0
+      GROUP BY e.id
+      HAVING MAX(s.weight_kg) = s.weight_kg
+      ORDER BY s.weight_kg DESC
+      LIMIT 20
+    `) as { exerciseName: string; maxWeightKg: number; repsAtMax: number; dateAchieved: string }[];
+
+    return { records: rows };
+  });
+
+  // Exercise progression (weight over time for a specific exercise)
+  app.get<{ Querystring: { exerciseId?: string; name?: string } }>(
+    '/reports/exercise-progression',
+    async (req) => {
+      let exerciseId: number | undefined;
+
+      if (req.query.exerciseId) {
+        exerciseId = parseInt(req.query.exerciseId);
+      } else if (req.query.name) {
+        const exercise = await db
+          .select()
+          .from(schema.exercises)
+          .where(eq(schema.exercises.name, req.query.name))
+          .get();
+        exerciseId = exercise?.id;
+      }
+
+      if (!exerciseId) {
+        return { dataPoints: [], exerciseName: null };
+      }
+
+      const exercise = await db
+        .select()
+        .from(schema.exercises)
+        .where(eq(schema.exercises.id, exerciseId))
+        .get();
+
+      const rows = db.all(sql`
+        SELECT
+          w.date,
+          MAX(CASE WHEN s.is_warmup = 0 THEN s.weight_kg ELSE 0 END) as maxWeight,
+          MAX(CASE WHEN s.is_warmup = 0 THEN s.reps ELSE 0 END) as maxReps,
+          SUM(CASE WHEN s.is_warmup = 0 THEN s.reps * s.weight_kg * s.multiplier ELSE 0 END) as sessionVolume
+        FROM workouts w
+        JOIN workout_exercises we ON we.workout_id = w.id
+        JOIN sets s ON s.workout_exercise_id = we.id
+        WHERE we.exercise_id = ${exerciseId}
+        GROUP BY w.id
+        ORDER BY w.date ASC
+      `) as { date: string; maxWeight: number; maxReps: number; sessionVolume: number }[];
+
+      return { exerciseName: exercise?.name, dataPoints: rows };
+    }
+  );
+
+  // Exercise list for progression picker
+  app.get('/reports/exercises-with-history', async () => {
+    const rows = db.all(sql`
+      SELECT DISTINCT e.id, e.name, COUNT(DISTINCT w.id) as workoutCount
+      FROM exercises e
+      JOIN workout_exercises we ON we.exercise_id = e.id
+      JOIN workouts w ON w.id = we.workout_id
+      GROUP BY e.id
+      HAVING workoutCount >= 2
+      ORDER BY workoutCount DESC
+    `) as { id: number; name: string; workoutCount: number }[];
+
+    return { exercises: rows };
+  });
+
+  // Health trends (weight, steps, HRV, resting HR, sleep over time)
+  app.get('/reports/health-trends', async () => {
+    const rows = db.all(sql`
+      SELECT *
+      FROM health_snapshots
+      ORDER BY date ASC
+    `) as {
+      id: number;
+      date: string;
+      resting_hr: number | null;
+      hrv: number | null;
+      sleep_hours: number | null;
+      calories: number | null;
+      protein_g: number | null;
+      steps: number | null;
+      body_weight_kg: number | null;
+    }[];
+
+    return {
+      snapshots: rows.map((r) => ({
+        date: r.date,
+        restingHr: r.resting_hr,
+        hrv: r.hrv,
+        sleepHours: r.sleep_hours,
+        calories: r.calories,
+        proteinG: r.protein_g,
+        steps: r.steps,
+        bodyWeightKg: r.body_weight_kg,
+      })),
+    };
+  });
+
+  // Summary stats
+  app.get('/reports/summary', async () => {
+    const totalWorkouts = db.all(sql`SELECT COUNT(*) as count FROM workouts`) as { count: number }[];
+    const totalSets = db.all(sql`SELECT COUNT(*) as count FROM sets WHERE is_warmup = 0`) as { count: number }[];
+    const totalVolume = db.all(sql`
+      SELECT COALESCE(SUM(s.reps * s.weight_kg * s.multiplier), 0) as total
+      FROM sets s WHERE s.is_warmup = 0
+    `) as { total: number }[];
+
+    // Current streak (consecutive days with workouts, allowing 1-day gaps for rest)
+    const workoutDates = db.all(sql`
+      SELECT DISTINCT date FROM workouts ORDER BY date DESC
+    `) as { date: string }[];
+
+    let streak = 0;
+    if (workoutDates.length > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      let checkDate = today;
+      let i = 0;
+      let gapDays = 0;
+
+      while (i < workoutDates.length) {
+        const wDate = new Date(workoutDates[i].date + 'T00:00:00');
+        const diff = Math.round((checkDate.getTime() - wDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diff <= 2) {
+          streak++;
+          checkDate = new Date(wDate);
+          checkDate.setDate(checkDate.getDate() - 1);
+          i++;
+          gapDays = 0;
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Workouts this week
+    const thisWeek = db.all(sql`
+      SELECT COUNT(*) as count FROM workouts
+      WHERE date >= date('now', 'weekday 0', '-7 days')
+    `) as { count: number }[];
+
+    // Workouts this month
+    const thisMonth = db.all(sql`
+      SELECT COUNT(*) as count FROM workouts
+      WHERE date >= date('now', 'start of month')
+    `) as { count: number }[];
+
+    return {
+      totalWorkouts: totalWorkouts[0]?.count || 0,
+      totalWorkingSets: totalSets[0]?.count || 0,
+      totalVolumeKg: Math.round(totalVolume[0]?.total || 0),
+      currentStreak: streak,
+      workoutsThisWeek: thisWeek[0]?.count || 0,
+      workoutsThisMonth: thisMonth[0]?.count || 0,
+    };
+  });
+}

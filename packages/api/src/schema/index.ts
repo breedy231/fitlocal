@@ -57,4 +57,6 @@ export const healthSnapshots = sqliteTable('health_snapshots', {
   sleepHours: real('sleep_hours'),
   calories: integer('calories'),
   proteinG: real('protein_g'),
+  steps: integer('steps'),
+  bodyWeightKg: real('body_weight_kg'),
 });

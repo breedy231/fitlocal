@@ -8,6 +8,7 @@ import { importRoutes } from './routes/import.js';
 import { generateRoutes } from './routes/generate.js';
 import { recoveryRoutes } from './routes/recovery.js';
 import { stretchRoutes } from './routes/stretches.js';
+import { reportRoutes } from './routes/reports.js';
 
 // Run migrations on startup
 await import('./migrate.js');
@@ -35,6 +36,7 @@ await app.register(importRoutes);
 await app.register(generateRoutes);
 await app.register(recoveryRoutes);
 await app.register(stretchRoutes);
+await app.register(reportRoutes);
 
 app.get('/health', async () => ({ status: 'ok' }));
 
