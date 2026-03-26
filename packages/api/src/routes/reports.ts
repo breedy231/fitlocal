@@ -2,17 +2,23 @@ import { FastifyInstance } from 'fastify';
 import { eq, desc, sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 
+// Reusable SQL fragment to exclude stretching/foam roll exercises
+const STRENGTH_ONLY = sql`e.name NOT LIKE '%stretch%' AND e.name NOT LIKE '%foam roll%'`;
+
 export async function reportRoutes(app: FastifyInstance) {
   // Weekly workout frequency (last 12 weeks)
   app.get('/reports/frequency', async () => {
     const rows = db.all(sql`
       SELECT
-        strftime('%Y-W%W', date) as week,
-        MIN(date) as weekStart,
-        COUNT(*) as count
-      FROM workouts
-      WHERE date >= date('now', '-84 days')
-      GROUP BY strftime('%Y-W%W', date)
+        strftime('%Y-W%W', w.date) as week,
+        MIN(w.date) as weekStart,
+        COUNT(DISTINCT w.id) as count
+      FROM workouts w
+      JOIN workout_exercises we ON we.workout_id = w.id
+      JOIN exercises e ON e.id = we.exercise_id
+      WHERE w.date >= date('now', '-84 days')
+        AND ${STRENGTH_ONLY}
+      GROUP BY strftime('%Y-W%W', w.date)
       ORDER BY week ASC
     `) as { week: string; weekStart: string; count: number }[];
 
@@ -32,8 +38,10 @@ export async function reportRoutes(app: FastifyInstance) {
         COUNT(DISTINCT we.id) as exerciseCount,
         COUNT(s.id) as setCount
       FROM workouts w
-      LEFT JOIN workout_exercises we ON we.workout_id = w.id
+      JOIN workout_exercises we ON we.workout_id = w.id
+      JOIN exercises e ON e.id = we.exercise_id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
+      WHERE ${STRENGTH_ONLY}
       GROUP BY w.id
       ORDER BY w.date DESC
       LIMIT 30
@@ -64,6 +72,10 @@ export async function reportRoutes(app: FastifyInstance) {
           .where(eq(schema.exercises.id, we.exerciseId))
           .get();
         if (!exercise) continue;
+
+        // Skip stretching/foam roll exercises
+        const eName = (exercise.name || '').toLowerCase();
+        if (eName.includes('stretch') || eName.includes('foam roll')) continue;
 
         const sets = await db
           .select()
@@ -104,6 +116,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workouts w ON w.id = we.workout_id
       WHERE s.is_warmup = 0
         AND s.weight_kg > 0
+        AND ${STRENGTH_ONLY}
       GROUP BY e.id
       HAVING MAX(s.weight_kg) = s.weight_kg
       ORDER BY s.weight_kg DESC
@@ -165,6 +178,7 @@ export async function reportRoutes(app: FastifyInstance) {
       FROM exercises e
       JOIN workout_exercises we ON we.exercise_id = e.id
       JOIN workouts w ON w.id = we.workout_id
+      WHERE ${STRENGTH_ONLY}
       GROUP BY e.id
       HAVING workoutCount >= 2
       ORDER BY workoutCount DESC
@@ -207,16 +221,38 @@ export async function reportRoutes(app: FastifyInstance) {
 
   // Summary stats
   app.get('/reports/summary', async () => {
-    const totalWorkouts = db.all(sql`SELECT COUNT(*) as count FROM workouts`) as { count: number }[];
-    const totalSets = db.all(sql`SELECT COUNT(*) as count FROM sets WHERE is_warmup = 0`) as { count: number }[];
+    const totalWorkouts = db.all(sql`
+      SELECT COUNT(DISTINCT w.id) as count
+      FROM workouts w
+      JOIN workout_exercises we ON we.workout_id = w.id
+      JOIN exercises e ON e.id = we.exercise_id
+      WHERE ${STRENGTH_ONLY}
+    `) as { count: number }[];
+
+    const totalSets = db.all(sql`
+      SELECT COUNT(*) as count
+      FROM sets s
+      JOIN workout_exercises we ON we.id = s.workout_exercise_id
+      JOIN exercises e ON e.id = we.exercise_id
+      WHERE s.is_warmup = 0 AND ${STRENGTH_ONLY}
+    `) as { count: number }[];
+
     const totalVolume = db.all(sql`
       SELECT COALESCE(SUM(s.reps * s.weight_kg * s.multiplier), 0) as total
-      FROM sets s WHERE s.is_warmup = 0
+      FROM sets s
+      JOIN workout_exercises we ON we.id = s.workout_exercise_id
+      JOIN exercises e ON e.id = we.exercise_id
+      WHERE s.is_warmup = 0 AND ${STRENGTH_ONLY}
     `) as { total: number }[];
 
     // Current streak (consecutive days with workouts, allowing 1-day gaps for rest)
     const workoutDates = db.all(sql`
-      SELECT DISTINCT date FROM workouts ORDER BY date DESC
+      SELECT DISTINCT w.date
+      FROM workouts w
+      JOIN workout_exercises we ON we.workout_id = w.id
+      JOIN exercises e ON e.id = we.exercise_id
+      WHERE ${STRENGTH_ONLY}
+      ORDER BY w.date DESC
     `) as { date: string }[];
 
     let streak = 0;
@@ -225,7 +261,6 @@ export async function reportRoutes(app: FastifyInstance) {
       today.setHours(0, 0, 0, 0);
       let checkDate = today;
       let i = 0;
-      let gapDays = 0;
 
       while (i < workoutDates.length) {
         const wDate = new Date(workoutDates[i].date + 'T00:00:00');
@@ -236,7 +271,6 @@ export async function reportRoutes(app: FastifyInstance) {
           checkDate = new Date(wDate);
           checkDate.setDate(checkDate.getDate() - 1);
           i++;
-          gapDays = 0;
         } else {
           break;
         }
@@ -245,14 +279,22 @@ export async function reportRoutes(app: FastifyInstance) {
 
     // Workouts this week
     const thisWeek = db.all(sql`
-      SELECT COUNT(*) as count FROM workouts
-      WHERE date >= date('now', 'weekday 0', '-7 days')
+      SELECT COUNT(DISTINCT w.id) as count
+      FROM workouts w
+      JOIN workout_exercises we ON we.workout_id = w.id
+      JOIN exercises e ON e.id = we.exercise_id
+      WHERE w.date >= date('now', 'weekday 0', '-7 days')
+        AND ${STRENGTH_ONLY}
     `) as { count: number }[];
 
     // Workouts this month
     const thisMonth = db.all(sql`
-      SELECT COUNT(*) as count FROM workouts
-      WHERE date >= date('now', 'start of month')
+      SELECT COUNT(DISTINCT w.id) as count
+      FROM workouts w
+      JOIN workout_exercises we ON we.workout_id = w.id
+      JOIN exercises e ON e.id = we.exercise_id
+      WHERE w.date >= date('now', 'start of month')
+        AND ${STRENGTH_ONLY}
     `) as { count: number }[];
 
     return {
