@@ -118,6 +118,12 @@
   let stretchTimerActive = $state(false);
   let stretchTimerInterval: ReturnType<typeof setInterval> | null = null;
 
+  const CARDIO_PATTERN = /treadmill|elliptical|cycling|rowing/i;
+
+  function isCardio(ex: WorkoutExercise): boolean {
+    return CARDIO_PATTERN.test(ex.exercise?.name ?? '');
+  }
+
   const KG_TO_LBS = 2.20462;
 
   function kgToLbs(kg: number | null): number {
@@ -252,6 +258,16 @@
         } catch {
           stretches = [];
         }
+      }
+
+      // Fallback stretches if API returns empty or fails
+      if (stretches.length === 0) {
+        stretches = [
+          { name: 'Standing Quad Stretch', duration: 30, muscles: ['quads'], instructions: 'Stand on one leg, pull opposite foot to glutes. Hold and switch.' },
+          { name: 'Chest Doorway Stretch', duration: 30, muscles: ['chest'], instructions: 'Place forearm on doorframe at 90°, lean forward gently.' },
+          { name: 'Seated Hamstring Stretch', duration: 30, muscles: ['hamstrings'], instructions: 'Sit with one leg extended, reach toward toes. Hold and switch.' },
+          { name: 'Child Pose', duration: 45, muscles: ['back'], instructions: 'Kneel, sit back on heels, extend arms forward on the floor.' },
+        ];
       }
 
       if (stretches.length > 0) {
@@ -434,52 +450,99 @@
 
           {#if ex.expanded}
             <div class="px-4 pb-4 space-y-2">
-              <!-- Header -->
-              <div class="grid grid-cols-[1fr_80px_80px_48px] gap-2 text-xs text-neutral-500 px-1">
-                <span>SET</span>
-                <span class="text-center">REPS</span>
-                <span class="text-center">LBS</span>
-                <span></span>
-              </div>
-
-              {#each ex.sets as set, idx}
-                <div class="grid grid-cols-[1fr_80px_80px_48px] gap-2 items-center">
-                  <span class="text-sm text-neutral-400 pl-1">{idx + 1}</span>
-
-                  <!-- Reps +/- -->
-                  <div class="flex items-center justify-center gap-1">
-                    <button
-                      onclick={() => adjustReps(set, -1)}
-                      class="w-7 h-7 rounded bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg"
-                    >−</button>
-                    <span class="w-8 text-center text-sm font-medium">{set.reps ?? 0}</span>
-                    <button
-                      onclick={() => adjustReps(set, 1)}
-                      class="w-7 h-7 rounded bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg"
-                    >+</button>
+              {#if isCardio(ex)}
+                <!-- Cardio fields: reps=duration(min), weightKg=distance(km), rpe=resistance level -->
+                {#each ex.sets as set, idx}
+                  <div class="space-y-2 py-2 {idx > 0 ? 'border-t border-neutral-800' : ''}">
+                    <div class="grid grid-cols-[1fr_1fr_48px] gap-2 items-center">
+                      <div>
+                        <label class="text-xs text-neutral-500 block mb-1">Duration (min)</label>
+                        <div class="flex items-center justify-center gap-1">
+                          <button
+                            onclick={() => adjustReps(set, -1)}
+                            class="w-7 h-7 rounded bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg"
+                          >−</button>
+                          <span class="w-8 text-center text-sm font-medium">{set.reps ?? 0}</span>
+                          <button
+                            onclick={() => adjustReps(set, 1)}
+                            class="w-7 h-7 rounded bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg"
+                          >+</button>
+                        </div>
+                      </div>
+                      <div>
+                        <label class="text-xs text-neutral-500 block mb-1">Distance (km)</label>
+                        <input
+                          type="number"
+                          value={set.weightKg ?? ''}
+                          onchange={(e) => { set.weightKg = parseFloat(e.currentTarget.value) || 0; }}
+                          placeholder="optional"
+                          class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
+                          step="0.1"
+                        />
+                      </div>
+                      <div class="pt-4">
+                        <button
+                          onclick={() => toggleComplete(set, ex)}
+                          class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors
+                            {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
+                        >
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-
-                  <!-- Weight input (lbs) -->
-                  <input
-                    type="number"
-                    value={kgToLbs(set.weightKg)}
-                    onchange={(e) => updateWeightLbs(set, e.currentTarget.value)}
-                    class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
-                    step="2.5"
-                  />
-
-                  <!-- Checkmark -->
-                  <button
-                    onclick={() => toggleComplete(set, ex)}
-                    class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors
-                      {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
-                  >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                  </button>
+                {/each}
+              {:else}
+                <!-- Strength exercise: standard reps + weight grid -->
+                <!-- Header -->
+                <div class="grid grid-cols-[1fr_80px_80px_48px] gap-2 text-xs text-neutral-500 px-1">
+                  <span>SET</span>
+                  <span class="text-center">REPS</span>
+                  <span class="text-center">LBS</span>
+                  <span></span>
                 </div>
-              {/each}
+
+                {#each ex.sets as set, idx}
+                  <div class="grid grid-cols-[1fr_80px_80px_48px] gap-2 items-center">
+                    <span class="text-sm text-neutral-400 pl-1">{idx + 1}</span>
+
+                    <!-- Reps +/- -->
+                    <div class="flex items-center justify-center gap-1">
+                      <button
+                        onclick={() => adjustReps(set, -1)}
+                        class="w-7 h-7 rounded bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg"
+                      >−</button>
+                      <span class="w-8 text-center text-sm font-medium">{set.reps ?? 0}</span>
+                      <button
+                        onclick={() => adjustReps(set, 1)}
+                        class="w-7 h-7 rounded bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg"
+                      >+</button>
+                    </div>
+
+                    <!-- Weight input (lbs) -->
+                    <input
+                      type="number"
+                      value={kgToLbs(set.weightKg)}
+                      onchange={(e) => updateWeightLbs(set, e.currentTarget.value)}
+                      class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
+                      step="2.5"
+                    />
+
+                    <!-- Checkmark -->
+                    <button
+                      onclick={() => toggleComplete(set, ex)}
+                      class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors
+                        {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
+                    >
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                      </svg>
+                    </button>
+                  </div>
+                {/each}
+              {/if}
 
               <button
                 onclick={() => addSet(ex)}

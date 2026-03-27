@@ -5,6 +5,12 @@ import { generateWorkout } from '../lib/generator.js';
 import { getMFPNutrition } from '../lib/mfp.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
 
+const DAY_TYPE_MUSCLES: Record<string, string[]> = {
+  upper: ['chest', 'shoulders', 'triceps', 'back', 'biceps'],
+  lower: ['quads', 'hamstrings', 'glutes', 'calves'],
+  fullbody: ['chest', 'shoulders', 'triceps', 'back', 'biceps', 'quads', 'hamstrings', 'glutes', 'calves'],
+};
+
 const DAY_TYPE_ALIASES: Record<string, string> = {
   push: 'upper',
   pull: 'upper',
@@ -70,9 +76,12 @@ export async function generateRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Exercise not found' });
     }
 
-    const targetMuscles = getMusclesForExercise(original[0].name);
+    let targetMuscles = getMusclesForExercise(original[0].name);
+
+    // Fall back to day type muscles if we can't determine muscles from exercise name
+    const dayType = req.query.dayType || 'fullbody';
     if (targetMuscles.length === 0) {
-      return reply.status(400).send({ error: 'Could not determine muscle group for exercise' });
+      targetMuscles = DAY_TYPE_MUSCLES[dayType] || DAY_TYPE_MUSCLES.fullbody;
     }
 
     // Get all exercises and find alternatives with overlapping muscles
@@ -91,6 +100,15 @@ export async function generateRoutes(app: FastifyInstance) {
 
     if (equipment === 'travel') {
       candidates = candidates.filter(e => TRAVEL_KEYWORDS.test(e.name));
+    }
+
+    // If no muscle-matched candidates, fall back to any exercise not in exclude list
+    if (candidates.length === 0) {
+      candidates = allExercises.filter(e => {
+        if (excludeSet.has(e.id)) return false;
+        if (equipment === 'travel' && !TRAVEL_KEYWORDS.test(e.name)) return false;
+        return true;
+      });
     }
 
     if (candidates.length === 0) {
