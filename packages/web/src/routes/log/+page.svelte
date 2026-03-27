@@ -16,7 +16,7 @@
   });
 </script>
 
-<div class="p-4 max-w-lg mx-auto">
+<div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   <h1 class="text-2xl font-bold mb-6">Log Workout</h1>
 
   {#if loading}
