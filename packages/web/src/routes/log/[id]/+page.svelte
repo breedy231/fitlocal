@@ -42,6 +42,68 @@
   let loading = $state(true);
   let finishing = $state(false);
 
+  // Completion tracking
+  let startTime = $state(Date.now());
+  let showCelebration = $state(false);
+  let showSummary = $state(false);
+  let allSetsCompleted = $state(false);
+  let hasCelebrated = false;
+
+  let allComplete = $derived(
+    workout != null &&
+    workout.exercises.length > 0 &&
+    workout.exercises.every(ex => ex.sets.length > 0 && ex.sets.every(s => s.completed))
+  );
+
+  // Watch for all-complete and trigger celebration
+  $effect(() => {
+    if (allComplete && !hasCelebrated && !showCoolDown && !showSummary) {
+      hasCelebrated = true;
+      showCelebration = true;
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([100, 50, 100, 50, 200]);
+      }
+      setTimeout(() => { showCelebration = false; }, 2000);
+    }
+  });
+
+  interface WorkoutSummary {
+    totalSets: number;
+    totalVolumeLbs: number;
+    exerciseCount: number;
+    durationMin: number;
+    exercises: { name: string; sets: number; avgWeightLbs: number }[];
+  }
+
+  let summaryData: WorkoutSummary | null = $state(null);
+
+  function computeSummary(): WorkoutSummary {
+    if (!workout) return { totalSets: 0, totalVolumeLbs: 0, exerciseCount: 0, durationMin: 0, exercises: [] };
+    let totalSets = 0;
+    let totalVolumeLbs = 0;
+    const exercises: { name: string; sets: number; avgWeightLbs: number }[] = [];
+
+    for (const ex of workout.exercises) {
+      let exSets = 0;
+      let exTotalWeight = 0;
+      for (const set of ex.sets) {
+        totalSets++;
+        exSets++;
+        const weightLbs = kgToLbs(set.weightKg);
+        totalVolumeLbs += weightLbs * (set.reps ?? 0);
+        exTotalWeight += weightLbs;
+      }
+      exercises.push({
+        name: ex.exercise?.name ?? 'Exercise',
+        sets: exSets,
+        avgWeightLbs: exSets > 0 ? Math.round(exTotalWeight / exSets) : 0,
+      });
+    }
+
+    const durationMin = Math.round((Date.now() - startTime) / 60000);
+    return { totalSets, totalVolumeLbs: Math.round(totalVolumeLbs), exerciseCount: workout.exercises.length, durationMin, exercises };
+  }
+
   // Rest timer state
   let restTimeLeft = $state(0);
   let restTimerActive = $state(false);
@@ -198,7 +260,8 @@
         stretchTimeLeft = stretches[0].duration;
         stretchTimerActive = false;
       } else {
-        goto('/history');
+        summaryData = computeSummary();
+        showSummary = true;
       }
     } catch (e: any) {
       alert('Failed to save workout');
@@ -231,13 +294,17 @@
       activeStretchIndex++;
       stretchTimeLeft = stretches[activeStretchIndex].duration;
     } else {
-      goto('/history');
+      showCoolDown = false;
+      summaryData = computeSummary();
+      showSummary = true;
     }
   }
 
   function skipCoolDown() {
     if (stretchTimerInterval) clearInterval(stretchTimerInterval);
-    goto('/history');
+    showCoolDown = false;
+    summaryData = computeSummary();
+    showSummary = true;
   }
 </script>
 
@@ -245,6 +312,53 @@
   {#if loading}
     <div class="flex justify-center py-12">
       <div class="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  {:else if showSummary && summaryData}
+    <!-- Workout Summary Screen -->
+    <div class="py-6">
+      <div class="text-center mb-8">
+        <div class="text-4xl mb-2">&#128170;</div>
+        <h1 class="text-2xl font-bold text-green-400">Great Work!</h1>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mb-6">
+        <div class="rounded-xl p-4 text-center" style="background-color: #1a1a1a;">
+          <div class="text-2xl font-bold text-green-400">{summaryData.totalSets}</div>
+          <div class="text-xs text-neutral-500 mt-1">Total Sets</div>
+        </div>
+        <div class="rounded-xl p-4 text-center" style="background-color: #1a1a1a;">
+          <div class="text-2xl font-bold text-green-400">{summaryData.totalVolumeLbs.toLocaleString()}</div>
+          <div class="text-xs text-neutral-500 mt-1">Volume (lbs)</div>
+        </div>
+        <div class="rounded-xl p-4 text-center" style="background-color: #1a1a1a;">
+          <div class="text-2xl font-bold text-green-400">{summaryData.exerciseCount}</div>
+          <div class="text-xs text-neutral-500 mt-1">Exercises</div>
+        </div>
+        <div class="rounded-xl p-4 text-center" style="background-color: #1a1a1a;">
+          <div class="text-2xl font-bold text-green-400">{summaryData.durationMin}</div>
+          <div class="text-xs text-neutral-500 mt-1">Minutes</div>
+        </div>
+      </div>
+
+      <div class="rounded-xl p-4 mb-6" style="background-color: #1a1a1a;">
+        <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Exercises</h2>
+        <div class="space-y-2">
+          {#each summaryData.exercises as ex}
+            <div class="flex justify-between items-center text-sm">
+              <span class="text-neutral-200">{ex.name}</span>
+              <span class="text-neutral-500">{ex.sets} sets @ {ex.avgWeightLbs} lbs avg</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <button
+        onclick={() => goto('/history')}
+        class="w-full font-semibold text-lg py-4 rounded-xl"
+        style="background-color: #22c55e; color: #0f0f0f;"
+      >
+        Done
+      </button>
     </div>
   {:else if showCoolDown}
     <!-- Cool Down Screen -->
@@ -397,6 +511,24 @@
   <ExerciseDetail bind:exerciseId={detailExerciseId} />
 </div>
 
+<!-- Celebration Animation -->
+{#if showCelebration}
+  <div class="fixed inset-0 z-[60] pointer-events-none flex items-center justify-center celebration-flash">
+    <div class="text-6xl font-bold text-green-400 celebration-text">ALL SETS DONE!</div>
+    <!-- CSS confetti -->
+    {#each Array(20) as _, i}
+      <div
+        class="absolute w-2 h-2 rounded-full confetti-piece"
+        style="
+          left: {20 + Math.random() * 60}%;
+          background-color: {['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'][i % 5]};
+          animation-delay: {Math.random() * 0.5}s;
+        "
+      ></div>
+    {/each}
+  </div>
+{/if}
+
 <!-- Rest Timer Bottom Sheet -->
 {#if restTimerActive}
   <div class="fixed inset-0 z-50 flex items-end justify-center" style="background-color: rgba(0,0,0,0.5);">
@@ -412,3 +544,30 @@
     </div>
   </div>
 {/if}
+
+<style>
+  @keyframes celebration-flash-anim {
+    0% { background-color: rgba(34, 197, 94, 0.3); }
+    50% { background-color: rgba(34, 197, 94, 0.1); }
+    100% { background-color: transparent; }
+  }
+  @keyframes celebration-text-anim {
+    0% { transform: scale(0.5); opacity: 0; }
+    30% { transform: scale(1.1); opacity: 1; }
+    70% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(0.8); opacity: 0; }
+  }
+  @keyframes confetti-fall {
+    0% { top: -10%; opacity: 1; transform: rotate(0deg); }
+    100% { top: 100%; opacity: 0; transform: rotate(720deg); }
+  }
+  :global(.celebration-flash) {
+    animation: celebration-flash-anim 2s ease-out forwards;
+  }
+  :global(.celebration-text) {
+    animation: celebration-text-anim 2s ease-out forwards;
+  }
+  :global(.confetti-piece) {
+    animation: confetti-fall 2s ease-in forwards;
+  }
+</style>

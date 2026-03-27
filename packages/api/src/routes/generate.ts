@@ -1,7 +1,9 @@
 import { FastifyInstance } from 'fastify';
+import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { generateWorkout } from '../lib/generator.js';
 import { getMFPNutrition } from '../lib/mfp.js';
+import { getMusclesForExercise } from '../lib/recovery.js';
 
 const DAY_TYPE_ALIASES: Record<string, string> = {
   push: 'upper',
@@ -44,4 +46,100 @@ export async function generateRoutes(app: FastifyInstance) {
       }
     }
   );
+
+  // Replace a single exercise with an alternative of the same muscle group
+  app.get<{
+    Querystring: { exerciseId: string; dayType?: string; equipment?: string; excludeIds?: string };
+  }>('/generate-workout/replace', async (req, reply) => {
+    const exerciseId = parseInt(req.query.exerciseId);
+    const equipment = req.query.equipment || 'full';
+    const excludeIds = (req.query.excludeIds || '')
+      .split(',')
+      .map(s => parseInt(s.trim()))
+      .filter(n => !isNaN(n));
+
+    if (!exerciseId) {
+      return reply.status(400).send({ error: 'exerciseId is required' });
+    }
+
+    // Get the exercise to replace and its muscles
+    const original = db.all<{ id: number; name: string }>(
+      sql`SELECT id, name FROM exercises WHERE id = ${exerciseId}`
+    );
+    if (original.length === 0) {
+      return reply.status(404).send({ error: 'Exercise not found' });
+    }
+
+    const targetMuscles = getMusclesForExercise(original[0].name);
+    if (targetMuscles.length === 0) {
+      return reply.status(400).send({ error: 'Could not determine muscle group for exercise' });
+    }
+
+    // Get all exercises and find alternatives with overlapping muscles
+    const allExercises = db.all<{ id: number; name: string; rest_seconds: number | null }>(
+      sql`SELECT id, name, rest_seconds FROM exercises`
+    );
+
+    const excludeSet = new Set([exerciseId, ...excludeIds]);
+    const TRAVEL_KEYWORDS = /dumbbell|bodyweight|band|trx|cardio/i;
+
+    let candidates = allExercises.filter(e => {
+      if (excludeSet.has(e.id)) return false;
+      const muscles = getMusclesForExercise(e.name);
+      return muscles.some(m => targetMuscles.includes(m));
+    });
+
+    if (equipment === 'travel') {
+      candidates = candidates.filter(e => TRAVEL_KEYWORDS.test(e.name));
+    }
+
+    if (candidates.length === 0) {
+      return reply.status(404).send({ error: 'No alternative exercises found' });
+    }
+
+    // Score by days since last performed (prefer less recent)
+    const now = Date.now();
+    const scored = candidates.map(e => {
+      const lastPerformed = db.all<{ date: string }>(sql`
+        SELECT w.date FROM workouts w
+        JOIN workout_exercises we ON we.workout_id = w.id
+        WHERE we.exercise_id = ${e.id}
+        ORDER BY w.date DESC
+        LIMIT 1
+      `);
+      let daysSince = 7;
+      if (lastPerformed.length > 0) {
+        daysSince = (now - new Date(lastPerformed[0].date).getTime()) / (1000 * 60 * 60 * 24);
+      }
+      return { ...e, daysSince, score: Math.min(1, daysSince / 7) };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    const pick = scored[0];
+
+    // Get last set info for suggestion
+    const lastSet = db.all<{ reps: number | null; weight_kg: number | null }>(sql`
+      SELECT s.reps, s.weight_kg FROM sets s
+      JOIN workout_exercises we ON s.workout_exercise_id = we.id
+      JOIN workouts w ON we.workout_id = w.id
+      WHERE we.exercise_id = ${pick.id} AND s.is_warmup = 0
+      ORDER BY w.date DESC, s.id DESC
+      LIMIT 1
+    `);
+
+    const suggestedReps = lastSet.length > 0 ? (lastSet[0].reps ?? 10) : 10;
+    const suggestedWeightKg = lastSet.length > 0 ? (lastSet[0].weight_kg ?? 0) : 0;
+
+    return {
+      id: pick.id,
+      name: pick.name,
+      suggestedSets: 3,
+      suggestedReps,
+      suggestedWeightKg: Math.round(suggestedWeightKg * 100) / 100,
+      lastPerformedDaysAgo: Math.round(pick.daysSince * 10) / 10,
+      isFocus: false,
+      isCardio: false,
+      restSeconds: pick.rest_seconds ?? 60,
+    };
+  });
 }

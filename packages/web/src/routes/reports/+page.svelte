@@ -113,13 +113,13 @@
     <div class="flex gap-2 mb-5">
       <button
         onclick={() => activeTab = 'training'}
-        class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors border {activeTab === 'training' ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-neutral-800 text-neutral-400 border-transparent'}"
+        class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors border-2 {activeTab === 'training' ? 'bg-green-500/20 text-green-400 border-green-500' : 'bg-neutral-800 text-neutral-400 border-transparent hover:border-neutral-700'}"
       >
         Training
       </button>
       <button
         onclick={() => activeTab = 'health'}
-        class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors border {activeTab === 'health' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-neutral-800 text-neutral-400 border-transparent'}"
+        class="flex-1 py-2 rounded-lg text-sm font-medium transition-colors border-2 {activeTab === 'health' ? 'bg-blue-500/20 text-blue-400 border-blue-500' : 'bg-neutral-800 text-neutral-400 border-transparent hover:border-neutral-700'}"
       >
         Health
       </button>
