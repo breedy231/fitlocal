@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type * as schemaTypes from '../schema/index.js';
 import { getMusclesForExercise, getGlobalRecoveryModifier } from './recovery.js';
+import { computeProgression, type ProgressionDirective, type RepRange } from './progression.js';
 
 type DB = BetterSQLite3Database<typeof schemaTypes>;
 
@@ -38,11 +39,6 @@ interface ExerciseRow {
   rest_seconds: number | null;
 }
 
-interface LastSetRow {
-  reps: number | null;
-  weight_kg: number | null;
-}
-
 interface LastPerformedRow {
   date: string;
 }
@@ -58,6 +54,9 @@ export interface GeneratedExercise {
   isCardio: boolean;
   suggestedDurationSec?: number;
   restSeconds: number;
+  progression?: ProgressionDirective;
+  repRange?: { min: number; max: number };
+  supersetGroup?: number;
 }
 
 export interface GeneratedWorkout {
@@ -65,6 +64,13 @@ export interface GeneratedWorkout {
   globalModifier: number;
   exercises: GeneratedExercise[];
 }
+
+// Antagonist muscle pairs for superset matching
+const ANTAGONIST_PAIRS: [string, string][] = [
+  ['chest', 'back'],
+  ['biceps', 'triceps'],
+  ['quads', 'hamstrings'],
+];
 
 interface ScoredExercise extends ExerciseRow {
   score: number;
@@ -113,19 +119,6 @@ function pickByMuscleTargets(
   }
 
   return selected;
-}
-
-function getLastSetInfo(exerciseId: number, db: DB): LastSetRow | null {
-  const lastSet = db.all<LastSetRow>(sql`
-    SELECT s.reps, s.weight_kg FROM sets s
-    JOIN workout_exercises we ON s.workout_exercise_id = we.id
-    JOIN workouts w ON we.workout_id = w.id
-    WHERE we.exercise_id = ${exerciseId}
-      AND s.is_warmup = 0
-    ORDER BY w.date DESC, s.id DESC
-    LIMIT 1
-  `);
-  return lastSet.length > 0 ? lastSet[0] : null;
 }
 
 export function generateWorkout(dayType: string, equipment: string, db: DB): GeneratedWorkout {
@@ -180,43 +173,62 @@ export function generateWorkout(dayType: string, equipment: string, db: DB): Gen
   const cardioSelected = scoredCardio.slice(0, 1);
 
   const globalModifier = getGlobalRecoveryModifier(db);
+  const suppressProgression = globalModifier < 0.85;
 
-  // Build exercise suggestions and find focus exercise
-  let bestProgressionScore = -1;
-  let focusIndex = -1;
-
+  // Build exercise suggestions using progressive overload
   const buildExercise = (e: ScoredExercise, isCardio: boolean): GeneratedExercise => {
-    const lastSet = getLastSetInfo(e.id, db);
-    const suggestedReps = lastSet?.reps ?? 10;
-    const suggestedWeightKg = lastSet?.weight_kg ?? 0;
+    const prog = computeProgression(e.id, e.name, db);
+
+    let suggestedSets = prog.sets;
+    let suggestedReps = prog.reps;
+    let suggestedWeightKg = prog.weightKg;
+    let directive = prog.directive;
+
+    // On bad recovery days, suppress progressions
+    if (suppressProgression && directive === 'up') {
+      directive = 'hold';
+      // Use last weight instead of progressed weight
+      suggestedWeightKg = Math.max(0, suggestedWeightKg - prog.repRange.jump);
+      suggestedSets = Math.max(2, suggestedSets - 1);
+    }
 
     return {
       id: e.id,
       name: e.name,
-      suggestedSets: isCardio ? 1 : 3,
+      suggestedSets: isCardio ? 1 : suggestedSets,
       suggestedReps: isCardio ? 1 : suggestedReps,
-      suggestedWeightKg: isCardio ? 0 : Math.round(suggestedWeightKg * 100) / 100,
+      suggestedWeightKg: isCardio ? 0 : suggestedWeightKg,
       lastPerformedDaysAgo: Math.round(e.daysSince * 10) / 10,
       isFocus: false,
       isCardio,
       restSeconds: e.rest_seconds ?? 60,
+      progression: isCardio ? undefined : directive,
+      repRange: isCardio ? undefined : { min: prog.repRange.min, max: prog.repRange.max },
       ...(isCardio ? { suggestedDurationSec: 900 } : {}),
     };
   };
 
   const exercises: GeneratedExercise[] = [];
 
-  // Main exercises
+  // Main exercises — track best focus candidate
+  let bestFocusScore = -1;
+  let focusIndex = -1;
+
   for (const e of selected) {
     const ex = buildExercise(e, false);
     exercises.push(ex);
 
-    // Check progression opportunity: last reps >= suggested reps means ready to progress
-    const lastSet = getLastSetInfo(e.id, db);
-    if (lastSet?.reps && lastSet.reps >= ex.suggestedReps) {
-      const progressionScore = e.score + (lastSet.reps - ex.suggestedReps) * 0.1;
-      if (progressionScore > bestProgressionScore) {
-        bestProgressionScore = progressionScore;
+    // Focus = exercise that's progressing (or closest to it)
+    if (ex.progression === 'up') {
+      const focusScore = e.score + 1; // Progressing exercises get priority
+      if (focusScore > bestFocusScore) {
+        bestFocusScore = focusScore;
+        focusIndex = exercises.length - 1;
+      }
+    } else if (ex.progression === 'hold' && focusIndex < 0) {
+      // Fallback: pick the hold exercise with highest recovery score
+      if (e.score > bestFocusScore) {
+        bestFocusScore = e.score;
         focusIndex = exercises.length - 1;
       }
     }
@@ -237,5 +249,46 @@ export function generateWorkout(dayType: string, equipment: string, db: DB): Gen
     exercises[focusIndex].isFocus = true;
   }
 
+  // Assign superset pairs (max 3 per workout)
+  assignSupersets(exercises);
+
   return { dayType, globalModifier, exercises };
+}
+
+function getAntagonist(muscle: string): string | null {
+  for (const [a, b] of ANTAGONIST_PAIRS) {
+    if (muscle === a) return b;
+    if (muscle === b) return a;
+  }
+  return null;
+}
+
+function assignSupersets(exercises: GeneratedExercise[]): void {
+  const paired = new Set<number>();
+  let groupNum = 1;
+  const MAX_SUPERSETS = 3;
+
+  for (let i = 0; i < exercises.length && groupNum <= MAX_SUPERSETS; i++) {
+    if (paired.has(i) || exercises[i].isCardio) continue;
+    const muscles = getMusclesForExercise(exercises[i].name);
+    if (muscles.length === 0) continue;
+
+    const primaryMuscle = muscles[0];
+    const antagonist = getAntagonist(primaryMuscle);
+    if (!antagonist) continue;
+
+    // Find a partner exercise that targets the antagonist muscle
+    for (let j = i + 1; j < exercises.length; j++) {
+      if (paired.has(j) || exercises[j].isCardio) continue;
+      const partnerMuscles = getMusclesForExercise(exercises[j].name);
+      if (partnerMuscles.includes(antagonist)) {
+        exercises[i].supersetGroup = groupNum;
+        exercises[j].supersetGroup = groupNum;
+        paired.add(i);
+        paired.add(j);
+        groupNum++;
+        break;
+      }
+    }
+  }
 }

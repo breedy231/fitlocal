@@ -26,6 +26,7 @@ export const workoutExercises = sqliteTable('workout_exercises', {
   workoutId: integer('workout_id').notNull().references(() => workouts.id, { onDelete: 'cascade' }),
   exerciseId: integer('exercise_id').notNull().references(() => exercises.id),
   displayOrder: integer('display_order').notNull().default(0),
+  supersetGroup: integer('superset_group'),
 });
 
 export const sets = sqliteTable('sets', {
