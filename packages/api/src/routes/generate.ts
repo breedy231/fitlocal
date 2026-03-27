@@ -115,9 +115,9 @@ export async function generateRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'No alternative exercises found' });
     }
 
-    // Score by days since last performed (prefer less recent)
+    // Enrich candidates with last-performed info and set suggestions
     const now = Date.now();
-    const scored = candidates.map(e => {
+    const enriched = candidates.map(e => {
       const lastPerformed = db.all<{ date: string }>(sql`
         SELECT w.date FROM workouts w
         JOIN workout_exercises we ON we.workout_id = w.id
@@ -125,39 +125,45 @@ export async function generateRoutes(app: FastifyInstance) {
         ORDER BY w.date DESC
         LIMIT 1
       `);
-      let daysSince = 7;
+      let daysSince = 999;
       if (lastPerformed.length > 0) {
         daysSince = (now - new Date(lastPerformed[0].date).getTime()) / (1000 * 60 * 60 * 24);
       }
-      return { ...e, daysSince, score: Math.min(1, daysSince / 7) };
+
+      const lastSet = db.all<{ reps: number | null; weight_kg: number | null }>(sql`
+        SELECT s.reps, s.weight_kg FROM sets s
+        JOIN workout_exercises we ON s.workout_exercise_id = we.id
+        JOIN workouts w ON we.workout_id = w.id
+        WHERE we.exercise_id = ${e.id} AND s.is_warmup = 0
+        ORDER BY w.date DESC, s.id DESC
+        LIMIT 1
+      `);
+
+      const suggestedReps = lastSet.length > 0 ? (lastSet[0].reps ?? 10) : 10;
+      const suggestedWeightKg = lastSet.length > 0 ? (lastSet[0].weight_kg ?? 0) : 0;
+
+      return {
+        id: e.id,
+        name: e.name,
+        suggestedSets: 3,
+        suggestedReps,
+        suggestedWeightKg: Math.round(suggestedWeightKg * 100) / 100,
+        lastPerformedDaysAgo: Math.round(daysSince * 10) / 10,
+        isFocus: false,
+        isCardio: false,
+        restSeconds: e.rest_seconds ?? 60,
+        _daysSince: daysSince,
+      };
     });
 
-    scored.sort((a, b) => b.score - a.score);
-    const pick = scored[0];
+    // Sort: most recently performed first, then alphabetically
+    enriched.sort((a, b) => {
+      if (a._daysSince !== b._daysSince) return a._daysSince - b._daysSince;
+      return a.name.localeCompare(b.name);
+    });
 
-    // Get last set info for suggestion
-    const lastSet = db.all<{ reps: number | null; weight_kg: number | null }>(sql`
-      SELECT s.reps, s.weight_kg FROM sets s
-      JOIN workout_exercises we ON s.workout_exercise_id = we.id
-      JOIN workouts w ON we.workout_id = w.id
-      WHERE we.exercise_id = ${pick.id} AND s.is_warmup = 0
-      ORDER BY w.date DESC, s.id DESC
-      LIMIT 1
-    `);
+    const alternatives = enriched.slice(0, 12).map(({ _daysSince, ...rest }) => rest);
 
-    const suggestedReps = lastSet.length > 0 ? (lastSet[0].reps ?? 10) : 10;
-    const suggestedWeightKg = lastSet.length > 0 ? (lastSet[0].weight_kg ?? 0) : 0;
-
-    return {
-      id: pick.id,
-      name: pick.name,
-      suggestedSets: 3,
-      suggestedReps,
-      suggestedWeightKg: Math.round(suggestedWeightKg * 100) / 100,
-      lastPerformedDaysAgo: Math.round(pick.daysSince * 10) / 10,
-      isFocus: false,
-      isCardio: false,
-      restSeconds: pick.rest_seconds ?? 60,
-    };
+    return { alternatives };
   });
 }

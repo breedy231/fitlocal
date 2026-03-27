@@ -23,7 +23,9 @@
     exercises: GeneratedExercise[];
   }
 
-  let swappingId: number | null = $state(null);
+  let swapTargetId: number | null = $state(null);
+  let swapAlternatives: GeneratedExercise[] = $state([]);
+  let loadingAlternatives = $state(false);
 
   let dayType = $state('');
   let equipment = $state(
@@ -99,23 +101,38 @@
     generate();
   }
 
-  async function swapExercise(exerciseId: number) {
+  async function openSwapSheet(exerciseId: number) {
     if (!workout) return;
-    swappingId = exerciseId;
+    swapTargetId = exerciseId;
+    swapAlternatives = [];
+    loadingAlternatives = true;
     try {
       const excludeIds = workout.exercises.map(e => e.id).join(',');
-      const replacement = await api<GeneratedExercise>(
+      const result = await api<{ alternatives: GeneratedExercise[] }>(
         `/generate-workout/replace?exerciseId=${exerciseId}&dayType=${dayType}&equipment=${equipment}&excludeIds=${excludeIds}`
       );
-      const idx = workout.exercises.findIndex(e => e.id === exerciseId);
-      if (idx !== -1) {
-        workout.exercises[idx] = { ...replacement, isFocus: workout.exercises[idx].isFocus };
-      }
+      swapAlternatives = result.alternatives;
     } catch (e: any) {
-      alert(e.message || 'No alternative found');
+      alert(e.message || 'No alternatives found');
+      swapTargetId = null;
     } finally {
-      swappingId = null;
+      loadingAlternatives = false;
     }
+  }
+
+  function pickAlternative(alt: GeneratedExercise) {
+    if (!workout || swapTargetId === null) return;
+    const idx = workout.exercises.findIndex(e => e.id === swapTargetId);
+    if (idx !== -1) {
+      workout.exercises[idx] = { ...alt, isFocus: workout.exercises[idx].isFocus };
+    }
+    swapTargetId = null;
+    swapAlternatives = [];
+  }
+
+  function closeSwapSheet() {
+    swapTargetId = null;
+    swapAlternatives = [];
   }
 
   function toggleEquipment() {
@@ -178,7 +195,7 @@
 
     <div class="space-y-3 mb-6">
       {#each workout.exercises as ex}
-        <div class="rounded-xl p-4 relative {swappingId === ex.id ? 'opacity-50' : ''}" style="background-color: #1a1a1a;">
+        <div class="rounded-xl p-4 relative" style="background-color: #1a1a1a;">
           <div class="absolute top-3 right-3 flex items-center gap-2">
             {#if ex.isFocus}
               <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #f59e0b20; color: #f59e0b;">
@@ -186,18 +203,13 @@
               </span>
             {/if}
             <button
-              onclick={() => swapExercise(ex.id)}
-              disabled={swappingId === ex.id}
-              class="w-7 h-7 rounded-lg flex items-center justify-center bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700 transition-colors disabled:opacity-50"
+              onclick={() => openSwapSheet(ex.id)}
+              class="w-7 h-7 rounded-lg flex items-center justify-center bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700 transition-colors"
               title="Swap exercise"
             >
-              {#if swappingId === ex.id}
-                <div class="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
-              {:else}
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                </svg>
-              {/if}
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              </svg>
             </button>
           </div>
           <button
@@ -232,4 +244,54 @@
   {/if}
 
   <ExerciseDetail bind:exerciseId={detailExerciseId} />
+
+  <!-- Swap Exercise Sheet -->
+  {#if swapTargetId !== null}
+    <div class="fixed inset-0 z-50 flex items-end justify-center">
+      <button class="absolute inset-0 bg-black/60" onclick={closeSwapSheet} aria-label="Close"></button>
+      <div class="relative w-full max-w-lg bg-neutral-900 rounded-t-2xl p-4 pb-8 max-h-[70vh] flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold">Swap Exercise</h2>
+          <button onclick={closeSwapSheet} class="w-8 h-8 rounded-lg flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-800" aria-label="Close">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+
+        {#if loadingAlternatives}
+          <div class="flex justify-center py-12">
+            <div class="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        {:else if swapAlternatives.length === 0}
+          <p class="text-neutral-400 text-center py-8">No alternatives found</p>
+        {:else}
+          <div class="overflow-y-auto space-y-2">
+            {#each swapAlternatives as alt}
+              <button
+                onclick={() => pickAlternative(alt)}
+                class="w-full text-left rounded-xl p-3 hover:bg-neutral-700 transition-colors"
+                style="background-color: #1a1a1a;"
+              >
+                <div class="font-medium">{alt.name}</div>
+                <div class="text-sm text-neutral-400">
+                  {#if alt.isCardio && alt.suggestedDurationSec}
+                    {formatDuration(alt.suggestedDurationSec)}
+                  {:else}
+                    {alt.suggestedSets} &times; {alt.suggestedReps}
+                    {#if alt.suggestedWeightKg > 0}
+                      @ {kgToLbs(alt.suggestedWeightKg)} lbs
+                    {/if}
+                  {/if}
+                  <span class="text-neutral-600 ml-2">
+                    {alt.lastPerformedDaysAgo < 1 ? 'today' : `${Math.round(alt.lastPerformedDaysAgo)}d ago`}
+                  </span>
+                </div>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
 </div>
