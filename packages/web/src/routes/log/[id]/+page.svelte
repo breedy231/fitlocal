@@ -4,9 +4,11 @@
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import ExerciseDetail from '$lib/ExerciseDetail.svelte';
+  import PlateCalculator from '$lib/PlateCalculator.svelte';
   import { showToast } from '$lib/toast';
 
   let detailExerciseId: number | null = $state(null);
+  let plateCalcWeightLbs: number | null = $state(null);
 
   interface SetData {
     id: number;
@@ -524,7 +526,15 @@
               >+</button>
             </div>
 
-            <span class="text-neutral-600 text-xs shrink-0">lbs</span>
+            <button
+              onclick={() => plateCalcWeightLbs = kgToLbs(set.weightKg)}
+              class="w-7 h-7 rounded-md flex items-center justify-center text-neutral-500 hover:text-neutral-300 hover:bg-neutral-700 transition-colors shrink-0"
+              title="Plate calculator"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+              </svg>
+            </button>
 
             <button
               onclick={() => toggleComplete(set, ex)}
@@ -700,6 +710,10 @@
 
   <ExerciseDetail bind:exerciseId={detailExerciseId} />
 </div>
+
+{#if plateCalcWeightLbs !== null}
+  <PlateCalculator weightLbs={plateCalcWeightLbs} onclose={() => plateCalcWeightLbs = null} />
+{/if}
 
 <!-- Celebration Animation -->
 {#if showCelebration}
