@@ -169,6 +169,39 @@ export async function workoutRoutes(app: FastifyInstance) {
     return reply.status(201).send(result);
   });
 
+  // Export workouts for HealthKit writeback
+  app.get<{ Querystring: { since?: string } }>('/workouts/export', async (req) => {
+    const since = req.query.since || '1970-01-01';
+    const rows = db.all<{
+      date: string;
+      set_count: number;
+      total_reps: number;
+      has_cardio: number;
+    }>(sql`
+      SELECT w.date,
+        COUNT(s.id) as set_count,
+        COALESCE(SUM(s.reps), 0) as total_reps,
+        MAX(CASE WHEN lower(e.name) GLOB '*treadmill*' OR lower(e.name) GLOB '*elliptical*'
+          OR lower(e.name) GLOB '*cycling*' OR lower(e.name) GLOB '*rowing*'
+          OR lower(e.name) GLOB '*bike*' OR lower(e.name) GLOB '*run*'
+          OR lower(e.name) GLOB '*cardio*' THEN 1 ELSE 0 END) as has_cardio
+      FROM workouts w
+      JOIN workout_exercises we ON we.workout_id = w.id
+      JOIN exercises e ON we.exercise_id = e.id
+      LEFT JOIN sets s ON s.workout_exercise_id = we.id
+      WHERE w.date >= ${since}
+      GROUP BY w.id
+      ORDER BY w.date
+    `);
+
+    return rows.map(r => ({
+      date: r.date,
+      durationMinutes: Math.round(r.set_count * 2.5),  // ~2.5 min per set including rest
+      caloriesBurned: Math.round(r.total_reps * 0.5 + r.set_count * 8), // rough estimate
+      exerciseType: r.has_cardio ? 'mixed' : 'strength',
+    }));
+  });
+
   // Delete workout_exercise (cascades sets)
   app.delete<{ Params: { id: string } }>('/workout-exercises/:id', async (req, reply) => {
     const id = parseInt(req.params.id);
