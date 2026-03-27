@@ -87,17 +87,22 @@
       {:else}
         <div class="space-y-2">
           {#each workouts as workout}
-            <div class="rounded-xl p-4 flex justify-between items-center" style="background-color: #1a1a1a;">
+            <a href="/history/{workout.id}/edit" class="rounded-xl p-4 flex justify-between items-center active:opacity-70 transition-opacity" style="background-color: #1a1a1a; display: flex;">
               <div>
                 <span class="font-medium">{formatDate(workout.date)}</span>
                 {#if workout.notes}
                   <p class="text-sm text-neutral-500 mt-0.5">{workout.notes}</p>
                 {/if}
               </div>
-              {#if workout.locationProfile}
-                <span class="text-xs px-2 py-1 rounded bg-neutral-800 text-neutral-400">{workout.locationProfile}</span>
-              {/if}
-            </div>
+              <div class="flex items-center gap-2">
+                {#if workout.locationProfile}
+                  <span class="text-xs px-2 py-1 rounded bg-neutral-800 text-neutral-400">{workout.locationProfile}</span>
+                {/if}
+                <svg class="w-4 h-4 text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+              </div>
+            </a>
           {/each}
         </div>
       {/if}
