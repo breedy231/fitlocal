@@ -9,6 +9,56 @@
   let importStatus = $state('');
   let importing = $state(false);
 
+  // Report exclusions
+  interface ExerciseResult { id: number; name: string }
+  let exclusionSearch = $state('');
+  let exclusionResults: ExerciseResult[] = $state([]);
+  let excludedExercises: ExerciseResult[] = $state([]);
+  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function loadExclusions() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const ids: number[] = JSON.parse(localStorage.getItem('fitlocal-report-exclusions') || '[]');
+      if (ids.length === 0) return;
+      // Load names for excluded IDs
+      Promise.all(ids.map(id => api<ExerciseResult>(`/exercises/${id}`).catch(() => null)))
+        .then(results => {
+          excludedExercises = results.filter((r): r is ExerciseResult => r !== null);
+        });
+    } catch { /* ignore */ }
+  }
+
+  function saveExclusions() {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem('fitlocal-report-exclusions', JSON.stringify(excludedExercises.map(e => e.id)));
+  }
+
+  function addExclusion(ex: ExerciseResult) {
+    if (excludedExercises.some(e => e.id === ex.id)) return;
+    excludedExercises = [...excludedExercises, ex];
+    saveExclusions();
+    exclusionSearch = '';
+    exclusionResults = [];
+  }
+
+  function removeExclusion(id: number) {
+    excludedExercises = excludedExercises.filter(e => e.id !== id);
+    saveExclusions();
+  }
+
+  async function searchExercises(query: string) {
+    if (!query.trim()) { exclusionResults = []; return; }
+    try {
+      exclusionResults = await api<ExerciseResult[]>(`/exercises/search?q=${encodeURIComponent(query)}`);
+    } catch { exclusionResults = []; }
+  }
+
+  // Load exclusions on init
+  if (typeof localStorage !== 'undefined') {
+    loadExclusions();
+  }
+
   // Apple Health sync
   let syncStatus = $state('');
   let syncing = $state(false);
@@ -177,6 +227,55 @@
         <p class="text-sm mt-2 {syncStatus.startsWith('Error') ? 'text-red-400' : 'text-green-400'}">
           {syncStatus}
         </p>
+      {/if}
+    </div>
+
+    <!-- Report Exclusions -->
+    <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
+      <h2 class="font-medium mb-3">Report Exclusions</h2>
+      <p class="text-sm text-neutral-400 mb-3">Exclude specific exercises from all report calculations.</p>
+      <input
+        type="text"
+        bind:value={exclusionSearch}
+        oninput={(e) => {
+          const q = (e.target as HTMLInputElement).value;
+          if (searchTimeout) clearTimeout(searchTimeout);
+          searchTimeout = setTimeout(() => searchExercises(q), 300);
+        }}
+        placeholder="Search exercises..."
+        class="w-full px-3 py-2 rounded-lg bg-neutral-800 text-neutral-200 text-sm border-none outline-none mb-2"
+      />
+      {#if exclusionResults.length > 0}
+        <div class="rounded-lg bg-neutral-800 mb-3 max-h-40 overflow-y-auto">
+          {#each exclusionResults as ex}
+            <button
+              onclick={() => addExclusion(ex)}
+              class="w-full text-left px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 flex justify-between items-center"
+            >
+              <span>{ex.name}</span>
+              {#if excludedExercises.some(e => e.id === ex.id)}
+                <span class="text-xs text-neutral-500">excluded</span>
+              {:else}
+                <span class="text-xs text-green-400">+ exclude</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
+      {#if excludedExercises.length > 0}
+        <div class="space-y-1">
+          {#each excludedExercises as ex}
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg bg-neutral-800">
+              <span class="text-sm text-neutral-300">{ex.name}</span>
+              <button
+                onclick={() => removeExclusion(ex.id)}
+                class="text-xs text-red-400 hover:text-red-300"
+              >Remove</button>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <p class="text-xs text-neutral-500">No exercises excluded</p>
       {/if}
     </div>
 

@@ -57,11 +57,27 @@
     return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
   }
 
+  // Read excluded exercise IDs from localStorage
+  let excludeParam = '';
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const ids: number[] = JSON.parse(localStorage.getItem('fitlocal-report-exclusions') || '[]');
+      if (ids.length > 0) {
+        excludeParam = `excludeExerciseIds=${ids.join(',')}`;
+      }
+    } catch { /* ignore */ }
+  }
+
+  function withExclusions(url: string): string {
+    if (!excludeParam) return url;
+    return url + (url.includes('?') ? '&' : '?') + excludeParam;
+  }
+
   async function loadExerciseProgression(exerciseId: number) {
     selectedExerciseId = exerciseId;
     try {
       const result = await api<{ exerciseName: string; dataPoints: ExerciseDataPoint[] }>(
-        `/reports/exercise-progression?exerciseId=${exerciseId}`
+        withExclusions(`/reports/exercise-progression?exerciseId=${exerciseId}`)
       );
       exerciseProgression = result.dataPoints;
       exerciseProgressionName = result.exerciseName || '';
@@ -73,12 +89,12 @@
   onMount(async () => {
     try {
       const [summaryData, freqData, volData, muscleData, prData, exData, healthData] = await Promise.all([
-        api<Summary>('/reports/summary').catch(() => summary),
-        api<{ weeks: FrequencyWeek[] }>('/reports/frequency').catch(() => ({ weeks: [] })),
-        api<{ workouts: VolumeWorkout[] }>('/reports/volume').catch(() => ({ workouts: [] })),
-        api<{ muscles: MuscleData[] }>('/reports/muscle-distribution').catch(() => ({ muscles: [] })),
-        api<{ records: PR[] }>('/reports/personal-records').catch(() => ({ records: [] })),
-        api<{ exercises: ExerciseOption[] }>('/reports/exercises-with-history').catch(() => ({ exercises: [] })),
+        api<Summary>(withExclusions('/reports/summary')).catch(() => summary),
+        api<{ weeks: FrequencyWeek[] }>(withExclusions('/reports/frequency')).catch(() => ({ weeks: [] })),
+        api<{ workouts: VolumeWorkout[] }>(withExclusions('/reports/volume')).catch(() => ({ workouts: [] })),
+        api<{ muscles: MuscleData[] }>(withExclusions('/reports/muscle-distribution')).catch(() => ({ muscles: [] })),
+        api<{ records: PR[] }>(withExclusions('/reports/personal-records')).catch(() => ({ records: [] })),
+        api<{ exercises: ExerciseOption[] }>(withExclusions('/reports/exercises-with-history')).catch(() => ({ exercises: [] })),
         api<{ snapshots: HealthSnapshot[] }>('/reports/health-trends').catch(() => ({ snapshots: [] })),
       ]);
 

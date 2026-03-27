@@ -5,9 +5,20 @@ import { db, schema } from '../db.js';
 // Reusable SQL fragment to exclude stretching/foam roll exercises
 const STRENGTH_ONLY = sql`e.name NOT LIKE '%stretch%' AND e.name NOT LIKE '%foam roll%'`;
 
+function parseExcludeIds(raw?: string): number[] {
+  if (!raw) return [];
+  return raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+}
+
+function excludeFilter(excludeIds: number[]) {
+  if (excludeIds.length === 0) return sql`1=1`;
+  return sql.raw(`e.id NOT IN (${excludeIds.join(',')})`);
+}
+
 export async function reportRoutes(app: FastifyInstance) {
   // Weekly workout frequency (last 12 weeks)
-  app.get('/reports/frequency', async () => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/frequency', async (req) => {
+    const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const rows = db.all(sql`
       SELECT
         strftime('%Y-W%W', w.date) as week,
@@ -18,6 +29,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN exercises e ON e.id = we.exercise_id
       WHERE w.date >= date('now', '-84 days')
         AND ${STRENGTH_ONLY}
+        AND ${excludeFilter(excludeIds)}
       GROUP BY strftime('%Y-W%W', w.date)
       ORDER BY week ASC
     `) as { week: string; weekStart: string; count: number }[];
@@ -26,7 +38,8 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Volume over time (total kg lifted per workout, last 30 workouts)
-  app.get('/reports/volume', async () => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/volume', async (req) => {
+    const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const rows = db.all(sql`
       SELECT
         w.id,
@@ -42,6 +55,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN exercises e ON e.id = we.exercise_id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
       WHERE ${STRENGTH_ONLY}
+        AND ${excludeFilter(excludeIds)}
       GROUP BY w.id
       ORDER BY w.date DESC
       LIMIT 30
@@ -51,7 +65,9 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Muscle group distribution (last 30 days)
-  app.get('/reports/muscle-distribution', async () => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/muscle-distribution', async (req) => {
+    const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
+    const excludeSet = new Set(excludeIds);
     const workouts = db.all(sql`
       SELECT w.id FROM workouts w
       WHERE w.date >= date('now', '-30 days')
@@ -73,9 +89,10 @@ export async function reportRoutes(app: FastifyInstance) {
           .get();
         if (!exercise) continue;
 
-        // Skip stretching/foam roll exercises
+        // Skip stretching/foam roll exercises and user-excluded exercises
         const eName = (exercise.name || '').toLowerCase();
         if (eName.includes('stretch') || eName.includes('foam roll')) continue;
+        if (excludeSet.has(exercise.id)) continue;
 
         const sets = await db
           .select()
@@ -103,7 +120,8 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Personal records (heaviest working set per exercise)
-  app.get('/reports/personal-records', async () => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/personal-records', async (req) => {
+    const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const rows = db.all(sql`
       SELECT
         e.name as exerciseName,
@@ -117,6 +135,7 @@ export async function reportRoutes(app: FastifyInstance) {
       WHERE s.is_warmup = 0
         AND s.weight_kg > 0
         AND ${STRENGTH_ONLY}
+        AND ${excludeFilter(excludeIds)}
       GROUP BY e.id
       HAVING MAX(s.weight_kg) = s.weight_kg
       ORDER BY s.weight_kg DESC
@@ -127,7 +146,7 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Exercise progression (weight over time for a specific exercise)
-  app.get<{ Querystring: { exerciseId?: string; name?: string } }>(
+  app.get<{ Querystring: { exerciseId?: string; name?: string; excludeExerciseIds?: string } }>(
     '/reports/exercise-progression',
     async (req) => {
       let exerciseId: number | undefined;
@@ -172,13 +191,15 @@ export async function reportRoutes(app: FastifyInstance) {
   );
 
   // Exercise list for progression picker
-  app.get('/reports/exercises-with-history', async () => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/exercises-with-history', async (req) => {
+    const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const rows = db.all(sql`
       SELECT DISTINCT e.id, e.name, COUNT(DISTINCT w.id) as workoutCount
       FROM exercises e
       JOIN workout_exercises we ON we.exercise_id = e.id
       JOIN workouts w ON w.id = we.workout_id
       WHERE ${STRENGTH_ONLY}
+        AND ${excludeFilter(excludeIds)}
       GROUP BY e.id
       HAVING workoutCount >= 2
       ORDER BY workoutCount DESC
@@ -220,13 +241,15 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Summary stats
-  app.get('/reports/summary', async () => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/summary', async (req) => {
+    const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const totalWorkouts = db.all(sql`
       SELECT COUNT(DISTINCT w.id) as count
       FROM workouts w
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON e.id = we.exercise_id
       WHERE ${STRENGTH_ONLY}
+        AND ${excludeFilter(excludeIds)}
     `) as { count: number }[];
 
     const totalSets = db.all(sql`
@@ -235,6 +258,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workout_exercises we ON we.id = s.workout_exercise_id
       JOIN exercises e ON e.id = we.exercise_id
       WHERE s.is_warmup = 0 AND ${STRENGTH_ONLY}
+        AND ${excludeFilter(excludeIds)}
     `) as { count: number }[];
 
     const totalVolume = db.all(sql`
@@ -243,6 +267,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workout_exercises we ON we.id = s.workout_exercise_id
       JOIN exercises e ON e.id = we.exercise_id
       WHERE s.is_warmup = 0 AND ${STRENGTH_ONLY}
+        AND ${excludeFilter(excludeIds)}
     `) as { total: number }[];
 
     // Current streak (consecutive days with workouts, allowing 1-day gaps for rest)
@@ -252,6 +277,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON e.id = we.exercise_id
       WHERE ${STRENGTH_ONLY}
+        AND ${excludeFilter(excludeIds)}
       ORDER BY w.date DESC
     `) as { date: string }[];
 
@@ -285,6 +311,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN exercises e ON e.id = we.exercise_id
       WHERE w.date >= date('now', 'weekday 0', '-7 days')
         AND ${STRENGTH_ONLY}
+        AND ${excludeFilter(excludeIds)}
     `) as { count: number }[];
 
     // Workouts this month
@@ -295,6 +322,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN exercises e ON e.id = we.exercise_id
       WHERE w.date >= date('now', 'start of month')
         AND ${STRENGTH_ONLY}
+        AND ${excludeFilter(excludeIds)}
     `) as { count: number }[];
 
     return {
