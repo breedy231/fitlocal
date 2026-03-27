@@ -28,7 +28,6 @@
   let rawMax = $derived(Math.max(...filtered.map((d) => d.value), 1));
   let rawMin = $derived(Math.min(...filtered.map((d) => d.value), 0));
 
-  // Compute nice Y-axis bounds
   let niceMin = $derived(rawMin >= 0 ? 0 : -niceNumber(Math.abs(rawMin)));
   let niceMax = $derived(niceNumber(rawMax * 1.1));
   let range = $derived(niceMax - niceMin || 1);
@@ -43,7 +42,8 @@
 
   let padding = 24;
   let yAxisWidth = 36;
-  let chartWidth = $derived(Math.max(filtered.length * 32, 200) + yAxisWidth);
+  let containerWidth = $state(300);
+  let chartWidth = $derived(Math.max(containerWidth, 100));
 
   function x(i: number): number {
     if (filtered.length <= 1) return (chartWidth + yAxisWidth) / 2;
@@ -59,12 +59,14 @@
       ? filtered.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(d.value)}`).join(' ')
       : ''
   );
+
+  let labelStep = $derived(Math.max(1, Math.floor(filtered.length / 8)));
 </script>
 
 {#if filtered.length > 0}
   {@const tickArr = ticks()}
-  <div class="overflow-x-auto">
-    <svg viewBox="0 0 {chartWidth} {height + 20}" class="w-full" style="min-width: {chartWidth}px; max-height: {height + 20}px;">
+  <div bind:clientWidth={containerWidth} style="overflow-x: hidden;">
+    <svg width="100%" viewBox="0 0 {chartWidth} {height + 20}" preserveAspectRatio="xMidYMid meet" style="max-height: {height + 20}px;">
       <!-- Grid lines with nice Y-axis labels -->
       {#each tickArr as tick}
         {@const ty = y(tick)}
@@ -93,10 +95,9 @@
         {/each}
       {/if}
 
-      <!-- X labels (show every Nth to avoid clutter) -->
+      <!-- X labels -->
       {#each filtered as point, i}
-        {@const step = Math.max(1, Math.floor(filtered.length / 8))}
-        {#if i % step === 0 || i === filtered.length - 1}
+        {#if i % labelStep === 0 || i === filtered.length - 1}
           <text x={x(i)} y={height + 10} text-anchor="middle" fill="#525252" font-size="8">
             {point.label}
           </text>

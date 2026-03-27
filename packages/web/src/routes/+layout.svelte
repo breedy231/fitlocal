@@ -1,16 +1,12 @@
 <script lang="ts">
   import '../app.css';
+  import { page } from '$app/stores';
   let { children } = $props();
 
-  // Simple path detection for active state
-  let currentPath = $state('/');
-  $effect(() => {
-    currentPath = typeof window !== 'undefined' ? window.location.pathname : '/';
-  });
-
   function isActive(href: string): boolean {
-    if (href === '/') return currentPath === '/';
-    return currentPath.startsWith(href);
+    const path = $page.url.pathname;
+    if (href === '/') return path === '/';
+    return path.startsWith(href);
   }
 </script>
 
