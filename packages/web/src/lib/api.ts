@@ -3,8 +3,9 @@ const API_BASE = typeof window !== 'undefined' && window.location.hostname !== '
   : 'http://localhost:3001';
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
+  const hasBody = options?.body != null;
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: hasBody ? { 'Content-Type': 'application/json' } : {},
     ...options,
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
