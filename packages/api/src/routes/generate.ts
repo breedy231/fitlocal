@@ -76,11 +76,15 @@ export async function generateRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Exercise not found' });
     }
 
-    let targetMuscles = getMusclesForExercise(original[0].name);
+    const originalName = original[0].name;
+    const CARDIO_KEYWORDS = /treadmill|elliptical|cycling|rowing|stair|bike|run|jog|sprint|cardio/i;
+    const isCardio = CARDIO_KEYWORDS.test(originalName);
+
+    let targetMuscles = getMusclesForExercise(originalName);
 
     // Fall back to day type muscles if we can't determine muscles from exercise name
     const dayType = req.query.dayType || 'fullbody';
-    if (targetMuscles.length === 0) {
+    if (targetMuscles.length === 0 && !isCardio) {
       targetMuscles = DAY_TYPE_MUSCLES[dayType] || DAY_TYPE_MUSCLES.fullbody;
     }
 
@@ -92,20 +96,34 @@ export async function generateRoutes(app: FastifyInstance) {
     const excludeSet = new Set([exerciseId, ...excludeIds]);
     const TRAVEL_KEYWORDS = /dumbbell|bodyweight|band|trx|cardio/i;
 
-    let candidates = allExercises.filter(e => {
-      if (excludeSet.has(e.id)) return false;
-      const muscles = getMusclesForExercise(e.name);
-      return muscles.some(m => targetMuscles.includes(m));
-    });
+    let candidates;
 
-    if (equipment === 'travel') {
-      candidates = candidates.filter(e => TRAVEL_KEYWORDS.test(e.name));
+    if (isCardio) {
+      // For cardio: only return other cardio exercises
+      candidates = allExercises.filter(e => {
+        if (excludeSet.has(e.id)) return false;
+        return CARDIO_KEYWORDS.test(e.name);
+      });
+    } else {
+      candidates = allExercises.filter(e => {
+        if (excludeSet.has(e.id)) return false;
+        const muscles = getMusclesForExercise(e.name);
+        // Exclude cardio from strength swaps
+        if (CARDIO_KEYWORDS.test(e.name)) return false;
+        return muscles.some(m => targetMuscles.includes(m));
+      });
+
+      if (equipment === 'travel') {
+        candidates = candidates.filter(e => TRAVEL_KEYWORDS.test(e.name));
+      }
     }
 
     // If no muscle-matched candidates, fall back to any exercise not in exclude list
     if (candidates.length === 0) {
       candidates = allExercises.filter(e => {
         if (excludeSet.has(e.id)) return false;
+        if (isCardio) return CARDIO_KEYWORDS.test(e.name);
+        if (CARDIO_KEYWORDS.test(e.name)) return false;
         if (equipment === 'travel' && !TRAVEL_KEYWORDS.test(e.name)) return false;
         return true;
       });
