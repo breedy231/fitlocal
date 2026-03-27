@@ -21,6 +21,21 @@
   let searching = $state(false);
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  // Multi-select edit mode
+  let editMode = $state(false);
+  let selectedIds: Set<number> = $state(new Set());
+  let bulkDeleteConfirm = $state(false);
+
+  // Error toast
+  let errorMessage = $state('');
+  let errorTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function showError(msg: string) {
+    errorMessage = msg;
+    if (errorTimeout) clearTimeout(errorTimeout);
+    errorTimeout = setTimeout(() => { errorMessage = ''; }, 3000);
+  }
+
   const KG_TO_LBS = 2.20462;
   function kgToLbs(kg: number | null): number {
     if (!kg) return 0;
@@ -34,6 +49,20 @@
 
   function toggleExpand(id: number) {
     expandedId = expandedId === id ? null : id;
+  }
+
+  function toggleSelect(id: number) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selectedIds = next;
+  }
+
+  function toggleEditMode() {
+    editMode = !editMode;
+    if (!editMode) {
+      selectedIds = new Set();
+    }
   }
 
   async function loadWorkouts(exerciseName?: string) {
@@ -78,8 +107,29 @@
       await api(`/workouts/${id}`, { method: 'DELETE' });
       workouts = workouts.filter(w => w.id !== id);
       deleteConfirmId = null;
-    } catch {
-      alert('Failed to delete workout');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      showError(`Failed to delete workout: ${msg}`);
+    } finally {
+      deleting = false;
+    }
+  }
+
+  async function bulkDelete() {
+    const ids = [...selectedIds];
+    deleting = true;
+    try {
+      await api('/workouts/bulk', {
+        method: 'DELETE',
+        body: JSON.stringify({ ids }),
+      });
+      workouts = workouts.filter(w => !selectedIds.has(w.id));
+      selectedIds = new Set();
+      editMode = false;
+      bulkDeleteConfirm = false;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      showError(`Failed to delete workouts: ${msg}`);
     } finally {
       deleting = false;
     }
@@ -88,16 +138,24 @@
   onMount(loadWorkouts);
 </script>
 
-<div class="p-4 max-w-lg mx-auto">
+<div class="p-4 max-w-lg mx-auto pb-20">
   <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-bold">History</h1>
-    <a
-      href="/history/new"
-      class="px-4 py-2 rounded-xl text-sm font-medium"
-      style="background-color: #22c55e; color: #0f0f0f;"
-    >
-      + Log Workout
-    </a>
+    <div class="flex items-center gap-2">
+      <button
+        onclick={toggleEditMode}
+        class="px-4 py-2 rounded-xl text-sm font-medium {editMode ? 'bg-neutral-700 text-white' : 'bg-neutral-800 text-neutral-300'}"
+      >
+        {editMode ? 'Done' : 'Edit'}
+      </button>
+      <a
+        href="/history/new"
+        class="px-4 py-2 rounded-xl text-sm font-medium"
+        style="background-color: #22c55e; color: #0f0f0f;"
+      >
+        + Log Workout
+      </a>
+    </div>
   </div>
 
   <!-- Search -->
@@ -139,27 +197,40 @@
       {#each workouts as workout}
         <div class="rounded-xl overflow-hidden" style="background-color: #1a1a1a;">
           <button
-            onclick={() => toggleExpand(workout.id)}
+            onclick={() => editMode ? toggleSelect(workout.id) : toggleExpand(workout.id)}
             class="w-full text-left p-4"
           >
             <div class="flex justify-between items-center">
-              <div>
-                <span class="font-medium">{formatDate(workout.date)}</span>
-                {#if workout.notes}
-                  <span class="ml-2 text-sm text-neutral-500">{workout.notes}</span>
+              <div class="flex items-center gap-3">
+                {#if editMode}
+                  <div class="w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 {selectedIds.has(workout.id) ? 'bg-green-500 border-green-500' : 'border-neutral-600'}">
+                    {#if selectedIds.has(workout.id)}
+                      <svg class="w-3 h-3 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                      </svg>
+                    {/if}
+                  </div>
                 {/if}
+                <div>
+                  <span class="font-medium">{formatDate(workout.date)}</span>
+                  {#if workout.notes}
+                    <span class="ml-2 text-sm text-neutral-500">{workout.notes}</span>
+                  {/if}
+                </div>
               </div>
               <div class="flex items-center gap-3 text-sm text-neutral-500">
                 <span>{workout.exerciseCount ?? workout.exercises?.length ?? 0} exercises</span>
                 <span>{workout.setCount ?? workout.exercises?.reduce((sum, e) => sum + (e.sets?.length ?? 0), 0) ?? 0} sets</span>
-                <svg class="w-4 h-4 transition-transform {expandedId === workout.id ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
+                {#if !editMode}
+                  <svg class="w-4 h-4 transition-transform {expandedId === workout.id ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                {/if}
               </div>
             </div>
           </button>
 
-          {#if expandedId === workout.id}
+          {#if !editMode && expandedId === workout.id}
             <div class="px-4 pb-4">
               {#if workout.exercises}
                 <div class="pt-2 pb-3 border-t border-neutral-800 space-y-3">
@@ -214,7 +285,29 @@
   {/if}
 </div>
 
-<!-- Delete confirmation dialog -->
+<!-- Sticky bulk delete bar -->
+{#if editMode && workouts.length > 0}
+  <div class="fixed bottom-0 left-0 right-0 p-4 z-40" style="background: linear-gradient(transparent, #0f0f0f 30%);">
+    <div class="max-w-lg mx-auto">
+      <button
+        onclick={() => bulkDeleteConfirm = true}
+        disabled={selectedIds.size === 0}
+        class="w-full py-3 rounded-xl text-sm font-medium transition-colors {selectedIds.size > 0 ? 'bg-red-500 text-white' : 'bg-neutral-800 text-neutral-600 cursor-not-allowed'}"
+      >
+        Delete Selected{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+      </button>
+    </div>
+  </div>
+{/if}
+
+<!-- Error toast -->
+{#if errorMessage}
+  <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-sm font-medium bg-red-500/90 text-white shadow-lg max-w-sm text-center">
+    {errorMessage}
+  </div>
+{/if}
+
+<!-- Single delete confirmation dialog -->
 {#if deleteConfirmId !== null}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div
@@ -242,6 +335,40 @@
           class="flex-1 py-2.5 rounded-xl text-sm font-medium bg-red-500 text-white disabled:opacity-50"
         >
           {deleting ? 'Deleting...' : 'Delete'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Bulk delete confirmation dialog -->
+{#if bulkDeleteConfirm}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center"
+    style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px);"
+    onclick={() => bulkDeleteConfirm = false}
+  >
+    <div
+      class="mx-4 w-full max-w-sm rounded-2xl p-6"
+      style="background-color: #1a1a1a;"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <h3 class="text-lg font-semibold mb-2">Delete {selectedIds.size} Workouts</h3>
+      <p class="text-sm text-neutral-400 mb-6">Delete {selectedIds.size} workouts? This cannot be undone.</p>
+      <div class="flex gap-3">
+        <button
+          onclick={() => bulkDeleteConfirm = false}
+          class="flex-1 py-2.5 rounded-xl text-sm font-medium bg-neutral-700 text-neutral-200"
+        >
+          Cancel
+        </button>
+        <button
+          onclick={bulkDelete}
+          disabled={deleting}
+          class="flex-1 py-2.5 rounded-xl text-sm font-medium bg-red-500 text-white disabled:opacity-50"
+        >
+          {deleting ? 'Deleting...' : `Delete ${selectedIds.size}`}
         </button>
       </div>
     </div>

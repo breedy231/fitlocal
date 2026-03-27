@@ -135,6 +135,20 @@ export async function workoutRoutes(app: FastifyInstance) {
     }
   );
 
+  // Bulk delete workouts
+  app.delete<{ Body: { ids: number[] } }>('/workouts/bulk', async (req, reply) => {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return reply.status(400).send({ error: 'ids must be a non-empty array' });
+    }
+    db.transaction((tx) => {
+      for (const id of ids) {
+        tx.delete(schema.workouts).where(eq(schema.workouts.id, id)).run();
+      }
+    });
+    return reply.status(204).send();
+  });
+
   // Delete workout
   app.delete<{ Params: { id: string } }>('/workouts/:id', async (req, reply) => {
     const id = parseInt(req.params.id);
