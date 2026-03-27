@@ -13,7 +13,7 @@ import { reportRoutes } from './routes/reports.js';
 // Run migrations on startup
 await import('./migrate.js');
 
-const app = Fastify({ logger: true });
+const app = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024 }); // 10MB
 
 await app.register(cors, {
   origin: true, // allow all origins for local network use
