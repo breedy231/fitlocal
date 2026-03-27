@@ -17,7 +17,7 @@
 
   const KG_TO_LBS = 2.20462;
 
-  let date = $state(new Date().toISOString().split('T')[0]);
+  let date = $state((() => { const _d = new Date(); return `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`; })());
   let exercises: LocalExercise[] = $state([]);
   let showSearch = $state(false);
   let saving = $state(false);
