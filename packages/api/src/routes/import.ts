@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { parse } from 'csv-parse/sync';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 
 interface FitbodRow {
@@ -50,9 +50,22 @@ export async function importRoutes(app: FastifyInstance) {
     }
 
     let workoutsCreated = 0;
+    let workoutsSkipped = 0;
     let setsCreated = 0;
 
     for (const [date, rows] of byDate) {
+      // Skip if a workout already exists for this date (idempotent import)
+      const existing = await db
+        .select()
+        .from(schema.workouts)
+        .where(eq(schema.workouts.date, date))
+        .get();
+
+      if (existing) {
+        workoutsSkipped++;
+        continue;
+      }
+
       // Create workout
       const workout = db.insert(schema.workouts).values({ date }).returning().get();
       workoutsCreated++;
@@ -110,6 +123,7 @@ export async function importRoutes(app: FastifyInstance) {
     return reply.status(201).send({
       message: 'Import complete',
       workoutsCreated,
+      workoutsSkipped,
       setsCreated,
     });
   });
