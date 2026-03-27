@@ -121,14 +121,14 @@ export async function workoutRoutes(app: FastifyInstance) {
   );
 
   // Add exercise to existing workout
-  app.post<{ Params: { id: string }; Body: { exerciseId: number; displayOrder?: number } }>(
+  app.post<{ Params: { id: string }; Body: { exerciseId: number; displayOrder?: number; supersetGroup?: number | null } }>(
     '/workouts/:id/exercises',
     async (req, reply) => {
       const workoutId = parseInt(req.params.id);
-      const { exerciseId, displayOrder = 0 } = req.body;
+      const { exerciseId, displayOrder = 0, supersetGroup } = req.body;
       const result = db
         .insert(schema.workoutExercises)
-        .values({ workoutId, exerciseId, displayOrder })
+        .values({ workoutId, exerciseId, displayOrder, supersetGroup: supersetGroup ?? null })
         .returning()
         .get();
       return reply.status(201).send(result);
@@ -158,12 +158,12 @@ export async function workoutRoutes(app: FastifyInstance) {
 
   // Create workout_exercise (link exercise to workout)
   app.post<{
-    Body: { workoutId: number; exerciseId: number; displayOrder?: number };
+    Body: { workoutId: number; exerciseId: number; displayOrder?: number; supersetGroup?: number | null };
   }>('/workout-exercises', async (req, reply) => {
-    const { workoutId, exerciseId, displayOrder = 0 } = req.body;
+    const { workoutId, exerciseId, displayOrder = 0, supersetGroup } = req.body;
     const result = db
       .insert(schema.workoutExercises)
-      .values({ workoutId, exerciseId, displayOrder })
+      .values({ workoutId, exerciseId, displayOrder, supersetGroup: supersetGroup ?? null })
       .returning()
       .get();
     return reply.status(201).send(result);

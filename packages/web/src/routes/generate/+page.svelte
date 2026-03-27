@@ -2,6 +2,7 @@
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
   import ExerciseDetail from '$lib/ExerciseDetail.svelte';
+  import { showToast } from '$lib/toast';
 
   let detailExerciseId: number | null = $state(null);
 
@@ -15,6 +16,9 @@
     isFocus: boolean;
     isCardio: boolean;
     suggestedDurationSec?: number;
+    progression?: 'up' | 'deload' | 'hold';
+    repRange?: { min: number; max: number };
+    supersetGroup?: number;
   }
 
   interface GeneratedWorkout {
@@ -60,7 +64,7 @@
     try {
       workout = await api<GeneratedWorkout>(`/generate-workout?dayType=${dayType}&equipment=${equipment}`);
     } catch (e: any) {
-      alert(e.message || 'Failed to generate workout');
+      showToast(e.message || 'Failed to generate workout — is the server running?', 'error');
     } finally {
       loading = false;
     }
@@ -78,10 +82,11 @@
       });
 
       // Create workout exercises and sets
-      for (const ex of workout.exercises) {
+      for (let i = 0; i < workout.exercises.length; i++) {
+        const ex = workout.exercises[i];
         const we = await api<{ id: number }>('/workout-exercises', {
           method: 'POST',
-          body: JSON.stringify({ workoutId: created.id, exerciseId: ex.id, displayOrder: 0 }),
+          body: JSON.stringify({ workoutId: created.id, exerciseId: ex.id, displayOrder: i, supersetGroup: ex.supersetGroup ?? null }),
         });
         for (let i = 0; i < ex.suggestedSets; i++) {
           await api('/sets', {
@@ -97,7 +102,7 @@
 
       goto(`/log/${created.id}`);
     } catch (e: any) {
-      alert(e.message || 'Failed to start workout');
+      showToast(e.message || 'Failed to start workout', 'error');
     } finally {
       starting = false;
     }
@@ -120,7 +125,7 @@
       );
       swapAlternatives = result.alternatives;
     } catch (e: any) {
-      alert(e.message || 'No alternatives found');
+      showToast(e.message || 'No alternatives found', 'error');
       swapTargetId = null;
     } finally {
       loadingAlternatives = false;
@@ -143,6 +148,34 @@
     swapSearch = '';
   }
 
+  // Group exercises: superset partners together, solo exercises as single-item groups
+  let groupedExercises = $derived.by(() => {
+    if (!workout) return [];
+    const groups: GeneratedExercise[][] = [];
+    const assigned = new Set<number>();
+    const exercises = workout.exercises;
+
+    for (let i = 0; i < exercises.length; i++) {
+      if (assigned.has(i)) continue;
+      const ex = exercises[i];
+      if (ex.supersetGroup) {
+        const partners = exercises
+          .map((e, idx) => ({ e, idx }))
+          .filter(({ e, idx }) => e.supersetGroup === ex.supersetGroup && !assigned.has(idx));
+        const group: GeneratedExercise[] = [];
+        for (const { e, idx } of partners) {
+          group.push(e);
+          assigned.add(idx);
+        }
+        groups.push(group);
+      } else {
+        assigned.add(i);
+        groups.push([ex]);
+      }
+    }
+    return groups;
+  });
+
   function toggleEquipment() {
     equipment = equipment === 'full' ? 'travel' : 'full';
     if (typeof localStorage !== 'undefined') {
@@ -151,6 +184,54 @@
     if (dayType) generate();
   }
 </script>
+
+{#snippet exerciseCard(ex: GeneratedExercise)}
+  <div class="absolute top-3 right-3 flex items-center gap-2">
+    {#if ex.progression === 'up'}
+      <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #22c55e20; color: #22c55e;">
+        ↑ PROGRESS
+      </span>
+    {:else if ex.progression === 'deload'}
+      <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #ef444420; color: #ef4444;">
+        ↓ DELOAD
+      </span>
+    {/if}
+    {#if ex.isFocus}
+      <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #f59e0b20; color: #f59e0b;">
+        FOCUS
+      </span>
+    {/if}
+    <button
+      onclick={() => openSwapSheet(ex.id)}
+      class="w-7 h-7 rounded-lg flex items-center justify-center bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700 transition-colors"
+      title="Swap exercise"
+    >
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+      </svg>
+    </button>
+  </div>
+  <button
+    onclick={() => detailExerciseId = ex.id}
+    class="font-medium mb-1 text-left underline decoration-neutral-600 underline-offset-2 hover:text-green-400 transition-colors"
+  >{ex.name}</button>
+  <div class="text-sm text-neutral-400">
+    {#if ex.isCardio && ex.suggestedDurationSec}
+      {formatDuration(ex.suggestedDurationSec)}
+    {:else}
+      {ex.suggestedSets} × {ex.suggestedReps}
+      {#if ex.suggestedWeightKg > 0}
+        @ {kgToLbs(ex.suggestedWeightKg)} lbs
+      {/if}
+    {/if}
+  </div>
+  <div class="text-xs text-neutral-600 mt-1">
+    Last done: {ex.lastPerformedDaysAgo < 1 ? 'today' : `${Math.round(ex.lastPerformedDaysAgo)}d ago`}
+    {#if ex.repRange && !ex.isCardio}
+      <span class="ml-2 text-neutral-500">target: {ex.repRange.min}–{ex.repRange.max} reps</span>
+    {/if}
+  </div>
+{/snippet}
 
 <div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   <h1 class="text-2xl font-bold mb-6">Generate Workout</h1>
@@ -202,42 +283,24 @@
     </div>
 
     <div class="space-y-3 mb-6">
-      {#each workout.exercises as ex}
-        <div class="rounded-xl p-4 relative" style="background-color: #1a1a1a;">
-          <div class="absolute top-3 right-3 flex items-center gap-2">
-            {#if ex.isFocus}
-              <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #f59e0b20; color: #f59e0b;">
-                FOCUS
-              </span>
-            {/if}
-            <button
-              onclick={() => openSwapSheet(ex.id)}
-              class="w-7 h-7 rounded-lg flex items-center justify-center bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700 transition-colors"
-              title="Swap exercise"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-              </svg>
-            </button>
+      {#each groupedExercises as group}
+        {#if group.length > 1}
+          <!-- Superset group -->
+          <div class="rounded-xl overflow-hidden border border-blue-500/30" style="background-color: #1a1a1a;">
+            <div class="px-4 py-1.5 text-xs font-bold text-blue-400 uppercase tracking-wider border-b border-blue-500/20" style="background-color: #1e3a5f20;">
+              Superset
+            </div>
+            {#each group as ex, idx}
+              <div class="p-4 relative {idx > 0 ? 'border-t border-neutral-800' : ''}">
+                {@render exerciseCard(ex)}
+              </div>
+            {/each}
           </div>
-          <button
-            onclick={() => detailExerciseId = ex.id}
-            class="font-medium mb-1 text-left underline decoration-neutral-600 underline-offset-2 hover:text-green-400 transition-colors"
-          >{ex.name}</button>
-          <div class="text-sm text-neutral-400">
-            {#if ex.isCardio && ex.suggestedDurationSec}
-              {formatDuration(ex.suggestedDurationSec)}
-            {:else}
-              {ex.suggestedSets} × {ex.suggestedReps}
-              {#if ex.suggestedWeightKg > 0}
-                @ {kgToLbs(ex.suggestedWeightKg)} lbs
-              {/if}
-            {/if}
+        {:else}
+          <div class="rounded-xl p-4 relative" style="background-color: #1a1a1a;">
+            {@render exerciseCard(group[0])}
           </div>
-          <div class="text-xs text-neutral-600 mt-1">
-            Last done: {ex.lastPerformedDaysAgo < 1 ? 'today' : `${Math.round(ex.lastPerformedDaysAgo)}d ago`}
-          </div>
-        </div>
+        {/if}
       {/each}
     </div>
 

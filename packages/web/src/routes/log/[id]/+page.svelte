@@ -23,6 +23,7 @@
     sets: SetData[];
     restSeconds?: number;
     expanded?: boolean;
+    supersetGroup?: number | null;
   }
 
   interface Workout {
@@ -121,6 +122,36 @@
 
   // Keep old name for the $effect check
   let showCoolDown = $derived(stretchPhase === 'cooldown');
+
+  // Group exercises for superset display
+  type ExerciseGroup = { supersetGroup: number | null; exercises: WorkoutExercise[] };
+
+  let exerciseGroups = $derived.by((): ExerciseGroup[] => {
+    if (!workout) return [];
+    const groups: ExerciseGroup[] = [];
+    const assigned = new Set<number>();
+    for (let i = 0; i < workout.exercises.length; i++) {
+      if (assigned.has(i)) continue;
+      const ex = workout.exercises[i];
+      if (ex.supersetGroup) {
+        const partners = workout.exercises
+          .map((e, idx) => ({ e, idx }))
+          .filter(({ e, idx }) => e.supersetGroup === ex.supersetGroup && !assigned.has(idx));
+        const group: WorkoutExercise[] = [];
+        for (const { e, idx } of partners) {
+          group.push(e);
+          assigned.add(idx);
+        }
+        groups.push({ supersetGroup: ex.supersetGroup, exercises: group });
+      } else {
+        assigned.add(i);
+        groups.push({ supersetGroup: null, exercises: [ex] });
+      }
+    }
+    return groups;
+  });
+
+  const SUPERSET_REST_SECONDS = 30;
 
   const CARDIO_PATTERN = /treadmill|elliptical|cycling|rowing/i;
 
@@ -255,9 +286,10 @@
       } catch {
         showToast('Failed to save set — will retry on finish', 'error');
       }
-      // Start rest timer when completing a set
-      if (ex.restSeconds && ex.restSeconds > 0) {
-        startRestTimer(ex.restSeconds);
+      // Start rest timer — shorter rest between superset partners
+      const restSec = ex.supersetGroup ? SUPERSET_REST_SECONDS : (ex.restSeconds ?? 60);
+      if (restSec > 0) {
+        startRestTimer(restSec);
       }
     }
   }
@@ -389,6 +421,134 @@
   }
 </script>
 
+{#snippet exerciseBlock(ex: WorkoutExercise)}
+  <div
+    class="w-full text-left p-4 flex justify-between items-center cursor-pointer"
+  >
+    <span class="font-medium">
+      <button
+        onclick={(e) => { e.stopPropagation(); detailExerciseId = ex.exerciseId; }}
+        class="underline decoration-neutral-600 underline-offset-2 hover:text-green-400 transition-colors"
+      >{ex.exercise?.name ?? 'Exercise'}</button>
+    </span>
+    <button
+      onclick={() => ex.expanded = !ex.expanded}
+      class="p-1"
+    >
+      <svg class="w-5 h-5 text-neutral-500 transition-transform {ex.expanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+      </svg>
+    </button>
+  </div>
+
+  {#if ex.expanded}
+    <div class="px-4 pb-4 space-y-2">
+      {#if isCardio(ex)}
+        {#each ex.sets as set, idx}
+          <div class="space-y-2 py-2 {idx > 0 ? 'border-t border-neutral-800' : ''}">
+            <div class="grid grid-cols-[1fr_1fr_48px] gap-2 items-center">
+              <div>
+                <label class="text-xs text-neutral-500 block mb-1">Duration (min)</label>
+                <div class="flex items-center justify-center gap-1">
+                  <button
+                    onclick={() => adjustReps(set, -1)}
+                    class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+                  >−</button>
+                  <span class="w-8 text-center text-sm font-bold">{set.reps ?? 0}</span>
+                  <button
+                    onclick={() => adjustReps(set, 1)}
+                    class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+                  >+</button>
+                </div>
+              </div>
+              <div>
+                <label class="text-xs text-neutral-500 block mb-1">Distance (km)</label>
+                <input
+                  type="number"
+                  value={set.weightKg ?? ''}
+                  onchange={(e) => { set.weightKg = parseFloat(e.currentTarget.value) || 0; }}
+                  placeholder="optional"
+                  class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
+                  step="0.1"
+                />
+              </div>
+              <div class="pt-4">
+                <button
+                  onclick={() => toggleComplete(set, ex)}
+                  class="w-11 h-11 rounded-lg flex items-center justify-center transition-colors
+                    {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
+                >
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        {/each}
+      {:else}
+        {#each ex.sets as set, idx}
+          <div class="flex items-center gap-2 py-1.5 {idx > 0 ? 'border-t border-neutral-800/50' : ''}">
+            <span class="w-6 text-center text-xs text-neutral-500 shrink-0">{idx + 1}</span>
+
+            <div class="flex items-center gap-1 shrink-0">
+              <button
+                onclick={() => adjustReps(set, -1)}
+                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+              >−</button>
+              <span class="w-8 text-center text-sm font-bold">{set.reps ?? 0}</span>
+              <button
+                onclick={() => adjustReps(set, 1)}
+                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+              >+</button>
+            </div>
+
+            <span class="text-neutral-600 text-xs shrink-0">×</span>
+
+            <div class="flex items-center gap-1 shrink-0">
+              <button
+                onclick={() => adjustWeightLbs(set, -5)}
+                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+              >−</button>
+              <input
+                type="number"
+                value={kgToLbs(set.weightKg)}
+                onchange={(e) => updateWeightLbs(set, e.currentTarget.value)}
+                class="w-14 text-center text-sm font-bold py-1.5 rounded-lg bg-neutral-800/50 text-white border-none outline-none"
+                step="2.5"
+                inputmode="decimal"
+              />
+              <button
+                onclick={() => adjustWeightLbs(set, 5)}
+                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+              >+</button>
+            </div>
+
+            <span class="text-neutral-600 text-xs shrink-0">lbs</span>
+
+            <button
+              onclick={() => toggleComplete(set, ex)}
+              class="w-11 h-11 rounded-lg flex items-center justify-center transition-colors shrink-0 ml-auto
+                {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
+            >
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </button>
+          </div>
+        {/each}
+      {/if}
+
+      <button
+        onclick={() => addSet(ex)}
+        class="w-full py-2 rounded-lg text-sm text-neutral-400 bg-neutral-800/50 hover:bg-neutral-800 transition-colors mt-2"
+      >
+        + Add Set
+      </button>
+    </div>
+  {/if}
+{/snippet}
+
 <div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   {#if loading}
     <div class="flex justify-center py-12">
@@ -500,139 +660,26 @@
     </div>
 
     <div class="space-y-4 mb-6">
-      {#each workout.exercises as ex}
-        <div class="rounded-xl overflow-hidden" style="background-color: #1a1a1a;">
-          <div
-            class="w-full text-left p-4 flex justify-between items-center cursor-pointer"
-          >
-            <span class="font-medium">
-              <button
-                onclick={(e) => { e.stopPropagation(); detailExerciseId = ex.exerciseId; }}
-                class="underline decoration-neutral-600 underline-offset-2 hover:text-green-400 transition-colors"
-              >{ex.exercise?.name ?? 'Exercise'}</button>
-            </span>
-            <button
-              onclick={() => ex.expanded = !ex.expanded}
-              class="p-1"
-            >
-              <svg class="w-5 h-5 text-neutral-500 transition-transform {ex.expanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-              </svg>
-            </button>
-          </div>
-
-          {#if ex.expanded}
-            <div class="px-4 pb-4 space-y-2">
-              {#if isCardio(ex)}
-                <!-- Cardio fields: reps=duration(min), weightKg=distance(km), rpe=resistance level -->
-                {#each ex.sets as set, idx}
-                  <div class="space-y-2 py-2 {idx > 0 ? 'border-t border-neutral-800' : ''}">
-                    <div class="grid grid-cols-[1fr_1fr_48px] gap-2 items-center">
-                      <div>
-                        <label class="text-xs text-neutral-500 block mb-1">Duration (min)</label>
-                        <div class="flex items-center justify-center gap-1">
-                          <button
-                            onclick={() => adjustReps(set, -1)}
-                            class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
-                          >−</button>
-                          <span class="w-8 text-center text-sm font-bold">{set.reps ?? 0}</span>
-                          <button
-                            onclick={() => adjustReps(set, 1)}
-                            class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
-                          >+</button>
-                        </div>
-                      </div>
-                      <div>
-                        <label class="text-xs text-neutral-500 block mb-1">Distance (km)</label>
-                        <input
-                          type="number"
-                          value={set.weightKg ?? ''}
-                          onchange={(e) => { set.weightKg = parseFloat(e.currentTarget.value) || 0; }}
-                          placeholder="optional"
-                          class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
-                          step="0.1"
-                        />
-                      </div>
-                      <div class="pt-4">
-                        <button
-                          onclick={() => toggleComplete(set, ex)}
-                          class="w-11 h-11 rounded-lg flex items-center justify-center transition-colors
-                            {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
-                        >
-                          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                {/each}
-              {:else}
-                <!-- Strength exercise: standard reps + weight grid -->
-                {#each ex.sets as set, idx}
-                  <div class="flex items-center gap-2 py-1.5 {idx > 0 ? 'border-t border-neutral-800/50' : ''}">
-                    <span class="w-6 text-center text-xs text-neutral-500 shrink-0">{idx + 1}</span>
-
-                    <!-- Reps +/- -->
-                    <div class="flex items-center gap-1 shrink-0">
-                      <button
-                        onclick={() => adjustReps(set, -1)}
-                        class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
-                      >−</button>
-                      <span class="w-8 text-center text-sm font-bold">{set.reps ?? 0}</span>
-                      <button
-                        onclick={() => adjustReps(set, 1)}
-                        class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
-                      >+</button>
-                    </div>
-
-                    <span class="text-neutral-600 text-xs shrink-0">×</span>
-
-                    <!-- Weight +/- with tappable display -->
-                    <div class="flex items-center gap-1 shrink-0">
-                      <button
-                        onclick={() => adjustWeightLbs(set, -5)}
-                        class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
-                      >−</button>
-                      <input
-                        type="number"
-                        value={kgToLbs(set.weightKg)}
-                        onchange={(e) => updateWeightLbs(set, e.currentTarget.value)}
-                        class="w-14 text-center text-sm font-bold py-1.5 rounded-lg bg-neutral-800/50 text-white border-none outline-none"
-                        step="2.5"
-                        inputmode="decimal"
-                      />
-                      <button
-                        onclick={() => adjustWeightLbs(set, 5)}
-                        class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
-                      >+</button>
-                    </div>
-
-                    <span class="text-neutral-600 text-xs shrink-0">lbs</span>
-
-                    <!-- Checkmark -->
-                    <button
-                      onclick={() => toggleComplete(set, ex)}
-                      class="w-11 h-11 rounded-lg flex items-center justify-center transition-colors shrink-0 ml-auto
-                        {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
-                    >
-                      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
-                      </svg>
-                    </button>
-                  </div>
-                {/each}
-              {/if}
-
-              <button
-                onclick={() => addSet(ex)}
-                class="w-full py-2 rounded-lg text-sm text-neutral-400 bg-neutral-800/50 hover:bg-neutral-800 transition-colors mt-2"
-              >
-                + Add Set
-              </button>
+      {#each exerciseGroups as group}
+        {#if group.supersetGroup !== null && group.exercises.length > 1}
+          <!-- Superset group -->
+          <div class="rounded-xl overflow-hidden border border-blue-500/30" style="background-color: #1a1a1a;">
+            <div class="px-4 py-1.5 text-xs font-bold text-blue-400 uppercase tracking-wider border-b border-blue-500/20" style="background-color: #1e3a5f20;">
+              Superset · 30s rest between
             </div>
-          {/if}
-        </div>
+            {#each group.exercises as ex, gIdx}
+              <div class="{gIdx > 0 ? 'border-t border-neutral-800' : ''}">
+                {@render exerciseBlock(ex)}
+              </div>
+            {/each}
+          </div>
+        {:else}
+          {#each group.exercises as ex}
+            <div class="rounded-xl overflow-hidden" style="background-color: #1a1a1a;">
+              {@render exerciseBlock(ex)}
+            </div>
+          {/each}
+        {/if}
       {/each}
     </div>
 

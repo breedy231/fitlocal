@@ -108,5 +108,8 @@ sqlite.exec(`
     OR lower(name) GLOB '*kickback*' OR lower(name) GLOB '*fly*' OR lower(name) GLOB '*flye*';
 `);
 
+// Add superset_group column to workout_exercises
+try { sqlite.exec('ALTER TABLE workout_exercises ADD COLUMN superset_group INTEGER'); } catch { /* exists */ }
+
 console.log('Database migrated successfully');
 sqlite.close();
