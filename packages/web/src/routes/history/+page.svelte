@@ -138,7 +138,7 @@
   onMount(loadWorkouts);
 </script>
 
-<div class="p-4 max-w-lg mx-auto pb-20">
+<div class="p-4 max-w-lg md:max-w-3xl mx-auto pb-20">
   <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-bold">History</h1>
     <div class="flex items-center gap-2">
@@ -288,7 +288,7 @@
 <!-- Sticky bulk delete bar -->
 {#if editMode && workouts.length > 0}
   <div class="fixed bottom-0 left-0 right-0 p-4 z-40" style="background: linear-gradient(transparent, #0f0f0f 30%);">
-    <div class="max-w-lg mx-auto">
+    <div class="max-w-lg md:max-w-3xl mx-auto">
       <button
         onclick={() => bulkDeleteConfirm = true}
         disabled={selectedIds.size === 0}

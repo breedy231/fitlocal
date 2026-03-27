@@ -46,7 +46,7 @@
   });
 </script>
 
-<div class="p-4 max-w-lg mx-auto">
+<div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   <h1 class="text-3xl font-bold mb-6">FitLocal</h1>
 
   {#if loading}

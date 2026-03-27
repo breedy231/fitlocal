@@ -308,7 +308,7 @@
   }
 </script>
 
-<div class="p-4 max-w-lg mx-auto">
+<div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   {#if loading}
     <div class="flex justify-center py-12">
       <div class="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>

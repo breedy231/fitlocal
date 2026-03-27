@@ -101,7 +101,7 @@
   });
 </script>
 
-<div class="p-4 max-w-lg mx-auto">
+<div class="p-4 max-w-lg md:max-w-5xl mx-auto">
   <h1 class="text-2xl font-bold mb-4">Reports</h1>
 
   {#if loading}
@@ -157,57 +157,77 @@
         </div>
       </div>
 
-      <!-- Weekly Frequency -->
-      <section class="mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
-        <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Weekly Frequency</h2>
-        <BarChart
-          data={frequency.map((w) => ({
-            label: shortDate(w.weekStart),
-            value: w.count,
-          }))}
-          height={120}
-        />
-      </section>
+      <!-- Frequency + Volume: side by side on desktop -->
+      <div class="md:grid md:grid-cols-2 md:gap-5">
+        <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Weekly Frequency</h2>
+          <BarChart
+            data={frequency.map((w) => ({
+              label: shortDate(w.weekStart),
+              value: w.count,
+            }))}
+            height={120}
+          />
+        </section>
 
-      <!-- Volume Over Time -->
-      <section class="mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
-        <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Volume per Workout (lbs)</h2>
-        <LineChart
-          data={volume.map((w) => ({
-            label: shortDate(w.date),
-            value: kgToLbs(w.totalVolume),
-          }))}
-          height={140}
-          showDots={volume.length <= 20}
-        />
-      </section>
+        <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Volume per Workout (lbs)</h2>
+          <LineChart
+            data={volume.map((w) => ({
+              label: shortDate(w.date),
+              value: kgToLbs(w.totalVolume),
+            }))}
+            height={140}
+            showDots={volume.length <= 20}
+          />
+        </section>
+      </div>
 
-      <!-- Muscle Distribution -->
-      <section class="mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
-        <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Muscle Distribution (30d)</h2>
-        {#if muscles.length > 0}
-          {@const maxSets = Math.max(...muscles.map((m) => m.sets))}
-          <div class="space-y-2">
-            {#each muscles as muscle}
-              <div class="flex items-center gap-3">
-                <span class="text-xs text-neutral-400 w-24 text-right capitalize">{muscle.name}</span>
-                <div class="flex-1 h-5 rounded-full overflow-hidden" style="background-color: #262626;">
-                  <div
-                    class="h-full rounded-full"
-                    style="width: {(muscle.sets / maxSets) * 100}%; background-color: #22c55e; opacity: {0.5 + (muscle.sets / maxSets) * 0.5};"
-                  ></div>
+      <!-- Muscle Distribution + PRs: side by side on desktop -->
+      <div class="md:grid md:grid-cols-2 md:gap-5 md:mt-5">
+        <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Muscle Distribution (30d)</h2>
+          {#if muscles.length > 0}
+            {@const maxSets = Math.max(...muscles.map((m) => m.sets))}
+            <div class="space-y-2">
+              {#each muscles as muscle}
+                <div class="flex items-center gap-3">
+                  <span class="text-xs text-neutral-400 w-24 text-right capitalize">{muscle.name}</span>
+                  <div class="flex-1 h-5 rounded-full overflow-hidden" style="background-color: #262626;">
+                    <div
+                      class="h-full rounded-full"
+                      style="width: {(muscle.sets / maxSets) * 100}%; background-color: #22c55e; opacity: {0.5 + (muscle.sets / maxSets) * 0.5};"
+                    ></div>
+                  </div>
+                  <span class="text-xs text-neutral-500 w-8">{Math.round(muscle.sets)}</span>
                 </div>
-                <span class="text-xs text-neutral-500 w-8">{Math.round(muscle.sets)}</span>
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <p class="text-neutral-500 text-sm text-center py-4">No data yet</p>
-        {/if}
-      </section>
+              {/each}
+            </div>
+          {:else}
+            <p class="text-neutral-500 text-sm text-center py-4">No data yet</p>
+          {/if}
+        </section>
 
-      <!-- Exercise Progression -->
-      <section class="mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
+        <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Personal Records</h2>
+          {#if records.length > 0}
+            <div class="space-y-2">
+              {#each records.slice(0, 10) as pr}
+                <div class="flex justify-between items-center py-1.5 border-b border-neutral-800 last:border-0">
+                  <span class="text-sm text-neutral-200 flex-1">{pr.exerciseName}</span>
+                  <span class="text-sm font-semibold text-green-400 ml-2">{kgToLbs(pr.maxWeightKg)} lbs</span>
+                  <span class="text-xs text-neutral-500 ml-2 w-16 text-right">{formatDate(pr.dateAchieved)}</span>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <p class="text-neutral-500 text-sm text-center py-4">No records yet</p>
+          {/if}
+        </section>
+      </div>
+
+      <!-- Exercise Progression: full width -->
+      <section class="mt-5 mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
         <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Exercise Progression</h2>
         {#if exerciseOptions.length > 0}
           <select
@@ -241,133 +261,110 @@
         {/if}
       </section>
 
-      <!-- Personal Records -->
-      <section class="mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
-        <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Personal Records</h2>
-        {#if records.length > 0}
-          <div class="space-y-2">
-            {#each records.slice(0, 10) as pr}
-              <div class="flex justify-between items-center py-1.5 border-b border-neutral-800 last:border-0">
-                <span class="text-sm text-neutral-200 flex-1">{pr.exerciseName}</span>
-                <span class="text-sm font-semibold text-green-400 ml-2">{kgToLbs(pr.maxWeightKg)} lbs</span>
-                <span class="text-xs text-neutral-500 ml-2 w-16 text-right">{formatDate(pr.dateAchieved)}</span>
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <p class="text-neutral-500 text-sm text-center py-4">No records yet</p>
-        {/if}
-      </section>
-
     {:else}
       <!-- Health Tab -->
-
-      <!-- Weight Trend -->
-      {#if healthSnapshots.some((s) => s.bodyWeightKg != null)}
-        <section class="mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
-          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Body Weight (lbs)</h2>
-          <LineChart
-            data={healthSnapshots
-              .filter((s) => s.bodyWeightKg != null)
-              .map((s) => ({ label: shortDate(s.date), value: kgToLbs(s.bodyWeightKg!) }))}
-            color="#f59e0b"
-            height={140}
-            unit="lb"
-          />
-        </section>
-      {/if}
-
-      <!-- Steps -->
-      {#if healthSnapshots.some((s) => s.steps != null)}
-        <section class="mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
-          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Daily Steps</h2>
-          <BarChart
-            data={healthSnapshots
-              .filter((s) => s.steps != null)
-              .slice(-14)
-              .map((s) => ({ label: shortDate(s.date), value: s.steps! }))}
-            color="#3b82f6"
-            height={120}
-          />
-        </section>
-      {/if}
-
-      <!-- HRV Trend -->
-      {#if healthSnapshots.some((s) => s.hrv != null)}
-        <section class="mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
-          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">HRV</h2>
-          <LineChart
-            data={healthSnapshots
-              .filter((s) => s.hrv != null)
-              .map((s) => ({ label: shortDate(s.date), value: s.hrv }))}
-            color="#22c55e"
-            height={140}
-            unit="ms"
-          />
-        </section>
-      {/if}
-
-      <!-- Resting Heart Rate -->
-      {#if healthSnapshots.some((s) => s.restingHr != null)}
-        <section class="mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
-          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Resting Heart Rate</h2>
-          <LineChart
-            data={healthSnapshots
-              .filter((s) => s.restingHr != null)
-              .map((s) => ({ label: shortDate(s.date), value: s.restingHr }))}
-            color="#ef4444"
-            height={140}
-            unit="bpm"
-          />
-        </section>
-      {/if}
-
-      <!-- Sleep -->
-      {#if healthSnapshots.some((s) => s.sleepHours != null)}
-        <section class="mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
-          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Sleep</h2>
-          <BarChart
-            data={healthSnapshots
-              .filter((s) => s.sleepHours != null)
-              .slice(-14)
-              .map((s) => ({ label: shortDate(s.date), value: s.sleepHours! }))}
-            color="#8b5cf6"
-            height={120}
-            unit="h"
-          />
-        </section>
-      {/if}
-
-      <!-- Nutrition -->
-      {#if healthSnapshots.some((s) => s.calories != null)}
-        <section class="mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
-          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Calories & Protein</h2>
-          <div class="mb-3">
-            <p class="text-xs text-neutral-500 mb-1">Calories</p>
+      <div class="md:grid md:grid-cols-2 md:gap-5">
+        {#if healthSnapshots.some((s) => s.bodyWeightKg != null)}
+          <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+            <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Body Weight (lbs)</h2>
             <LineChart
               data={healthSnapshots
-                .filter((s) => s.calories != null)
-                .map((s) => ({ label: shortDate(s.date), value: s.calories }))}
-              color="#f97316"
-              height={100}
-              unit="cal"
+                .filter((s) => s.bodyWeightKg != null)
+                .map((s) => ({ label: shortDate(s.date), value: kgToLbs(s.bodyWeightKg!) }))}
+              color="#f59e0b"
+              height={140}
+              unit="lb"
             />
-          </div>
-          {#if healthSnapshots.some((s) => s.proteinG != null)}
-            <div>
-              <p class="text-xs text-neutral-500 mb-1">Protein</p>
+          </section>
+        {/if}
+
+        {#if healthSnapshots.some((s) => s.steps != null)}
+          <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+            <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Daily Steps</h2>
+            <BarChart
+              data={healthSnapshots
+                .filter((s) => s.steps != null)
+                .slice(-14)
+                .map((s) => ({ label: shortDate(s.date), value: s.steps! }))}
+              color="#3b82f6"
+              height={120}
+            />
+          </section>
+        {/if}
+
+        {#if healthSnapshots.some((s) => s.hrv != null)}
+          <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+            <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">HRV</h2>
+            <LineChart
+              data={healthSnapshots
+                .filter((s) => s.hrv != null)
+                .map((s) => ({ label: shortDate(s.date), value: s.hrv }))}
+              color="#22c55e"
+              height={140}
+              unit="ms"
+            />
+          </section>
+        {/if}
+
+        {#if healthSnapshots.some((s) => s.restingHr != null)}
+          <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+            <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Resting Heart Rate</h2>
+            <LineChart
+              data={healthSnapshots
+                .filter((s) => s.restingHr != null)
+                .map((s) => ({ label: shortDate(s.date), value: s.restingHr }))}
+              color="#ef4444"
+              height={140}
+              unit="bpm"
+            />
+          </section>
+        {/if}
+
+        {#if healthSnapshots.some((s) => s.sleepHours != null)}
+          <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+            <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Sleep</h2>
+            <BarChart
+              data={healthSnapshots
+                .filter((s) => s.sleepHours != null)
+                .slice(-14)
+                .map((s) => ({ label: shortDate(s.date), value: s.sleepHours! }))}
+              color="#8b5cf6"
+              height={120}
+              unit="h"
+            />
+          </section>
+        {/if}
+
+        {#if healthSnapshots.some((s) => s.calories != null)}
+          <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+            <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Calories & Protein</h2>
+            <div class="mb-3">
+              <p class="text-xs text-neutral-500 mb-1">Calories</p>
               <LineChart
                 data={healthSnapshots
-                  .filter((s) => s.proteinG != null)
-                  .map((s) => ({ label: shortDate(s.date), value: s.proteinG }))}
-                color="#06b6d4"
+                  .filter((s) => s.calories != null)
+                  .map((s) => ({ label: shortDate(s.date), value: s.calories }))}
+                color="#f97316"
                 height={100}
-                unit="g"
+                unit="cal"
               />
             </div>
-          {/if}
-        </section>
-      {/if}
+            {#if healthSnapshots.some((s) => s.proteinG != null)}
+              <div>
+                <p class="text-xs text-neutral-500 mb-1">Protein</p>
+                <LineChart
+                  data={healthSnapshots
+                    .filter((s) => s.proteinG != null)
+                    .map((s) => ({ label: shortDate(s.date), value: s.proteinG }))}
+                  color="#06b6d4"
+                  height={100}
+                  unit="g"
+                />
+              </div>
+            {/if}
+          </section>
+        {/if}
+      </div>
 
       {#if !healthSnapshots.some((s) => s.bodyWeightKg != null || s.steps != null || s.hrv != null || s.restingHr != null || s.sleepHours != null)}
         <div class="rounded-xl p-6 text-center" style="background-color: #1a1a1a;">

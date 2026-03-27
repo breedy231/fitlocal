@@ -91,7 +91,7 @@
   }
 </script>
 
-<div class="p-4 max-w-lg mx-auto">
+<div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   <div class="flex items-center justify-between mb-6">
     <a href="/history" class="text-neutral-400 hover:text-white text-sm">← Back</a>
     <h1 class="text-xl font-bold">Log Workout</h1>
