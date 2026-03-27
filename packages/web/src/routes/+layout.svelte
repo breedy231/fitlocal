@@ -1,7 +1,32 @@
 <script lang="ts">
   import '../app.css';
   import { page } from '$app/stores';
+  import Toast from '$lib/Toast.svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { onQueueChange } from '$lib/offline-queue';
   let { children } = $props();
+
+  let isOffline = $state(false);
+  let queuedCount = $state(0);
+
+  let unsubQueue: (() => void) | null = null;
+
+  onMount(() => {
+    isOffline = !navigator.onLine;
+    const goOffline = () => { isOffline = true; };
+    const goOnline = () => { isOffline = false; };
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', goOnline);
+    unsubQueue = onQueueChange((count) => { queuedCount = count; });
+    return () => {
+      window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online', goOnline);
+    };
+  });
+
+  onDestroy(() => {
+    unsubQueue?.();
+  });
 
   function isActive(href: string): boolean {
     const path = $page.url.pathname;
@@ -62,9 +87,18 @@
     </div>
   </aside>
 
+  {#if isOffline}
+    <div class="md:ml-[200px] flex items-center justify-center gap-2 text-xs py-1.5 bg-amber-600/20 text-amber-400 border-b border-amber-600/30">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728M5.636 5.636a9 9 0 000 12.728M8.464 15.536a5 5 0 010-7.072M15.536 8.464a5 5 0 010 7.072"></path></svg>
+      Offline{queuedCount > 0 ? ` · ${queuedCount} queued` : ''}
+    </div>
+  {/if}
+
   <main class="flex-1 pb-24 md:pb-0 md:ml-[200px]">
     {@render children()}
   </main>
+
+  <Toast />
 
   <!-- Mobile bottom nav -->
   <nav class="md:hidden fixed bottom-0 left-0 right-0 border-t border-neutral-800 safe-area-pb" style="background-color: #1a1a1a;">

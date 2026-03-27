@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import ExerciseDetail from '$lib/ExerciseDetail.svelte';
+  import { showToast } from '$lib/toast';
 
   let detailExerciseId: number | null = $state(null);
 
@@ -50,9 +51,9 @@
   let hasCelebrated = false;
 
   let allComplete = $derived(
-    workout != null &&
-    workout.exercises.length > 0 &&
-    workout.exercises.every(ex => ex.sets.length > 0 && ex.sets.every(s => s.completed))
+    workout !== null &&
+    (workout as Workout).exercises.length > 0 &&
+    (workout as Workout).exercises.every((ex: WorkoutExercise) => ex.sets.length > 0 && ex.sets.every((s: SetData) => s.completed))
   );
 
   // Watch for all-complete and trigger celebration
@@ -110,13 +111,16 @@
   let restTimerInterval: ReturnType<typeof setInterval> | null = null;
   let hasVibrated10s = false;
 
-  // Cool-down state
-  let showCoolDown = $state(false);
+  // Stretch state (shared for warm-up and cool-down)
+  let stretchPhase: 'warmup' | 'cooldown' | null = $state(null);
   let stretches: StretchData[] = $state([]);
   let activeStretchIndex = $state(0);
   let stretchTimeLeft = $state(0);
   let stretchTimerActive = $state(false);
   let stretchTimerInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Keep old name for the $effect check
+  let showCoolDown = $derived(stretchPhase === 'cooldown');
 
   const CARDIO_PATTERN = /treadmill|elliptical|cycling|rowing/i;
 
@@ -135,20 +139,85 @@
     return lbs / KG_TO_LBS;
   }
 
-  onMount(async () => {
+  function getWorkoutMuscles(): string[] {
+    if (!workout) return [];
+    const muscles = new Set<string>();
+    for (const ex of workout.exercises) {
+      if (ex.exercise.primaryMuscles) {
+        for (const m of ex.exercise.primaryMuscles) muscles.add(m);
+      }
+    }
+    return [...muscles];
+  }
+
+  const FALLBACK_STRETCHES: StretchData[] = [
+    { name: 'Standing Quad Stretch', duration: 30, muscles: ['quads'], instructions: 'Stand on one leg, pull opposite foot to glutes. Hold and switch.' },
+    { name: 'Chest Doorway Stretch', duration: 30, muscles: ['chest'], instructions: 'Place forearm on doorframe at 90°, lean forward gently.' },
+    { name: 'Seated Hamstring Stretch', duration: 30, muscles: ['hamstrings'], instructions: 'Sit with one leg extended, reach toward toes. Hold and switch.' },
+    { name: "Child's Pose", duration: 45, muscles: ['back'], instructions: 'Kneel, sit back on heels, extend arms forward on the floor.' },
+  ];
+
+  async function loadStretches(muscleGroups: string[]): Promise<StretchData[]> {
+    if (muscleGroups.length === 0) return FALLBACK_STRETCHES;
     try {
-      const id = $page.params.id;
+      const result = await api<StretchData[]>(`/stretches?muscleGroups=${muscleGroups.join(',')}`);
+      return result.length > 0 ? result : FALLBACK_STRETCHES;
+    } catch {
+      return FALLBACK_STRETCHES;
+    }
+  }
+
+  function beginStretchPhase(phase: 'warmup' | 'cooldown', stretchList: StretchData[]) {
+    stretches = stretchList;
+    stretchPhase = phase;
+    activeStretchIndex = 0;
+    stretchTimeLeft = stretchList[0].duration;
+    stretchTimerActive = false;
+  }
+
+  const CACHE_PREFIX = 'fitlocal-workout-';
+
+  function cacheWorkout(id: string, data: Workout) {
+    try { localStorage.setItem(CACHE_PREFIX + id, JSON.stringify(data)); } catch { /* quota */ }
+  }
+
+  function getCachedWorkout(id: string): Workout | null {
+    try {
+      const raw = localStorage.getItem(CACHE_PREFIX + id);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+
+  function initWorkout(w: Workout) {
+    for (const ex of w.exercises) {
+      ex.expanded = true;
+      for (const s of ex.sets) {
+        s.completed = false;
+      }
+    }
+  }
+
+  onMount(async () => {
+    const id = $page.params.id!;
+    try {
       workout = await api<Workout>(`/workouts/${id}`);
       if (workout?.exercises) {
-        for (const ex of workout.exercises) {
-          ex.expanded = true;
-          for (const s of ex.sets) {
-            s.completed = false;
-          }
-        }
+        cacheWorkout(id, workout);
+        initWorkout(workout);
+        const muscles = getWorkoutMuscles();
+        const stretchList = await loadStretches(muscles);
+        beginStretchPhase('warmup', stretchList);
       }
     } catch (e: any) {
-      alert('Could not load workout');
+      // Try loading from cache if offline
+      const cached = getCachedWorkout(id);
+      if (cached) {
+        workout = cached;
+        initWorkout(workout);
+        showToast('Loaded from offline cache', 'info');
+      } else {
+        showToast('Could not load workout — check that the server is running', 'error');
+      }
     } finally {
       loading = false;
     }
@@ -163,16 +232,33 @@
     set.reps = Math.max(0, (set.reps ?? 0) + delta);
   }
 
+  function adjustWeightLbs(set: SetData, deltaLbs: number) {
+    const currentLbs = kgToLbs(set.weightKg);
+    const newLbs = Math.max(0, currentLbs + deltaLbs);
+    set.weightKg = lbsToKg(newLbs);
+  }
+
   function updateWeightLbs(set: SetData, lbsStr: string) {
     const lbs = parseFloat(lbsStr) || 0;
     set.weightKg = lbsToKg(lbs);
   }
 
-  function toggleComplete(set: SetData, ex: WorkoutExercise) {
+  async function toggleComplete(set: SetData, ex: WorkoutExercise) {
     set.completed = !set.completed;
-    // Start rest timer when completing a set
-    if (set.completed && ex.restSeconds && ex.restSeconds > 0) {
-      startRestTimer(ex.restSeconds);
+    // Save set to API immediately when completing
+    if (set.completed) {
+      try {
+        await api(`/sets/${set.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg }),
+        });
+      } catch {
+        showToast('Failed to save set — will retry on finish', 'error');
+      }
+      // Start rest timer when completing a set
+      if (ex.restSeconds && ex.restSeconds > 0) {
+        startRestTimer(ex.restSeconds);
+      }
     }
   }
 
@@ -224,7 +310,7 @@
       newSet.completed = false;
       exercise.sets = [...exercise.sets, newSet];
     } catch (e: any) {
-      alert('Failed to add set');
+      showToast('Failed to add set', 'error');
     }
   }
 
@@ -246,41 +332,11 @@
       });
 
       // Load stretches for cool-down
-      const muscles = new Set<string>();
-      for (const ex of workout.exercises) {
-        if (ex.exercise.primaryMuscles) {
-          for (const m of ex.exercise.primaryMuscles) muscles.add(m);
-        }
-      }
-      if (muscles.size > 0) {
-        try {
-          stretches = await api<StretchData[]>(`/stretches?muscleGroups=${[...muscles].join(',')}`);
-        } catch {
-          stretches = [];
-        }
-      }
-
-      // Fallback stretches if API returns empty or fails
-      if (stretches.length === 0) {
-        stretches = [
-          { name: 'Standing Quad Stretch', duration: 30, muscles: ['quads'], instructions: 'Stand on one leg, pull opposite foot to glutes. Hold and switch.' },
-          { name: 'Chest Doorway Stretch', duration: 30, muscles: ['chest'], instructions: 'Place forearm on doorframe at 90°, lean forward gently.' },
-          { name: 'Seated Hamstring Stretch', duration: 30, muscles: ['hamstrings'], instructions: 'Sit with one leg extended, reach toward toes. Hold and switch.' },
-          { name: 'Child Pose', duration: 45, muscles: ['back'], instructions: 'Kneel, sit back on heels, extend arms forward on the floor.' },
-        ];
-      }
-
-      if (stretches.length > 0) {
-        showCoolDown = true;
-        activeStretchIndex = 0;
-        stretchTimeLeft = stretches[0].duration;
-        stretchTimerActive = false;
-      } else {
-        summaryData = computeSummary();
-        showSummary = true;
-      }
+      const muscles = getWorkoutMuscles();
+      const stretchList = await loadStretches(muscles);
+      beginStretchPhase('cooldown', stretchList);
     } catch (e: any) {
-      alert('Failed to save workout');
+      showToast('Failed to save workout — check connection and try again', 'error');
     } finally {
       finishing = false;
     }
@@ -310,17 +366,26 @@
       activeStretchIndex++;
       stretchTimeLeft = stretches[activeStretchIndex].duration;
     } else {
-      showCoolDown = false;
+      finishStretchPhase();
+    }
+  }
+
+  function finishStretchPhase() {
+    const phase = stretchPhase;
+    stretchPhase = null;
+    if (phase === 'warmup') {
+      // Warm-up done — start the workout timer now
+      startTime = Date.now();
+    } else {
+      // Cool-down done — show summary
       summaryData = computeSummary();
       showSummary = true;
     }
   }
 
-  function skipCoolDown() {
+  function skipStretches() {
     if (stretchTimerInterval) clearInterval(stretchTimerInterval);
-    showCoolDown = false;
-    summaryData = computeSummary();
-    showSummary = true;
+    finishStretchPhase();
   }
 </script>
 
@@ -376,12 +441,14 @@
         Done
       </button>
     </div>
-  {:else if showCoolDown}
-    <!-- Cool Down Screen -->
+  {:else if stretchPhase !== null}
+    <!-- Stretch Screen (warm-up or cool-down) -->
     <div class="py-6">
       <div class="flex items-center justify-between mb-8">
-        <h1 class="text-2xl font-bold">Cool Down</h1>
-        <button onclick={skipCoolDown} class="text-sm text-neutral-500 hover:text-neutral-300">Skip Cool Down</button>
+        <h1 class="text-2xl font-bold">{stretchPhase === 'warmup' ? 'Warm Up' : 'Cool Down'}</h1>
+        <button onclick={skipStretches} class="text-sm text-neutral-500 hover:text-neutral-300">
+          {stretchPhase === 'warmup' ? 'Skip to Workout' : 'Skip Cool Down'}
+        </button>
       </div>
 
       <div class="space-y-4">
@@ -411,7 +478,13 @@
                   </button>
                 {:else}
                   <button onclick={advanceStretch} class="flex-1 py-2.5 rounded-lg font-medium text-sm bg-neutral-700 text-neutral-200">
-                    {idx < stretches.length - 1 ? 'Next Stretch' : 'Finish'}
+                    {#if idx < stretches.length - 1}
+                      Next Stretch
+                    {:else if stretchPhase === 'warmup'}
+                      Start Workout
+                    {:else}
+                      Finish
+                    {/if}
                   </button>
                 {/if}
               </div>
@@ -423,7 +496,7 @@
   {:else if workout}
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">Workout</h1>
-      <span class="text-sm text-neutral-500">{new Date(workout.date).toLocaleDateString()}</span>
+      <span class="text-sm text-neutral-500">{new Date(workout.date + 'T12:00:00').toLocaleDateString()}</span>
     </div>
 
     <div class="space-y-4 mb-6">
@@ -460,12 +533,12 @@
                         <div class="flex items-center justify-center gap-1">
                           <button
                             onclick={() => adjustReps(set, -1)}
-                            class="w-7 h-7 rounded bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg"
+                            class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
                           >−</button>
-                          <span class="w-8 text-center text-sm font-medium">{set.reps ?? 0}</span>
+                          <span class="w-8 text-center text-sm font-bold">{set.reps ?? 0}</span>
                           <button
                             onclick={() => adjustReps(set, 1)}
-                            class="w-7 h-7 rounded bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg"
+                            class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
                           >+</button>
                         </div>
                       </div>
@@ -483,11 +556,11 @@
                       <div class="pt-4">
                         <button
                           onclick={() => toggleComplete(set, ex)}
-                          class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors
+                          class="w-11 h-11 rounded-lg flex items-center justify-center transition-colors
                             {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
                         >
-                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
                           </svg>
                         </button>
                       </div>
@@ -496,48 +569,55 @@
                 {/each}
               {:else}
                 <!-- Strength exercise: standard reps + weight grid -->
-                <!-- Header -->
-                <div class="grid grid-cols-[1fr_80px_80px_48px] gap-2 text-xs text-neutral-500 px-1">
-                  <span>SET</span>
-                  <span class="text-center">REPS</span>
-                  <span class="text-center">LBS</span>
-                  <span></span>
-                </div>
-
                 {#each ex.sets as set, idx}
-                  <div class="grid grid-cols-[1fr_80px_80px_48px] gap-2 items-center">
-                    <span class="text-sm text-neutral-400 pl-1">{idx + 1}</span>
+                  <div class="flex items-center gap-2 py-1.5 {idx > 0 ? 'border-t border-neutral-800/50' : ''}">
+                    <span class="w-6 text-center text-xs text-neutral-500 shrink-0">{idx + 1}</span>
 
                     <!-- Reps +/- -->
-                    <div class="flex items-center justify-center gap-1">
+                    <div class="flex items-center gap-1 shrink-0">
                       <button
                         onclick={() => adjustReps(set, -1)}
-                        class="w-7 h-7 rounded bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg"
+                        class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
                       >−</button>
-                      <span class="w-8 text-center text-sm font-medium">{set.reps ?? 0}</span>
+                      <span class="w-8 text-center text-sm font-bold">{set.reps ?? 0}</span>
                       <button
                         onclick={() => adjustReps(set, 1)}
-                        class="w-7 h-7 rounded bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg"
+                        class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
                       >+</button>
                     </div>
 
-                    <!-- Weight input (lbs) -->
-                    <input
-                      type="number"
-                      value={kgToLbs(set.weightKg)}
-                      onchange={(e) => updateWeightLbs(set, e.currentTarget.value)}
-                      class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
-                      step="2.5"
-                    />
+                    <span class="text-neutral-600 text-xs shrink-0">×</span>
+
+                    <!-- Weight +/- with tappable display -->
+                    <div class="flex items-center gap-1 shrink-0">
+                      <button
+                        onclick={() => adjustWeightLbs(set, -5)}
+                        class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+                      >−</button>
+                      <input
+                        type="number"
+                        value={kgToLbs(set.weightKg)}
+                        onchange={(e) => updateWeightLbs(set, e.currentTarget.value)}
+                        class="w-14 text-center text-sm font-bold py-1.5 rounded-lg bg-neutral-800/50 text-white border-none outline-none"
+                        step="2.5"
+                        inputmode="decimal"
+                      />
+                      <button
+                        onclick={() => adjustWeightLbs(set, 5)}
+                        class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+                      >+</button>
+                    </div>
+
+                    <span class="text-neutral-600 text-xs shrink-0">lbs</span>
 
                     <!-- Checkmark -->
                     <button
                       onclick={() => toggleComplete(set, ex)}
-                      class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors
+                      class="w-11 h-11 rounded-lg flex items-center justify-center transition-colors shrink-0 ml-auto
                         {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
                     >
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
                       </svg>
                     </button>
                   </div>
