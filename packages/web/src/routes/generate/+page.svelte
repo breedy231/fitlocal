@@ -61,7 +61,8 @@
     if (!workout) return;
     starting = true;
     try {
-      const now = new Date().toISOString().split('T')[0];
+      const d = new Date();
+      const now = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       const created = await api<{ id: number }>('/workouts', {
         method: 'POST',
         body: JSON.stringify({ date: now, notes: `${workout.dayType} day` }),
