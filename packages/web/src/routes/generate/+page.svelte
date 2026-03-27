@@ -23,6 +23,8 @@
     exercises: GeneratedExercise[];
   }
 
+  let swappingId: number | null = $state(null);
+
   let dayType = $state('');
   let equipment = $state(
     typeof localStorage !== 'undefined'
@@ -96,6 +98,25 @@
     generate();
   }
 
+  async function swapExercise(exerciseId: number) {
+    if (!workout) return;
+    swappingId = exerciseId;
+    try {
+      const excludeIds = workout.exercises.map(e => e.id).join(',');
+      const replacement = await api<GeneratedExercise>(
+        `/generate-workout/replace?exerciseId=${exerciseId}&dayType=${dayType}&equipment=${equipment}&excludeIds=${excludeIds}`
+      );
+      const idx = workout.exercises.findIndex(e => e.id === exerciseId);
+      if (idx !== -1) {
+        workout.exercises[idx] = { ...replacement, isFocus: workout.exercises[idx].isFocus };
+      }
+    } catch (e: any) {
+      alert(e.message || 'No alternative found');
+    } finally {
+      swappingId = null;
+    }
+  }
+
   function toggleEquipment() {
     equipment = equipment === 'full' ? 'travel' : 'full';
     if (typeof localStorage !== 'undefined') {
@@ -156,12 +177,28 @@
 
     <div class="space-y-3 mb-6">
       {#each workout.exercises as ex}
-        <div class="rounded-xl p-4 relative" style="background-color: #1a1a1a;">
-          {#if ex.isFocus}
-            <span class="absolute top-3 right-3 text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #f59e0b20; color: #f59e0b;">
-              FOCUS EXERCISE
-            </span>
-          {/if}
+        <div class="rounded-xl p-4 relative {swappingId === ex.id ? 'opacity-50' : ''}" style="background-color: #1a1a1a;">
+          <div class="absolute top-3 right-3 flex items-center gap-2">
+            {#if ex.isFocus}
+              <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #f59e0b20; color: #f59e0b;">
+                FOCUS
+              </span>
+            {/if}
+            <button
+              onclick={() => swapExercise(ex.id)}
+              disabled={swappingId === ex.id}
+              class="w-7 h-7 rounded-lg flex items-center justify-center bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700 transition-colors disabled:opacity-50"
+              title="Swap exercise"
+            >
+              {#if swappingId === ex.id}
+                <div class="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+              {:else}
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+              {/if}
+            </button>
+          </div>
           <button
             onclick={() => detailExerciseId = ex.id}
             class="font-medium mb-1 text-left underline decoration-neutral-600 underline-offset-2 hover:text-green-400 transition-colors"

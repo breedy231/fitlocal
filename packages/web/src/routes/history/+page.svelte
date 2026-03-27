@@ -17,6 +17,15 @@
   let expandedId: number | null = $state(null);
   let deleteConfirmId: number | null = $state(null);
   let deleting = $state(false);
+  let searchQuery = $state('');
+  let searching = $state(false);
+  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  const KG_TO_LBS = 2.20462;
+  function kgToLbs(kg: number | null): number {
+    if (!kg) return 0;
+    return Math.round((kg * KG_TO_LBS) / 2.5) * 2.5;
+  }
 
   function formatDate(dateStr: string): string {
     const d = new Date(dateStr);
@@ -27,9 +36,10 @@
     expandedId = expandedId === id ? null : id;
   }
 
-  async function loadWorkouts() {
+  async function loadWorkouts(exerciseName?: string) {
     try {
-      const data = await api<Workout[]>('/workouts');
+      const params = exerciseName ? `?exerciseName=${encodeURIComponent(exerciseName)}` : '';
+      const data = await api<Workout[]>(`/workouts${params}`);
       workouts = data;
       // Fetch details for expanded views
       const detailed = await Promise.all(
@@ -43,7 +53,23 @@
       // API not running
     } finally {
       loading = false;
+      searching = false;
     }
+  }
+
+  function onSearchInput(value: string) {
+    searchQuery = value;
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      searching = true;
+      loadWorkouts(searchQuery || undefined);
+    }, 300);
+  }
+
+  function clearSearch() {
+    searchQuery = '';
+    searching = true;
+    loadWorkouts();
   }
 
   async function deleteWorkout(id: number) {
@@ -72,6 +98,32 @@
     >
       + Log Workout
     </a>
+  </div>
+
+  <!-- Search -->
+  <div class="relative mb-4">
+    <input
+      type="text"
+      placeholder="Search by exercise name..."
+      value={searchQuery}
+      oninput={(e) => onSearchInput(e.currentTarget.value)}
+      class="w-full px-4 py-2.5 pr-10 rounded-xl text-sm bg-neutral-800 text-neutral-200 border border-neutral-700 outline-none focus:border-green-500/50 placeholder-neutral-500"
+    />
+    {#if searchQuery}
+      <button
+        onclick={clearSearch}
+        class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+    {/if}
+    {#if searching}
+      <div class="absolute right-3 top-1/2 -translate-y-1/2">
+        <div class="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    {/if}
   </div>
 
   {#if loading}
@@ -110,12 +162,30 @@
           {#if expandedId === workout.id}
             <div class="px-4 pb-4">
               {#if workout.exercises}
-                <div class="pt-2 pb-3 border-t border-neutral-800 space-y-1">
+                <div class="pt-2 pb-3 border-t border-neutral-800 space-y-3">
                   {#each workout.exercises as we}
-                    <div class="text-sm text-neutral-400">
-                      {we.exercise?.name ?? 'Unknown exercise'}
+                    <div>
+                      <div class="text-sm font-medium text-neutral-300 mb-1">
+                        {#if searchQuery && we.exercise?.name?.toLowerCase().includes(searchQuery.toLowerCase())}
+                          {@const name = we.exercise.name}
+                          {@const idx = name.toLowerCase().indexOf(searchQuery.toLowerCase())}
+                          {name.slice(0, idx)}<span class="text-green-400 font-semibold">{name.slice(idx, idx + searchQuery.length)}</span>{name.slice(idx + searchQuery.length)}
+                        {:else}
+                          {we.exercise?.name ?? 'Unknown exercise'}
+                        {/if}
+                      </div>
                       {#if we.sets && we.sets.length > 0}
-                        <span class="text-neutral-600">— {we.sets.length} sets</span>
+                        <div class="space-y-0.5 pl-2">
+                          {#each we.sets as set, idx}
+                            <div class="text-xs {set.isWarmup ? 'text-neutral-600' : 'text-neutral-400'} font-mono">
+                              {#if set.isWarmup}<span class="text-neutral-600 mr-1">W</span>{:else}<span class="text-neutral-600 mr-1">{idx + 1}</span>{/if}
+                              {set.reps ?? 0} reps
+                              {#if set.weightKg && set.weightKg > 0}
+                                @ {kgToLbs(set.weightKg)} lbs
+                              {/if}
+                            </div>
+                          {/each}
+                        </div>
                       {/if}
                     </div>
                   {/each}

@@ -1,16 +1,41 @@
 import { FastifyInstance } from 'fastify';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, like, sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 
 export async function workoutRoutes(app: FastifyInstance) {
   // List all workouts with exercise/set counts
-  app.get<{ Querystring: { detail?: string; limit?: string; offset?: string } }>('/workouts', async (req) => {
+  app.get<{ Querystring: { detail?: string; limit?: string; offset?: string; exerciseName?: string } }>('/workouts', async (req) => {
     const limit = Math.min(parseInt(req.query.limit || '50'), 200);
     const offset = parseInt(req.query.offset || '0');
-    const workouts = await db.select().from(schema.workouts)
-      .orderBy(desc(schema.workouts.date))
-      .limit(limit)
-      .offset(offset);
+    const exerciseNameFilter = req.query.exerciseName?.trim();
+
+    let workoutIds: number[] | null = null;
+
+    // If exerciseName filter is provided, find matching workout IDs
+    if (exerciseNameFilter) {
+      const matchingRows = db.all<{ workout_id: number }>(sql`
+        SELECT DISTINCT we.workout_id
+        FROM workout_exercises we
+        JOIN exercises e ON we.exercise_id = e.id
+        WHERE e.name LIKE ${'%' + exerciseNameFilter + '%'}
+      `);
+      workoutIds = matchingRows.map(r => r.workout_id);
+      if (workoutIds.length === 0) return [];
+    }
+
+    let workouts;
+    if (workoutIds) {
+      workouts = await db.select().from(schema.workouts)
+        .where(sql`${schema.workouts.id} IN (${sql.join(workoutIds.map(id => sql`${id}`), sql`, `)})`)
+        .orderBy(desc(schema.workouts.date))
+        .limit(limit)
+        .offset(offset);
+    } else {
+      workouts = await db.select().from(schema.workouts)
+        .orderBy(desc(schema.workouts.date))
+        .limit(limit)
+        .offset(offset);
+    }
 
     const enriched = await Promise.all(
       workouts.map(async (w) => {
