@@ -26,6 +26,13 @@
   let swapTargetId: number | null = $state(null);
   let swapAlternatives: GeneratedExercise[] = $state([]);
   let loadingAlternatives = $state(false);
+  let swapSearch = $state('');
+
+  let filteredAlternatives = $derived(
+    swapSearch.trim()
+      ? swapAlternatives.filter(a => a.name.toLowerCase().includes(swapSearch.toLowerCase()))
+      : swapAlternatives
+  );
 
   let dayType = $state('');
   let equipment = $state(
@@ -133,6 +140,7 @@
   function closeSwapSheet() {
     swapTargetId = null;
     swapAlternatives = [];
+    swapSearch = '';
   }
 
   function toggleEquipment() {
@@ -259,15 +267,29 @@
           </button>
         </div>
 
+        {#if !loadingAlternatives}
+          <div class="relative mb-3">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"></path>
+            </svg>
+            <input
+              type="text"
+              placeholder="Search exercises..."
+              bind:value={swapSearch}
+              class="w-full pl-9 pr-3 py-2 rounded-lg bg-neutral-800 text-white text-sm placeholder-neutral-500 border border-neutral-700 focus:outline-none focus:border-green-500"
+            />
+          </div>
+        {/if}
+
         {#if loadingAlternatives}
           <div class="flex justify-center py-12">
             <div class="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
-        {:else if swapAlternatives.length === 0}
-          <p class="text-neutral-400 text-center py-8">No alternatives found</p>
+        {:else if filteredAlternatives.length === 0}
+          <p class="text-neutral-400 text-center py-8">{swapSearch ? 'No matches' : 'No alternatives found'}</p>
         {:else}
           <div class="overflow-y-auto space-y-2">
-            {#each swapAlternatives as alt}
+            {#each filteredAlternatives as alt}
               <button
                 onclick={() => pickAlternative(alt)}
                 class="w-full text-left rounded-xl p-3 hover:bg-neutral-700 transition-colors"
