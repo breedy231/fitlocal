@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { generateWorkout } from '../lib/generator.js';
-import { getMFPNutrition } from '../lib/mfp.js';
+import { computeProgression } from '../lib/progression.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
 
 const DAY_TYPE_MUSCLES: Record<string, string[]> = {
@@ -30,18 +30,18 @@ export async function generateRoutes(app: FastifyInstance) {
       try {
         const workout = generateWorkout(dayType, equipment, db);
 
-        // MFP integration: reduce volume if in caloric deficit
-        const mfpUser = process.env.MFP_USERNAME;
-        const mfpCookie = process.env.MFP_SESSION_COOKIE;
-        if (mfpUser && mfpCookie) {
-          const nutrition = await getMFPNutrition(mfpUser, mfpCookie);
-          if (nutrition && nutrition.calories > 0) {
-            // Assume ~2200 maintenance; if deficit > 300, reduce sets
-            const deficit = 2200 - nutrition.calories;
-            if (deficit > 300) {
-              for (const ex of workout.exercises) {
-                ex.suggestedSets = Math.max(2, Math.round(ex.suggestedSets * 0.9));
-              }
+        // Nutrition integration: reduce volume if in caloric deficit
+        // Reads from health_snapshots (synced via HealthKit or iOS Shortcut)
+        const maintenance = Number(process.env.MAINTENANCE_CALORIES) || 2200;
+        const today = new Date().toISOString().slice(0, 10);
+        const snapshot = db.all<{ calories: number | null }>(
+          sql`SELECT calories FROM health_snapshots WHERE date = ${today} LIMIT 1`
+        );
+        if (snapshot.length > 0 && snapshot[0].calories && snapshot[0].calories > 0) {
+          const deficit = maintenance - snapshot[0].calories;
+          if (deficit > 300) {
+            for (const ex of workout.exercises) {
+              ex.suggestedSets = Math.max(2, Math.round(ex.suggestedSets * 0.9));
             }
           }
         }
@@ -133,7 +133,7 @@ export async function generateRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'No alternative exercises found' });
     }
 
-    // Enrich candidates with last-performed info and set suggestions
+    // Enrich candidates with progression data and last-performed info
     const now = Date.now();
     const enriched = candidates.map(e => {
       const lastPerformed = db.all<{ date: string }>(sql`
@@ -148,28 +148,20 @@ export async function generateRoutes(app: FastifyInstance) {
         daysSince = (now - new Date(lastPerformed[0].date).getTime()) / (1000 * 60 * 60 * 24);
       }
 
-      const lastSet = db.all<{ reps: number | null; weight_kg: number | null }>(sql`
-        SELECT s.reps, s.weight_kg FROM sets s
-        JOIN workout_exercises we ON s.workout_exercise_id = we.id
-        JOIN workouts w ON we.workout_id = w.id
-        WHERE we.exercise_id = ${e.id} AND s.is_warmup = 0
-        ORDER BY w.date DESC, s.id DESC
-        LIMIT 1
-      `);
-
-      const suggestedReps = lastSet.length > 0 ? (lastSet[0].reps ?? 10) : 10;
-      const suggestedWeightKg = lastSet.length > 0 ? (lastSet[0].weight_kg ?? 0) : 0;
+      const prog = computeProgression(e.id, e.name, db);
 
       return {
         id: e.id,
         name: e.name,
-        suggestedSets: 3,
-        suggestedReps,
-        suggestedWeightKg: Math.round(suggestedWeightKg * 100) / 100,
+        suggestedSets: prog.sets,
+        suggestedReps: prog.reps,
+        suggestedWeightKg: prog.weightKg,
         lastPerformedDaysAgo: Math.round(daysSince * 10) / 10,
         isFocus: false,
         isCardio: false,
         restSeconds: e.rest_seconds ?? 60,
+        progression: prog.directive,
+        repRange: { min: prog.repRange.min, max: prog.repRange.max },
         _daysSince: daysSince,
       };
     });
