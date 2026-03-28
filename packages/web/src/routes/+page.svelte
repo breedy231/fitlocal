@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '$lib/api';
   import { onMount } from 'svelte';
+  import { showToast } from '$lib/toast';
 
   interface MuscleRecovery {
     name: string;
@@ -26,7 +27,8 @@
   }
 
   function formatDate(dateStr: string): string {
-    const d = new Date(dateStr);
+    // Append T12:00 to avoid UTC midnight → previous day in CDT
+    const d = new Date(dateStr + 'T12:00:00');
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   }
 
@@ -39,7 +41,7 @@
       muscles = recoveryData.muscles || [];
       workouts = (Array.isArray(workoutData) ? workoutData : []).slice(-5).reverse();
     } catch {
-      // API not running
+      showToast('Cannot reach server — check that it\'s running', 'error');
     } finally {
       loading = false;
     }

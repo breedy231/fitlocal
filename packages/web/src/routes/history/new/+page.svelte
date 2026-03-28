@@ -2,6 +2,7 @@
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
   import ExerciseSearch from '$lib/ExerciseSearch.svelte';
+  import { showToast } from '$lib/toast';
 
   interface LocalSet {
     tempId: number;
@@ -52,7 +53,7 @@
 
   async function saveWorkout() {
     if (exercises.length === 0) {
-      alert('Add at least one exercise');
+      showToast('Add at least one exercise', 'info');
       return;
     }
     saving = true;
@@ -84,7 +85,7 @@
 
       goto('/history');
     } catch {
-      alert('Failed to save workout');
+      showToast('Failed to save workout', 'error');
     } finally {
       saving = false;
     }
