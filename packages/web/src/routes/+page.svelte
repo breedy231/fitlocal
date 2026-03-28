@@ -16,8 +16,16 @@
     exercises?: any[];
   }
 
+  interface ActiveProgram {
+    program: { id: number; name: string };
+    dayIndex: number;
+    totalDays: number;
+    day: { name: string; musclesFocus: string | null };
+  }
+
   let muscles: MuscleRecovery[] = $state([]);
   let workouts: Workout[] = $state([]);
+  let activeProgram: ActiveProgram | null = $state(null);
   let loading = $state(true);
 
   function recoveryColor(pct: number): string {
@@ -34,12 +42,14 @@
 
   onMount(async () => {
     try {
-      const [recoveryData, workoutData] = await Promise.all([
+      const [recoveryData, workoutData, activeProg] = await Promise.all([
         api<{ muscles: MuscleRecovery[] }>('/recovery-summary').catch(() => ({ muscles: [] })),
         api<Workout[]>('/workouts?limit=5').catch(() => []),
+        api<ActiveProgram>('/programs/active').catch(() => null),
       ]);
       muscles = recoveryData.muscles || [];
       workouts = (Array.isArray(workoutData) ? workoutData : []).slice(-5).reverse();
+      activeProgram = activeProg;
     } catch {
       showToast('Cannot reach server — check that it\'s running', 'error');
     } finally {
@@ -70,13 +80,32 @@
       </section>
     {/if}
 
+    <!-- Active Program -->
+    {#if activeProgram}
+      <a href="/generate" class="block rounded-xl p-4 mb-4 border border-green-500/30" style="background-color: #22c55e08;">
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="text-xs font-bold text-green-400 uppercase tracking-wider">{activeProgram.program.name}</span>
+            <p class="font-medium mt-1">{activeProgram.day.name}</p>
+            {#if activeProgram.day.musclesFocus}
+              <p class="text-sm text-neutral-400 mt-0.5">{activeProgram.day.musclesFocus}</p>
+            {/if}
+          </div>
+          <div class="text-right">
+            <p class="text-xs text-neutral-600">Day {activeProgram.dayIndex + 1} of {activeProgram.totalDays}</p>
+            <span class="text-sm text-green-400 font-medium">Start &rarr;</span>
+          </div>
+        </div>
+      </a>
+    {/if}
+
     <!-- Generate Button -->
     <a
       href="/generate"
       class="block w-full text-center font-semibold text-lg py-4 rounded-xl mb-6"
       style="background-color: #22c55e; color: #0f0f0f;"
     >
-      Generate Workout
+      {activeProgram ? 'Generate Freestyle Workout' : 'Generate Workout'}
     </a>
 
     <!-- Recent Workouts -->
