@@ -44,12 +44,45 @@
   let labelStep = $derived(
     data.length > 8 ? Math.ceil(data.length / 8) : 1
   );
+
+  // Tooltip state
+  let hoveredIndex: number | null = $state(null);
+  let svgEl: SVGSVGElement | undefined = $state(undefined);
+
+  function handlePointerMove(e: PointerEvent) {
+    if (!svgEl || data.length === 0) return;
+    const rect = svgEl.getBoundingClientRect();
+    const relX = e.clientX - rect.left;
+    const scaleX = chartWidth / rect.width;
+    const svgX = relX * scaleX;
+
+    // Find which bar slot we're in
+    const idx = Math.floor((svgX - yAxisWidth) / barSlotWidth);
+    hoveredIndex = idx >= 0 && idx < data.length ? idx : null;
+  }
+
+  function handlePointerLeave() {
+    hoveredIndex = null;
+  }
+
+  function formatValue(v: number): string {
+    if (Number.isInteger(v)) return v.toLocaleString();
+    return v.toFixed(1);
+  }
 </script>
 
 {#if data.length > 0}
   {@const tickArr = ticks()}
-  <div bind:clientWidth={containerWidth} style="overflow-x: hidden;">
-    <svg width="100%" viewBox="0 0 {chartWidth} {height + 30}" preserveAspectRatio="xMidYMid meet" style="max-height: {height + 40}px;">
+  <div bind:clientWidth={containerWidth} style="overflow-x: hidden; position: relative;">
+    <svg
+      bind:this={svgEl}
+      width="100%"
+      viewBox="0 0 {chartWidth} {height + 30}"
+      preserveAspectRatio="xMidYMid meet"
+      style="max-height: {height + 40}px; touch-action: pan-y;"
+      onpointermove={handlePointerMove}
+      onpointerleave={handlePointerLeave}
+    >
       <!-- Y-axis grid lines and labels -->
       {#each tickArr as tick}
         {@const ty = height - (tick / niceMax) * height}
@@ -83,17 +116,21 @@
           rx="4"
           height={barHeight}
           fill={color}
-          opacity="0.85"
+          opacity={hoveredIndex === i ? 1 : 0.85}
         />
-        <text
-          x={barCenter}
-          y={height - barHeight - 4}
-          text-anchor="middle"
-          fill="#a3a3a3"
-          font-size="10"
-        >
-          {Math.round(bar.value)}{unit}
-        </text>
+        <!-- Show value above bar only when hovered or few bars -->
+        {#if hoveredIndex === i || data.length <= 14}
+          <text
+            x={barCenter}
+            y={height - barHeight - 4}
+            text-anchor="middle"
+            fill={hoveredIndex === i ? '#e5e5e5' : '#a3a3a3'}
+            font-size={hoveredIndex === i ? '11' : '10'}
+            font-weight={hoveredIndex === i ? '600' : '400'}
+          >
+            {formatValue(bar.value)}{unit}
+          </text>
+        {/if}
         {#if i % labelStep === 0 || i === data.length - 1}
           <text
             x={barCenter}
@@ -107,6 +144,26 @@
         {/if}
       {/each}
     </svg>
+
+    <!-- Tooltip for many-bar charts -->
+    {#if hoveredIndex !== null && data.length > 14}
+      {@const bar = data[hoveredIndex]}
+      {@const barCenter = yAxisWidth + hoveredIndex * barSlotWidth + barSlotWidth / 2}
+      {@const pct = barCenter / chartWidth * 100}
+      <div
+        class="absolute pointer-events-none px-2 py-1 rounded-lg text-xs font-medium shadow-lg"
+        style="
+          background-color: #262626;
+          color: #e5e5e5;
+          top: 0;
+          left: {pct}%;
+          transform: translateX({pct > 75 ? '-100%' : pct < 25 ? '0%' : '-50%'});
+          white-space: nowrap;
+        "
+      >
+        {formatValue(bar.value)}{unit ? ` ${unit}` : ''} <span style="color: #737373;">{bar.label}</span>
+      </div>
+    {/if}
   </div>
 {:else}
   <p class="text-neutral-500 text-sm text-center py-4">No data yet</p>
