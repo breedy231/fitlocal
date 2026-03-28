@@ -38,7 +38,15 @@ export async function healthRoutes(app: FastifyInstance) {
   }>('/health/sync', async (req, reply) => {
     const _d = new Date();
     const date = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
-    const { hrv, restingHr, sleepHours, steps, bodyWeightKg, calories, proteinG } = req.body;
+    const raw = req.body;
+    // Treat 0 as null for metrics where zero is meaningless
+    const hrv = raw.hrv || null;
+    const restingHr = raw.restingHr || null;
+    const sleepHours = raw.sleepHours || null;
+    const steps = raw.steps || null;
+    const bodyWeightKg = raw.bodyWeightKg || null;
+    const calories = raw.calories || null;
+    const proteinG = raw.proteinG || null;
 
     const existing = db.all<{ id: number }>(
       sql`SELECT id FROM health_snapshots WHERE date = ${date} LIMIT 1`

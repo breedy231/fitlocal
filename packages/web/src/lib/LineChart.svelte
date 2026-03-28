@@ -61,12 +61,53 @@
   );
 
   let labelStep = $derived(Math.max(1, Math.floor(filtered.length / 8)));
+
+  // Tooltip state
+  let hoveredIndex: number | null = $state(null);
+  let svgEl: SVGSVGElement | undefined = $state(undefined);
+
+  function handlePointerMove(e: PointerEvent) {
+    if (!svgEl || filtered.length === 0) return;
+    const rect = svgEl.getBoundingClientRect();
+    const relX = e.clientX - rect.left;
+    const scaleX = chartWidth / rect.width;
+    const svgX = relX * scaleX;
+
+    // Find closest point
+    let closest = 0;
+    let closestDist = Infinity;
+    for (let i = 0; i < filtered.length; i++) {
+      const dist = Math.abs(x(i) - svgX);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = i;
+      }
+    }
+    hoveredIndex = closest;
+  }
+
+  function handlePointerLeave() {
+    hoveredIndex = null;
+  }
+
+  function formatValue(v: number): string {
+    if (Number.isInteger(v)) return v.toLocaleString();
+    return v.toFixed(1);
+  }
 </script>
 
 {#if filtered.length > 0}
   {@const tickArr = ticks()}
-  <div bind:clientWidth={containerWidth} style="overflow-x: hidden;">
-    <svg width="100%" viewBox="0 0 {chartWidth} {height + 20}" preserveAspectRatio="xMidYMid meet" style="max-height: {height + 20}px;">
+  <div bind:clientWidth={containerWidth} style="overflow-x: hidden; position: relative;">
+    <svg
+      bind:this={svgEl}
+      width="100%"
+      viewBox="0 0 {chartWidth} {height + 20}"
+      preserveAspectRatio="xMidYMid meet"
+      style="max-height: {height + 20}px; touch-action: pan-y;"
+      onpointermove={handlePointerMove}
+      onpointerleave={handlePointerLeave}
+    >
       <!-- Grid lines with nice Y-axis labels -->
       {#each tickArr as tick}
         {@const ty = y(tick)}
@@ -91,8 +132,22 @@
       <!-- Dots -->
       {#if showDots}
         {#each filtered as point, i}
-          <circle cx={x(i)} cy={y(point.value)} r="3" fill={color} />
+          <circle
+            cx={x(i)} cy={y(point.value)} r={hoveredIndex === i ? 5 : 3}
+            fill={hoveredIndex === i ? '#fff' : color}
+            stroke={hoveredIndex === i ? color : 'none'}
+            stroke-width="2"
+          />
         {/each}
+      {/if}
+
+      <!-- Hover crosshair -->
+      {#if hoveredIndex !== null}
+        <line
+          x1={x(hoveredIndex)} y1={padding / 2}
+          x2={x(hoveredIndex)} y2={height - padding / 2}
+          stroke="#525252" stroke-width="1" stroke-dasharray="3,3"
+        />
       {/if}
 
       <!-- X labels -->
@@ -104,6 +159,26 @@
         {/if}
       {/each}
     </svg>
+
+    <!-- Tooltip -->
+    {#if hoveredIndex !== null}
+      {@const pt = filtered[hoveredIndex]}
+      {@const tipX = x(hoveredIndex)}
+      {@const pct = tipX / chartWidth * 100}
+      <div
+        class="absolute pointer-events-none px-2 py-1 rounded-lg text-xs font-medium shadow-lg"
+        style="
+          background-color: #262626;
+          color: #e5e5e5;
+          top: 0;
+          left: {pct}%;
+          transform: translateX({pct > 75 ? '-100%' : pct < 25 ? '0%' : '-50%'});
+          white-space: nowrap;
+        "
+      >
+        {formatValue(pt.value)}{unit ? ` ${unit}` : ''} <span style="color: #737373;">{pt.label}</span>
+      </div>
+    {/if}
   </div>
 {:else}
   <p class="text-neutral-500 text-sm text-center py-4">No data yet</p>
