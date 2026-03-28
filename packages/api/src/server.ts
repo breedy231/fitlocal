@@ -21,7 +21,7 @@ const port = Number(process.env.PORT) || 3001;
 // Run migrations on startup
 await import('./migrate.js');
 
-const app = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024 }); // 10MB
+const app = Fastify({ logger: true, bodyLimit: 500 * 1024 * 1024 }); // 500MB for health exports
 
 await app.register(cors, {
   origin: true, // allow all origins for local network use
@@ -41,6 +41,9 @@ app.addContentTypeParser('application/pdf', { parseAs: 'buffer' }, (_req, body, 
   done(null, body);
 });
 app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_req, body, done) => {
+  done(null, body);
+});
+app.addContentTypeParser('application/zip', { parseAs: 'buffer' }, (_req, body, done) => {
   done(null, body);
 });
 

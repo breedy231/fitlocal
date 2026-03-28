@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from '$lib/api';
+  import { showToast } from '$lib/toast';
 
   let equipment = $state(
     typeof localStorage !== 'undefined'
@@ -65,11 +66,53 @@
   let copied = $state(false);
   let showSteps = $state(false);
   let showBackfill = $state(false);
-  const apiBase = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
-    ? `http://${window.location.hostname}:3001`
-    : 'http://localhost:3001';
+  let healthImporting = $state(false);
+  let healthImportResult = $state('');
+
+  function getApiBase(): string {
+    if (typeof window === 'undefined') return 'http://localhost:3001';
+    const { hostname, port, protocol } = window.location;
+    if (port === '5173') {
+      return hostname === 'localhost' ? 'http://localhost:3001' : `http://${hostname}:3001`;
+    }
+    return `${protocol}//${hostname}${port ? ':' + port : ''}/api`;
+  }
+
+  const apiBase = getApiBase();
   const syncUrl = `${apiBase}/health/sync`;
   const importUrl = `${apiBase}/health/import-samples`;
+
+  async function handleHealthExport(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    healthImporting = true;
+    healthImportResult = '';
+    try {
+      const buffer = await file.arrayBuffer();
+      const res = await fetch(`${apiBase}/health/import-apple`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/zip' },
+        body: buffer,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || `Import failed: ${res.status}`);
+      }
+      const result = await res.json();
+      const counts = result.sampleCounts || {};
+      const details = Object.entries(counts).map(([k, v]) => `${k}: ${v}`).join(', ');
+      healthImportResult = `Imported ${result.daysProcessed} days (${result.dateRange}). ${result.inserted} new, ${result.updated} updated. Samples: ${details}`;
+      showToast('Health data imported!', 'success');
+    } catch (err: any) {
+      healthImportResult = err.message || 'Import failed';
+      showToast(healthImportResult, 'error');
+    } finally {
+      healthImporting = false;
+      input.value = '';
+    }
+  }
 
   function toggleEquipment() {
     equipment = equipment === 'full' ? 'travel' : 'full';
@@ -172,11 +215,38 @@
       {/if}
     </div>
 
-    <!-- Apple Health Sync -->
+    <!-- Apple Health Import -->
     <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
-      <h2 class="font-medium mb-3">Apple Health Sync</h2>
+      <h2 class="font-medium mb-3">Apple Health Import</h2>
       <p class="text-sm text-neutral-400 mb-3">
-        Syncs health data daily via an iOS Shortcut automation. Safe to run multiple times — data is merged, not duplicated.
+        Import your full health history from the Apple Health app. Go to <strong>Health &gt; Profile (top right) &gt; Export All Health Data</strong>, then AirDrop the zip to your Mac and upload it here.
+      </p>
+
+      <label class="block w-full cursor-pointer mb-3">
+        <div class="py-3 px-4 rounded-lg bg-neutral-800 text-center text-neutral-300 min-h-[48px] flex items-center justify-center">
+          {#if healthImporting}
+            <div class="w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full animate-spin mr-2"></div>
+            Importing (this may take a minute)...
+          {:else}
+            Select Apple Health Export (.zip)
+          {/if}
+        </div>
+        <input type="file" accept=".zip" onchange={handleHealthExport} class="hidden" disabled={healthImporting} />
+      </label>
+      {#if healthImportResult}
+        <p class="text-xs mt-2 {healthImportResult.startsWith('Imported') ? 'text-green-400' : 'text-red-400'} leading-relaxed">
+          {healthImportResult}
+        </p>
+      {/if}
+
+      <p class="text-xs text-neutral-600 mt-2">Imports HRV, resting heart rate, sleep, steps, body weight, calories, and protein. Safe to re-import — data is merged by date.</p>
+    </div>
+
+    <!-- Apple Health Sync (Advanced) -->
+    <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
+      <h2 class="font-medium mb-3">Daily Sync (Advanced)</h2>
+      <p class="text-sm text-neutral-400 mb-3">
+        For ongoing daily sync via iOS Shortcuts. Re-export from Health periodically, or set up a Shortcut automation.
       </p>
 
       <!-- Sync URL -->

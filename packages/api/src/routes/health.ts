@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
+import { parseHealthExportZip } from '../lib/health-xml-parser.js';
 
 export async function healthRoutes(app: FastifyInstance) {
   app.get('/health-snapshots', async () => {
@@ -194,6 +195,64 @@ export async function healthRoutes(app: FastifyInstance) {
       samplesReceived: samples.length,
       daysAggregated: aggregated.size,
       ...results,
+    });
+  });
+
+  // Import Apple Health export zip (Settings > Health > Export All Health Data)
+  app.post('/health/import-apple', async (req, reply) => {
+    const zipBuffer = Buffer.isBuffer(req.body)
+      ? req.body
+      : Buffer.from(req.body as string, 'binary');
+
+    if (zipBuffer.length < 100) {
+      return reply.status(400).send({ error: 'Invalid zip data' });
+    }
+
+    const { snapshots, stats } = await parseHealthExportZip(zipBuffer);
+
+    if (snapshots.length === 0) {
+      return reply.status(400).send({ error: 'No health records found in export' });
+    }
+
+    // Upsert all snapshots in a transaction
+    const results = db.transaction((tx) => {
+      let inserted = 0;
+      let updated = 0;
+
+      for (const s of snapshots) {
+        const existing = tx.all<{ id: number }>(
+          sql`SELECT id FROM health_snapshots WHERE date = ${s.date} LIMIT 1`
+        );
+
+        if (existing.length > 0) {
+          tx.run(sql`UPDATE health_snapshots SET
+            resting_hr = COALESCE(${s.restingHr}, resting_hr),
+            hrv = COALESCE(${s.hrv}, hrv),
+            sleep_hours = COALESCE(${s.sleepHours}, sleep_hours),
+            steps = COALESCE(${s.steps}, steps),
+            body_weight_kg = COALESCE(${s.bodyWeightKg}, body_weight_kg),
+            calories = COALESCE(${s.calories}, calories),
+            protein_g = COALESCE(${s.proteinG}, protein_g)
+            WHERE date = ${s.date}`);
+          updated++;
+        } else {
+          tx.run(sql`INSERT INTO health_snapshots (date, resting_hr, hrv, sleep_hours, steps, body_weight_kg, calories, protein_g)
+            VALUES (${s.date}, ${s.restingHr}, ${s.hrv}, ${s.sleepHours},
+                    ${s.steps}, ${s.bodyWeightKg}, ${s.calories}, ${s.proteinG})`);
+          inserted++;
+        }
+      }
+
+      return { inserted, updated };
+    });
+
+    const dateRange = `${snapshots[0].date} to ${snapshots[snapshots.length - 1].date}`;
+
+    return reply.status(200).send({
+      daysProcessed: snapshots.length,
+      dateRange,
+      ...results,
+      sampleCounts: stats,
     });
   });
 }
