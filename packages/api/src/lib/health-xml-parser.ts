@@ -44,6 +44,13 @@ interface RawSample {
   value: number;
 }
 
+interface SleepInterval {
+  date: string; // attributed date (wake-up date)
+  startMs: number;
+  endMs: number;
+  creationDate: string; // groups segments into sessions
+}
+
 // Parse a single <Record .../> line from the XML using regex (streaming, no DOM needed)
 function parseRecordLine(line: string): RawSample | null {
   // Extract type attribute
@@ -54,30 +61,8 @@ function parseRecordLine(line: string): RawSample | null {
   const metricKey = TYPE_MAP[hkType];
   if (!metricKey) return null;
 
-  // Sleep analysis is a category, not a quantity — compute duration
-  if (metricKey === 'sleep') {
-    // Only count actual sleep, not "InBed"
-    const valueMatch = line.match(/value="([^"]+)"/);
-    if (valueMatch) {
-      const val = valueMatch[1];
-      // HKCategoryValueSleepAnalysis: 0=InBed, 1=Asleep (legacy)
-      // Newer: AsleepCore, AsleepDeep, AsleepREM, AsleepUnspecified
-      if (val === 'HKCategoryValueSleepAnalysisInBed' || val === '0') return null;
-    }
-
-    const startMatch = line.match(/startDate="([^"]+)"/);
-    const endMatch = line.match(/endDate="([^"]+)"/);
-    if (!startMatch || !endMatch) return null;
-
-    const start = new Date(startMatch[1]);
-    const end = new Date(endMatch[1]);
-    const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    if (hours <= 0 || hours > 24) return null;
-
-    // Attribute sleep to the end date (when you wake up), using local date
-    const date = extractLocalDate(endMatch[1]);
-    return { type: 'sleep', date, value: hours };
-  }
+  // Sleep handled separately — skip here
+  if (metricKey === 'sleep') return null;
 
   // Quantity types — extract value and startDate
   const valueMatch = line.match(/value="([^"]+)"/);
@@ -107,6 +92,47 @@ function parseRecordLine(line: string): RawSample | null {
   }
 
   return { type: metricKey, date, value: finalValue };
+}
+
+function parseSleepLine(line: string): SleepInterval | null {
+  const valueMatch = line.match(/value="([^"]+)"/);
+  if (!valueMatch) return null;
+  const val = valueMatch[1];
+  // Skip InBed, Awake, and legacy value "0" (InBed)
+  if (val === 'HKCategoryValueSleepAnalysisInBed' || val === '0') return null;
+  if (val.includes('Awake')) return null;
+
+  const startMatch = line.match(/startDate="([^"]+)"/);
+  const endMatch = line.match(/endDate="([^"]+)"/);
+  const creationMatch = line.match(/creationDate="([^"]+)"/);
+  if (!startMatch || !endMatch) return null;
+
+  const start = new Date(startMatch[1]);
+  const end = new Date(endMatch[1]);
+  if (end.getTime() <= start.getTime()) return null;
+
+  const creationDate = creationMatch ? creationMatch[1] : endMatch[1];
+  // Date will be assigned at session level, not per-segment
+  return { date: '', startMs: start.getTime(), endMs: end.getTime(), creationDate };
+}
+
+// Merge overlapping intervals and return total hours
+function mergeAndSumSleepHours(intervals: SleepInterval[]): number {
+  if (intervals.length === 0) return 0;
+  // Sort by start time
+  intervals.sort((a, b) => a.startMs - b.startMs);
+  const merged: { start: number; end: number }[] = [{ start: intervals[0].startMs, end: intervals[0].endMs }];
+  for (let i = 1; i < intervals.length; i++) {
+    const last = merged[merged.length - 1];
+    if (intervals[i].startMs <= last.end) {
+      // Overlapping — extend
+      last.end = Math.max(last.end, intervals[i].endMs);
+    } else {
+      merged.push({ start: intervals[i].startMs, end: intervals[i].endMs });
+    }
+  }
+  const totalMs = merged.reduce((sum, m) => sum + (m.end - m.start), 0);
+  return totalMs / (1000 * 60 * 60);
 }
 
 export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
@@ -140,6 +166,7 @@ export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
 
   // Stream-parse the XML line by line (export.xml can be 1GB+)
   const samples: RawSample[] = [];
+  const sleepIntervals: SleepInterval[] = [];
   const stats: Record<string, number> = {};
 
   const rl = createInterface({
@@ -151,6 +178,16 @@ export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
     const trimmed = line.trim();
     if (!trimmed.startsWith('<Record ')) continue;
 
+    // Check for sleep records first
+    if (trimmed.includes('SleepAnalysis')) {
+      const interval = parseSleepLine(trimmed);
+      if (interval) {
+        sleepIntervals.push(interval);
+        stats['sleep'] = (stats['sleep'] || 0) + 1;
+      }
+      continue;
+    }
+
     const sample = parseRecordLine(trimmed);
     if (sample) {
       samples.push(sample);
@@ -161,31 +198,64 @@ export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
   // Cleanup
   try { execSync(`rm -rf "${tmpDir}"`); } catch { /* ignore */ }
 
-  // Aggregate samples by date
+  // Aggregate non-sleep samples by date
   const byDate = new Map<string, {
-    hrv: number[]; restingHr: number[]; sleep: number[];
+    hrv: number[]; restingHr: number[];
     steps: number[]; bodyWeight: number[]; calories: number[]; protein: number[];
   }>();
 
   for (const s of samples) {
     if (!byDate.has(s.date)) {
-      byDate.set(s.date, { hrv: [], restingHr: [], sleep: [], steps: [], bodyWeight: [], calories: [], protein: [] });
+      byDate.set(s.date, { hrv: [], restingHr: [], steps: [], bodyWeight: [], calories: [], protein: [] });
     }
     const day = byDate.get(s.date)!;
     (day as any)[s.type].push(s.value);
   }
 
+  // Group sleep segments into sessions by creationDate, then attribute each
+  // session to its wake-up date (max endMs). Merge overlapping sessions per date.
+  const sleepSessions = new Map<string, SleepInterval[]>();
+  for (const si of sleepIntervals) {
+    if (!sleepSessions.has(si.creationDate)) sleepSessions.set(si.creationDate, []);
+    sleepSessions.get(si.creationDate)!.push(si);
+  }
+
+  const sleepByDate = new Map<string, SleepInterval[]>();
+  for (const [, segments] of sleepSessions) {
+    // Session wake-up date = local date of the latest endMs
+    const maxEnd = Math.max(...segments.map(s => s.endMs));
+    // Convert to local date string from the original end time
+    // Find the segment with maxEnd to get its original date string
+    const latestSegment = segments.reduce((a, b) => b.endMs > a.endMs ? b : a);
+    const wakeDate = new Date(maxEnd);
+    // Use local date: offset back from UTC using the timezone from creation date
+    const dateStr = `${wakeDate.getFullYear()}-${String(wakeDate.getMonth() + 1).padStart(2, '0')}-${String(wakeDate.getDate()).padStart(2, '0')}`;
+    // Actually, better: extract from creation date which is when Apple Watch uploaded
+    // creationDate is always after wake-up, on the same local date
+    const sessionDate = extractLocalDate(latestSegment.creationDate);
+
+    if (!sleepByDate.has(sessionDate)) sleepByDate.set(sessionDate, []);
+    sleepByDate.get(sessionDate)!.push(...segments);
+  }
+
+  // Collect all dates
+  const allDates = new Set([...byDate.keys(), ...sleepByDate.keys()]);
+
   const snapshots: DaySnapshot[] = [];
-  for (const [date, day] of byDate) {
+  for (const date of allDates) {
+    const day = byDate.get(date);
+    const sleepInts = sleepByDate.get(date);
+    const sleepHours = sleepInts ? mergeAndSumSleepHours(sleepInts) : 0;
+
     snapshots.push({
       date,
-      hrv: day.hrv.length > 0 ? Math.round(day.hrv.reduce((a, b) => a + b, 0) / day.hrv.length) : null,
-      restingHr: day.restingHr.length > 0 ? Math.round(day.restingHr.reduce((a, b) => a + b, 0) / day.restingHr.length) : null,
-      sleepHours: day.sleep.length > 0 ? Math.round(day.sleep.reduce((a, b) => a + b, 0) * 100) / 100 : null,
-      steps: day.steps.length > 0 ? Math.round(day.steps.reduce((a, b) => a + b, 0)) : null,
-      bodyWeightKg: day.bodyWeight.length > 0 ? Math.round(day.bodyWeight[day.bodyWeight.length - 1] * 100) / 100 : null,
-      calories: day.calories.length > 0 ? Math.round(day.calories.reduce((a, b) => a + b, 0)) : null,
-      proteinG: day.protein.length > 0 ? Math.round(day.protein.reduce((a, b) => a + b, 0) * 10) / 10 : null,
+      hrv: day?.hrv.length ? Math.round(day.hrv.reduce((a, b) => a + b, 0) / day.hrv.length) : null,
+      restingHr: day?.restingHr.length ? Math.round(day.restingHr.reduce((a, b) => a + b, 0) / day.restingHr.length) : null,
+      sleepHours: sleepHours > 0 ? Math.round(sleepHours * 100) / 100 : null,
+      steps: day?.steps.length ? Math.round(day.steps.reduce((a, b) => a + b, 0)) : null,
+      bodyWeightKg: day?.bodyWeight.length ? Math.round(day.bodyWeight[day.bodyWeight.length - 1] * 100) / 100 : null,
+      calories: day?.calories.length ? Math.round(day.calories.reduce((a, b) => a + b, 0)) : null,
+      proteinG: day?.protein.length ? Math.round(day.protein.reduce((a, b) => a + b, 0) * 10) / 10 : null,
     });
   }
 
