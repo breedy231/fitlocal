@@ -23,7 +23,7 @@ export async function healthRoutes(app: FastifyInstance) {
     return reply.status(201).send(result);
   });
 
-  // iOS Shortcut / HealthKit sync endpoint
+  // iOS Shortcut / HealthKit sync endpoint (idempotent — upserts by today's date)
   app.post<{
     Body: {
       hrv?: number;
@@ -38,6 +38,27 @@ export async function healthRoutes(app: FastifyInstance) {
     const _d = new Date();
     const date = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
     const { hrv, restingHr, sleepHours, steps, bodyWeightKg, calories, proteinG } = req.body;
+
+    const existing = db.all<{ id: number }>(
+      sql`SELECT id FROM health_snapshots WHERE date = ${date} LIMIT 1`
+    );
+
+    if (existing.length > 0) {
+      db.run(sql`UPDATE health_snapshots SET
+        resting_hr = COALESCE(${restingHr ?? null}, resting_hr),
+        hrv = COALESCE(${hrv ?? null}, hrv),
+        sleep_hours = COALESCE(${sleepHours ?? null}, sleep_hours),
+        steps = COALESCE(${steps ?? null}, steps),
+        body_weight_kg = COALESCE(${bodyWeightKg ?? null}, body_weight_kg),
+        calories = COALESCE(${calories ?? null}, calories),
+        protein_g = COALESCE(${proteinG ?? null}, protein_g)
+        WHERE date = ${date}`);
+      const updated = db.all<Record<string, unknown>>(
+        sql`SELECT * FROM health_snapshots WHERE date = ${date} LIMIT 1`
+      );
+      return reply.status(200).send(updated[0]);
+    }
+
     const result = db
       .insert(schema.healthSnapshots)
       .values({ date, hrv, restingHr, sleepHours, steps, bodyWeightKg, calories, proteinG })

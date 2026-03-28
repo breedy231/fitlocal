@@ -63,17 +63,11 @@
   let syncStatus = $state('');
   let syncing = $state(false);
   let copied = $state(false);
+  let showSteps = $state(false);
   const apiBase = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
     ? `http://${window.location.hostname}:3001`
     : 'http://localhost:3001';
   const syncUrl = `${apiBase}/health/sync`;
-  const jsonTemplate = JSON.stringify({
-    hrv: 45,
-    restingHr: 58,
-    sleepHours: 7.5,
-    steps: 8200,
-    bodyWeightKg: 82.1
-  }, null, 2);
 
   function toggleEquipment() {
     equipment = equipment === 'full' ? 'travel' : 'full';
@@ -180,7 +174,7 @@
     <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
       <h2 class="font-medium mb-3">Apple Health Sync</h2>
       <p class="text-sm text-neutral-400 mb-3">
-        Create an iOS Shortcut that runs on a schedule, reads health data, and POSTs to this URL.
+        Syncs health data daily via an iOS Shortcut automation. Safe to run multiple times — data is merged, not duplicated.
       </p>
 
       <!-- Sync URL -->
@@ -197,23 +191,62 @@
         </div>
       </div>
 
-      <!-- JSON Template -->
-      <div class="mb-3">
-        <label class="text-xs text-neutral-500 block mb-1">JSON Body Template</label>
-        <pre class="text-xs text-neutral-400 bg-neutral-800 rounded-lg px-3 py-2 overflow-x-auto">{jsonTemplate}</pre>
-      </div>
+      <!-- Setup Guide Toggle -->
+      <button
+        onclick={() => showSteps = !showSteps}
+        class="w-full flex items-center justify-between py-3 px-4 rounded-lg bg-neutral-800 text-sm text-neutral-300 mb-3 min-h-[48px]"
+      >
+        <span>Shortcut Setup Guide</span>
+        <span class="text-neutral-500">{showSteps ? '▲' : '▼'}</span>
+      </button>
 
-      <!-- Supported fields -->
-      <div class="text-xs text-neutral-500 space-y-1 mb-3">
-        <p>All fields are optional:</p>
-        <ul class="list-disc list-inside ml-2 space-y-0.5">
-          <li><span class="text-neutral-400">hrv</span> — Heart Rate Variability (ms)</li>
-          <li><span class="text-neutral-400">restingHr</span> — Resting heart rate (bpm)</li>
-          <li><span class="text-neutral-400">sleepHours</span> — Hours of sleep</li>
-          <li><span class="text-neutral-400">steps</span> — Daily step count</li>
-          <li><span class="text-neutral-400">bodyWeightKg</span> — Body weight (kg)</li>
-        </ul>
-      </div>
+      {#if showSteps}
+        <div class="space-y-3 mb-3 text-sm">
+          <div class="rounded-lg bg-neutral-800/50 p-3">
+            <p class="text-neutral-300 font-medium mb-2">1. Create the Shortcut</p>
+            <p class="text-neutral-400 text-xs">Open <strong>Shortcuts</strong> app → tap <strong>+</strong> → name it <strong>FitLocal Sync</strong></p>
+          </div>
+
+          <div class="rounded-lg bg-neutral-800/50 p-3">
+            <p class="text-neutral-300 font-medium mb-2">2. Add Health queries</p>
+            <p class="text-neutral-400 text-xs mb-2">Add a <strong>Find Health Samples</strong> action for each metric below. Set each to sort by <strong>Start Date (newest first)</strong>, limit to <strong>1</strong>.</p>
+            <div class="text-xs text-neutral-500 space-y-1 ml-2">
+              <p>• <span class="text-neutral-400">Heart Rate Variability</span> → save to variable <code class="text-green-400/80">hrv</code></p>
+              <p>• <span class="text-neutral-400">Resting Heart Rate</span> → save to variable <code class="text-green-400/80">restingHr</code></p>
+              <p>• <span class="text-neutral-400">Sleep Analysis</span> → save to variable <code class="text-green-400/80">sleep</code></p>
+              <p>• <span class="text-neutral-400">Steps</span> (start date = today) → save to variable <code class="text-green-400/80">steps</code></p>
+              <p>• <span class="text-neutral-400">Body Mass</span> → save to variable <code class="text-green-400/80">weight</code></p>
+            </div>
+          </div>
+
+          <div class="rounded-lg bg-neutral-800/50 p-3">
+            <p class="text-neutral-300 font-medium mb-2">3. Build the JSON dictionary</p>
+            <p class="text-neutral-400 text-xs mb-2">Add a <strong>Dictionary</strong> action with these keys:</p>
+            <pre class="text-xs text-neutral-400 bg-neutral-900 rounded px-2 py-1.5 overflow-x-auto">hrv: <span class="text-green-400/80">hrv</span> (number)
+restingHr: <span class="text-green-400/80">restingHr</span> (number)
+sleepHours: <span class="text-green-400/80">sleep</span> (number)
+steps: <span class="text-green-400/80">steps</span> (number)
+bodyWeightKg: <span class="text-green-400/80">weight</span> (number)</pre>
+            <p class="text-neutral-500 text-xs mt-1.5">For sleep: use the duration value in hours. For weight: Shortcuts gives kg if your Health app is set to metric — otherwise add a <strong>Convert Measurement</strong> action first.</p>
+          </div>
+
+          <div class="rounded-lg bg-neutral-800/50 p-3">
+            <p class="text-neutral-300 font-medium mb-2">4. POST to FitLocal</p>
+            <p class="text-neutral-400 text-xs">Add <strong>Get Contents of URL</strong>:</p>
+            <div class="text-xs text-neutral-500 ml-2 space-y-0.5 mt-1">
+              <p>• URL: <code class="text-green-400/80 break-all">{syncUrl}</code></p>
+              <p>• Method: <strong>POST</strong></p>
+              <p>• Request Body: <strong>JSON</strong> → set to the Dictionary from step 3</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg bg-neutral-800/50 p-3">
+            <p class="text-neutral-300 font-medium mb-2">5. Automate it</p>
+            <p class="text-neutral-400 text-xs">Go to <strong>Automation</strong> tab → <strong>New Automation</strong> → <strong>Time of Day</strong> (e.g. 7:00 AM) → choose <strong>Run Immediately</strong> → select <strong>FitLocal Sync</strong></p>
+            <p class="text-neutral-500 text-xs mt-1.5">Tip: pick a time after you typically wake up so sleep data is finalized.</p>
+          </div>
+        </div>
+      {/if}
 
       <!-- Test Sync -->
       <button
