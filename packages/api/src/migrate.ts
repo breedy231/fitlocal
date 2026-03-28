@@ -111,5 +111,45 @@ sqlite.exec(`
 // Add superset_group column to workout_exercises
 try { sqlite.exec('ALTER TABLE workout_exercises ADD COLUMN superset_group INTEGER'); } catch { /* exists */ }
 
+// Program / routine template tables
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS programs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    days_per_week INTEGER,
+    duration_weeks INTEGER,
+    source TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS program_days (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    program_id INTEGER NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    day_order INTEGER NOT NULL,
+    muscles_focus TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS program_exercises (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    program_day_id INTEGER NOT NULL REFERENCES program_days(id) ON DELETE CASCADE,
+    exercise_name TEXT NOT NULL,
+    exercise_id INTEGER REFERENCES exercises(id),
+    display_order INTEGER NOT NULL DEFAULT 0,
+    target_sets INTEGER,
+    target_reps TEXT,
+    rest_seconds INTEGER,
+    notes TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS active_program (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    program_id INTEGER NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
+    start_date TEXT NOT NULL,
+    current_day_index INTEGER NOT NULL DEFAULT 0
+  );
+`);
+
 console.log('Database migrated successfully');
 sqlite.close();

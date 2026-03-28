@@ -12,6 +12,7 @@ import { generateRoutes } from './routes/generate.js';
 import { recoveryRoutes } from './routes/recovery.js';
 import { stretchRoutes } from './routes/stretches.js';
 import { reportRoutes } from './routes/reports.js';
+import { programRoutes } from './routes/programs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === 'production';
@@ -35,6 +36,14 @@ app.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done)
   done(null, body);
 });
 
+// Accept raw binary for PDF uploads
+app.addContentTypeParser('application/pdf', { parseAs: 'buffer' }, (_req, body, done) => {
+  done(null, body);
+});
+app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_req, body, done) => {
+  done(null, body);
+});
+
 // In production, mount API routes under /api prefix
 const apiPrefix = isProduction ? '/api' : '';
 
@@ -47,6 +56,7 @@ await app.register(generateRoutes, { prefix: apiPrefix });
 await app.register(recoveryRoutes, { prefix: apiPrefix });
 await app.register(stretchRoutes, { prefix: apiPrefix });
 await app.register(reportRoutes, { prefix: apiPrefix });
+await app.register(programRoutes, { prefix: apiPrefix });
 
 app.get(`${apiPrefix}/health`, async () => ({ status: 'ok' }));
 
