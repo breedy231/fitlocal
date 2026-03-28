@@ -64,10 +64,12 @@
   let syncing = $state(false);
   let copied = $state(false);
   let showSteps = $state(false);
+  let showBackfill = $state(false);
   const apiBase = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
     ? `http://${window.location.hostname}:3001`
     : 'http://localhost:3001';
   const syncUrl = `${apiBase}/health/sync`;
+  const importUrl = `${apiBase}/health/import-samples`;
 
   function toggleEquipment() {
     equipment = equipment === 'full' ? 'travel' : 'full';
@@ -260,6 +262,65 @@ bodyWeightKg: <span class="text-green-400/80">weight</span> (number)</pre>
         <p class="text-sm mt-2 {syncStatus.startsWith('Error') ? 'text-red-400' : 'text-green-400'}">
           {syncStatus}
         </p>
+      {/if}
+
+      <!-- Backfill Guide -->
+      <button
+        onclick={() => showBackfill = !showBackfill}
+        class="w-full flex items-center justify-between py-3 px-4 rounded-lg bg-neutral-800 text-sm text-neutral-300 mt-3 min-h-[48px]"
+      >
+        <span>Historical Backfill (one-time)</span>
+        <span class="text-neutral-500">{showBackfill ? '▲' : '▼'}</span>
+      </button>
+
+      {#if showBackfill}
+        <div class="space-y-3 mt-3 text-sm">
+          <p class="text-xs text-neutral-400">Import years of Apple Health history. Create a separate <strong>FitLocal Backfill</strong> shortcut — run it once, then delete it.</p>
+
+          <div class="rounded-lg bg-neutral-800/50 p-3">
+            <p class="text-neutral-300 font-medium mb-2">1. For each metric, repeat these 3 actions:</p>
+            <p class="text-neutral-400 text-xs mb-2">You'll add a block of 3 actions per metric (5 blocks total).</p>
+
+            <div class="rounded bg-neutral-900 p-2 mb-2">
+              <p class="text-xs text-neutral-300 font-medium mb-1">Block A — HRV</p>
+              <div class="text-xs text-neutral-500 space-y-0.5 ml-2">
+                <p>① <strong>Find Health Samples</strong>: Type = <span class="text-neutral-300">Heart Rate Variability</span>, Start Date is after <span class="text-neutral-300">3 years ago</span>, Sort by Start Date (oldest first)</p>
+                <p>② <strong>Repeat with Each</strong>: build a list of dictionaries — each with <code class="text-green-400/80">date</code> (Repeat Item's Start Date, formatted <span class="text-neutral-300">yyyy-MM-dd</span>) and <code class="text-green-400/80">value</code> (Repeat Item's Value)</p>
+                <p>③ <strong>Get Contents of URL</strong>: POST to <code class="text-green-400/80 break-all">{importUrl}</code> with JSON body: <code class="text-green-400/80">{`{"type":"hrv","samples":[list from ②]}`}</code></p>
+              </div>
+            </div>
+
+            <div class="rounded bg-neutral-900 p-2 mb-2">
+              <p class="text-xs text-neutral-300 font-medium mb-1">Block B — Resting Heart Rate</p>
+              <p class="text-xs text-neutral-500 ml-2">Same pattern. Type = <span class="text-neutral-300">Resting Heart Rate</span>. POST type: <code class="text-green-400/80">"restingHr"</code></p>
+            </div>
+
+            <div class="rounded bg-neutral-900 p-2 mb-2">
+              <p class="text-xs text-neutral-300 font-medium mb-1">Block C — Sleep</p>
+              <p class="text-xs text-neutral-500 ml-2">Type = <span class="text-neutral-300">Sleep Analysis</span>. For value, use the <span class="text-neutral-300">duration in hours</span>. POST type: <code class="text-green-400/80">"sleep"</code></p>
+            </div>
+
+            <div class="rounded bg-neutral-900 p-2 mb-2">
+              <p class="text-xs text-neutral-300 font-medium mb-1">Block D — Steps</p>
+              <p class="text-xs text-neutral-500 ml-2">Type = <span class="text-neutral-300">Steps</span>. POST type: <code class="text-green-400/80">"steps"</code></p>
+            </div>
+
+            <div class="rounded bg-neutral-900 p-2">
+              <p class="text-xs text-neutral-300 font-medium mb-1">Block E — Body Weight</p>
+              <p class="text-xs text-neutral-500 ml-2">Type = <span class="text-neutral-300">Body Mass</span>. POST type: <code class="text-green-400/80">"bodyWeight"</code></p>
+            </div>
+          </div>
+
+          <div class="rounded-lg bg-neutral-800/50 p-3">
+            <p class="text-neutral-300 font-medium mb-2">2. Run it</p>
+            <p class="text-neutral-400 text-xs">Tap play. It may take 1–2 minutes for large datasets. The server aggregates multiple readings per day automatically (averages HR/HRV, sums steps/sleep). Safe to re-run — data merges without duplicating.</p>
+          </div>
+
+          <div class="mb-1">
+            <label class="text-xs text-neutral-500 block mb-1">Import Endpoint</label>
+            <code class="text-xs text-neutral-300 bg-neutral-800 rounded-lg px-3 py-2 break-all block">{importUrl}</code>
+          </div>
+        </div>
       {/if}
     </div>
 
