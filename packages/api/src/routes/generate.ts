@@ -18,17 +18,18 @@ const DAY_TYPE_ALIASES: Record<string, string> = {
 };
 
 export async function generateRoutes(app: FastifyInstance) {
-  app.get<{ Querystring: { dayType: string; equipment?: string } }>(
+  app.get<{ Querystring: { dayType: string; equipment?: string; supersets?: string } }>(
     '/generate-workout',
     async (req, reply) => {
-      let { dayType, equipment = 'full' } = req.query;
+      let { dayType, equipment = 'full', supersets: supersetsParam } = req.query;
       if (!dayType) {
         return reply.status(400).send({ error: 'dayType query param required (upper, lower, or fullbody)' });
       }
       // Map legacy day types
       dayType = DAY_TYPE_ALIASES[dayType] ?? dayType;
+      const supersets = supersetsParam !== 'false';
       try {
-        const workout = generateWorkout(dayType, equipment, db);
+        const workout = generateWorkout(dayType, equipment, db, { supersets });
 
         // Nutrition integration: reduce volume if in caloric deficit
         // Reads from health_snapshots (synced via HealthKit or iOS Shortcut)
