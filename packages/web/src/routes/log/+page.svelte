@@ -1,17 +1,19 @@
 <script lang="ts">
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
+  import { showToast } from '$lib/toast';
+  import { onMount } from 'svelte';
 
   let workouts: any[] = $state([]);
   let loading = $state(true);
 
-  import { onMount } from 'svelte';
   onMount(async () => {
     try {
       const data = await api<any[]>('/workouts');
-      // Show recent incomplete workouts or prompt to generate
       workouts = [...data].reverse().slice(0, 5);
-    } catch {}
+    } catch {
+      showToast('Cannot reach server', 'error');
+    }
     loading = false;
   });
 </script>
@@ -41,7 +43,7 @@
             class="block rounded-xl p-4 hover:ring-1 hover:ring-green-500/30 transition-all"
             style="background-color: #1a1a1a;"
           >
-            <span class="font-medium">{new Date(w.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+            <span class="font-medium">{new Date(w.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
             {#if w.notes}
               <span class="ml-2 text-sm text-neutral-500">{w.notes}</span>
             {/if}
