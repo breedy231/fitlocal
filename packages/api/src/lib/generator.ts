@@ -121,7 +121,7 @@ function pickByMuscleTargets(
   return selected;
 }
 
-export function generateWorkout(dayType: string, equipment: string, db: DB): GeneratedWorkout {
+export function generateWorkout(dayType: string, equipment: string, db: DB, options?: { supersets?: boolean }): GeneratedWorkout {
   const targetMuscles = DAY_TYPE_MUSCLES[dayType];
   if (!targetMuscles) {
     throw new Error(`Unknown day type: ${dayType}. Use upper, lower, or fullbody.`);
@@ -249,8 +249,10 @@ export function generateWorkout(dayType: string, equipment: string, db: DB): Gen
     exercises[focusIndex].isFocus = true;
   }
 
-  // Assign superset pairs (max 3 per workout)
-  assignSupersets(exercises);
+  // Assign superset pairs (max 3 per workout) unless disabled
+  if (options?.supersets !== false) {
+    assignSupersets(exercises);
+  }
 
   return { dayType, globalModifier, exercises };
 }

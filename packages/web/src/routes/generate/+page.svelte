@@ -90,6 +90,11 @@
       ? localStorage.getItem('fitlocal-equipment') || 'full'
       : 'full'
   );
+  let supersets = $state(
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('fitlocal-supersets') !== 'false'
+      : true
+  );
   let workout: GeneratedWorkout | null = $state(null);
   let loading = $state(false);
   let starting = $state(false);
@@ -108,7 +113,7 @@
     loading = true;
     workout = null;
     try {
-      workout = await api<GeneratedWorkout>(`/generate-workout?dayType=${dayType}&equipment=${equipment}`);
+      workout = await api<GeneratedWorkout>(`/generate-workout?dayType=${dayType}&equipment=${equipment}&supersets=${supersets}`);
     } catch (e: any) {
       showToast(e.message || 'Failed to generate workout — is the server running?', 'error');
     } finally {
@@ -226,6 +231,14 @@
     equipment = equipment === 'full' ? 'travel' : 'full';
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('fitlocal-equipment', equipment);
+    }
+    if (dayType) generate();
+  }
+
+  function toggleSupersets() {
+    supersets = !supersets;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('fitlocal-supersets', String(supersets));
     }
     if (dayType) generate();
   }
@@ -421,14 +434,23 @@
 
   <!-- Freestyle Mode -->
   {#if mode === 'freestyle' && !programLoading}
-  <!-- Equipment Toggle -->
-  <div class="flex items-center justify-between mb-4 rounded-xl p-4" style="background-color: #1a1a1a;">
+  <!-- Equipment & Supersets Toggles -->
+  <div class="flex items-center justify-between mb-2 rounded-xl p-4" style="background-color: #1a1a1a;">
     <span class="text-sm font-medium text-neutral-300">Equipment</span>
     <button
       onclick={toggleEquipment}
       class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {equipment === 'full' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}"
     >
       {equipment === 'full' ? '🏋️ Full Gym' : '🧳 Travel'}
+    </button>
+  </div>
+  <div class="flex items-center justify-between mb-4 rounded-xl p-4" style="background-color: #1a1a1a;">
+    <span class="text-sm font-medium text-neutral-300">Supersets</span>
+    <button
+      onclick={toggleSupersets}
+      class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {supersets ? 'bg-blue-500/20 text-blue-400' : 'bg-neutral-700 text-neutral-400'}"
+    >
+      {supersets ? 'On' : 'Off'}
     </button>
   </div>
 
