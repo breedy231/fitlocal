@@ -42,6 +42,63 @@
   let exerciseProgressionName: string = $state('');
   let healthSnapshots: HealthSnapshot[] = $state([]);
   let activeTab: 'training' | 'health' = $state('training');
+  let healthRange: '30' | '90' | '365' | 'all' = $state('90');
+
+  // Filter + downsample health data based on selected range
+  let filteredHealth = $derived.by(() => {
+    let data = healthSnapshots;
+
+    // Filter by date range
+    if (healthRange !== 'all') {
+      const days = parseInt(healthRange);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      data = data.filter(s => s.date >= cutoffStr);
+    }
+
+    // Downsample: >200 points → weekly averages
+    if (data.length > 200) {
+      return downsampleWeekly(data);
+    }
+    return data;
+  });
+
+  function downsampleWeekly(data: HealthSnapshot[]): HealthSnapshot[] {
+    const weeks = new Map<string, HealthSnapshot[]>();
+    for (const s of data) {
+      // Group by ISO week start (Monday)
+      const d = new Date(s.date + 'T12:00:00');
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const weekStart = new Date(d.setDate(diff)).toISOString().slice(0, 10);
+      if (!weeks.has(weekStart)) weeks.set(weekStart, []);
+      weeks.get(weekStart)!.push(s);
+    }
+
+    const result: HealthSnapshot[] = [];
+    for (const [weekDate, entries] of weeks) {
+      result.push({
+        date: weekDate,
+        hrv: avg(entries.map(e => e.hrv)),
+        restingHr: avg(entries.map(e => e.restingHr)),
+        sleepHours: avg(entries.map(e => e.sleepHours), 1),
+        steps: avg(entries.map(e => e.steps)),
+        bodyWeightKg: avg(entries.map(e => e.bodyWeightKg), 1),
+        calories: avg(entries.map(e => e.calories)),
+        proteinG: avg(entries.map(e => e.proteinG), 1),
+      });
+    }
+    return result.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  function avg(values: (number | null)[], decimals = 0): number | null {
+    const valid = values.filter((v): v is number => v != null && v > 0);
+    if (valid.length === 0) return null;
+    const mean = valid.reduce((a, b) => a + b, 0) / valid.length;
+    const factor = Math.pow(10, decimals);
+    return Math.round(mean * factor) / factor;
+  }
 
   function kgToLbs(kg: number): number {
     return Math.round(kg * 2.20462);
@@ -279,12 +336,27 @@
 
     {:else}
       <!-- Health Tab -->
+
+      <!-- Time Range Picker -->
+      <div class="flex rounded-xl overflow-hidden mb-5" style="background-color: #1a1a1a;">
+        {#each [['30', '30d'], ['90', '90d'], ['365', '1y'], ['all', 'All']] as [value, label]}
+          <button
+            onclick={() => healthRange = value as any}
+            class="flex-1 py-2.5 text-sm font-medium text-center transition-colors {healthRange === value ? 'bg-green-500/20 text-green-400' : 'text-neutral-400 hover:text-neutral-200'}"
+          >{label}</button>
+        {/each}
+      </div>
+
+      {#if filteredHealth.length > 200}
+        <p class="text-xs text-neutral-600 mb-3 text-center">Showing weekly averages ({filteredHealth.length} weeks)</p>
+      {/if}
+
       <div class="md:grid md:grid-cols-2 md:gap-5">
-        {#if healthSnapshots.some((s) => s.bodyWeightKg != null)}
+        {#if filteredHealth.some((s) => s.bodyWeightKg != null)}
           <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
             <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Body Weight (lbs)</h2>
             <LineChart
-              data={healthSnapshots
+              data={filteredHealth
                 .filter((s) => s.bodyWeightKg != null)
                 .map((s) => ({ label: shortDate(s.date), value: kgToLbs(s.bodyWeightKg!) }))}
               color="#f59e0b"
@@ -294,13 +366,12 @@
           </section>
         {/if}
 
-        {#if healthSnapshots.some((s) => s.steps != null)}
+        {#if filteredHealth.some((s) => s.steps != null)}
           <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
             <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Daily Steps</h2>
             <BarChart
-              data={healthSnapshots
+              data={filteredHealth
                 .filter((s) => s.steps != null)
-                .slice(-14)
                 .map((s) => ({ label: shortDate(s.date), value: s.steps! }))}
               color="#3b82f6"
               height={120}
@@ -308,11 +379,11 @@
           </section>
         {/if}
 
-        {#if healthSnapshots.some((s) => s.hrv != null)}
+        {#if filteredHealth.some((s) => s.hrv != null)}
           <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
             <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">HRV</h2>
             <LineChart
-              data={healthSnapshots
+              data={filteredHealth
                 .filter((s) => s.hrv != null)
                 .map((s) => ({ label: shortDate(s.date), value: s.hrv }))}
               color="#22c55e"
@@ -322,11 +393,11 @@
           </section>
         {/if}
 
-        {#if healthSnapshots.some((s) => s.restingHr != null)}
+        {#if filteredHealth.some((s) => s.restingHr != null)}
           <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
             <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Resting Heart Rate</h2>
             <LineChart
-              data={healthSnapshots
+              data={filteredHealth
                 .filter((s) => s.restingHr != null)
                 .map((s) => ({ label: shortDate(s.date), value: s.restingHr }))}
               color="#ef4444"
@@ -336,13 +407,12 @@
           </section>
         {/if}
 
-        {#if healthSnapshots.some((s) => s.sleepHours != null)}
+        {#if filteredHealth.some((s) => s.sleepHours != null)}
           <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
-            <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Sleep</h2>
+            <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Sleep (hours)</h2>
             <BarChart
-              data={healthSnapshots
+              data={filteredHealth
                 .filter((s) => s.sleepHours != null)
-                .slice(-14)
                 .map((s) => ({ label: shortDate(s.date), value: s.sleepHours! }))}
               color="#8b5cf6"
               height={120}
@@ -351,13 +421,13 @@
           </section>
         {/if}
 
-        {#if healthSnapshots.some((s) => s.calories != null)}
+        {#if filteredHealth.some((s) => s.calories != null)}
           <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
             <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Calories & Protein</h2>
             <div class="mb-3">
               <p class="text-xs text-neutral-500 mb-1">Calories</p>
               <LineChart
-                data={healthSnapshots
+                data={filteredHealth
                   .filter((s) => s.calories != null)
                   .map((s) => ({ label: shortDate(s.date), value: s.calories }))}
                 color="#f97316"
@@ -365,11 +435,11 @@
                 unit="cal"
               />
             </div>
-            {#if healthSnapshots.some((s) => s.proteinG != null)}
+            {#if filteredHealth.some((s) => s.proteinG != null)}
               <div>
                 <p class="text-xs text-neutral-500 mb-1">Protein</p>
                 <LineChart
-                  data={healthSnapshots
+                  data={filteredHealth
                     .filter((s) => s.proteinG != null)
                     .map((s) => ({ label: shortDate(s.date), value: s.proteinG }))}
                   color="#06b6d4"
@@ -385,7 +455,7 @@
       {#if !healthSnapshots.some((s) => s.bodyWeightKg != null || s.steps != null || s.hrv != null || s.restingHr != null || s.sleepHours != null)}
         <div class="rounded-xl p-6 text-center" style="background-color: #1a1a1a;">
           <p class="text-neutral-400 mb-2">No health data yet</p>
-          <p class="text-sm text-neutral-500">Set up Apple Health sync via iOS Shortcuts to start tracking HRV, heart rate, sleep, steps, and weight.</p>
+          <p class="text-sm text-neutral-500">Import your Apple Health data in Settings to see trends here.</p>
           <a href="/settings" class="inline-block mt-3 text-green-400 text-sm">Go to Settings</a>
         </div>
       {/if}
