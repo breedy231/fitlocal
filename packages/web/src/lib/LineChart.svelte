@@ -25,11 +25,30 @@
   }
 
   let filtered = $derived(data.filter((d) => d.value != null) as { label: string; value: number }[]);
-  let rawMax = $derived(Math.max(...filtered.map((d) => d.value), 1));
-  let rawMin = $derived(Math.min(...filtered.map((d) => d.value), 0));
+  let rawMax = $derived(filtered.length > 0 ? Math.max(...filtered.map((d) => d.value)) : 1);
+  let rawMin = $derived(filtered.length > 0 ? Math.min(...filtered.map((d) => d.value)) : 0);
 
-  let niceMin = $derived(rawMin >= 0 ? 0 : -niceNumber(Math.abs(rawMin)));
-  let niceMax = $derived(niceNumber(rawMax * 1.1));
+  // Use tight axis when data clusters far from zero (e.g. weight 170-185)
+  // but start at 0 when data is near zero or has wide spread
+  let niceMin = $derived.by(() => {
+    if (rawMin < 0) return -niceNumber(Math.abs(rawMin));
+    if (rawMin === 0) return 0;
+    const spread = rawMax - rawMin;
+    // If the minimum is more than 2x the spread above zero, tighten the axis
+    if (rawMin > spread * 2 && rawMin > 10) {
+      const step = niceNumber(spread / 4) || 1;
+      const result = Math.floor((rawMin - spread * 0.3) / step) * step;
+      // Safety: never exceed rawMin
+      return Math.min(result, rawMin);
+    }
+    return 0;
+  });
+  // niceNumber can round down, so ensure niceMax always exceeds rawMax
+  let niceMax = $derived.by(() => {
+    let n = niceNumber(rawMax * 1.05);
+    while (n < rawMax) n += niceNumber((rawMax - n) || 1);
+    return n;
+  });
   let range = $derived(niceMax - niceMin || 1);
   let tickStep = $derived(niceNumber(range / 4));
   let ticks = $derived(() => {
