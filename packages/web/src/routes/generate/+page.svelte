@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
   import ExerciseDetail from '$lib/ExerciseDetail.svelte';
   import { showToast } from '$lib/toast';
 
@@ -26,6 +27,51 @@
     globalModifier: number;
     exercises: GeneratedExercise[];
   }
+
+  interface ProgramExercise {
+    id: number;
+    exerciseName: string;
+    exerciseId: number | null;
+    displayOrder: number;
+    targetSets: number | null;
+    targetReps: string | null;
+    restSeconds: number | null;
+    notes: string | null;
+    progression: 'up' | 'deload' | 'hold' | null;
+    suggestedWeightKg: number | null;
+    suggestedReps: number | null;
+    repRange: { min: number; max: number } | null;
+  }
+
+  interface ActiveProgram {
+    program: { id: number; name: string };
+    dayIndex: number;
+    totalDays: number;
+    day: {
+      id: number;
+      name: string;
+      musclesFocus: string | null;
+      exercises: ProgramExercise[];
+    };
+  }
+
+  // Program state
+  let activeProgram: ActiveProgram | null = $state(null);
+  let mode: 'program' | 'freestyle' = $state('freestyle');
+  let startingProgram = $state(false);
+  let programLoading = $state(true);
+
+  onMount(async () => {
+    try {
+      activeProgram = await api<ActiveProgram>('/programs/active');
+      mode = 'program';
+    } catch {
+      activeProgram = null;
+      mode = 'freestyle';
+    } finally {
+      programLoading = false;
+    }
+  });
 
   let swapTargetId: number | null = $state(null);
   let swapAlternatives: GeneratedExercise[] = $state([]);
@@ -183,6 +229,65 @@
     }
     if (dayType) generate();
   }
+
+  function parseTargetReps(reps: string | null): number {
+    if (!reps) return 10;
+    if (/amrap/i.test(reps)) return 1;
+    const num = parseInt(reps);
+    return isNaN(num) ? 10 : num;
+  }
+
+  async function startProgramWorkout() {
+    if (!activeProgram) return;
+    startingProgram = true;
+    try {
+      const d = new Date();
+      const now = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const created = await api<{ id: number }>('/workouts', {
+        method: 'POST',
+        body: JSON.stringify({ date: now, notes: `${activeProgram.program.name} — ${activeProgram.day.name}` }),
+      });
+
+      for (let i = 0; i < activeProgram.day.exercises.length; i++) {
+        const ex = activeProgram.day.exercises[i];
+
+        // Resolve exerciseId — create exercise if unmatched
+        let exerciseId = ex.exerciseId;
+        if (!exerciseId) {
+          const created = await api<{ id: number }>('/exercises', {
+            method: 'POST',
+            body: JSON.stringify({ name: ex.exerciseName }),
+          });
+          exerciseId = created.id;
+        }
+
+        const we = await api<{ id: number }>('/workout-exercises', {
+          method: 'POST',
+          body: JSON.stringify({ workoutId: created.id, exerciseId, displayOrder: i }),
+        });
+
+        const sets = ex.targetSets || 3;
+        const reps = ex.suggestedReps ?? parseTargetReps(ex.targetReps);
+        const weightKg = ex.suggestedWeightKg ?? 0;
+
+        for (let s = 0; s < sets; s++) {
+          await api('/sets', {
+            method: 'POST',
+            body: JSON.stringify({ workoutExerciseId: we.id, reps, weightKg }),
+          });
+        }
+      }
+
+      // Advance to next day in program
+      await api('/programs/active/advance', { method: 'POST' }).catch(() => {});
+
+      goto(`/log/${created.id}`);
+    } catch (e: any) {
+      showToast(e.message || 'Failed to start workout', 'error');
+    } finally {
+      startingProgram = false;
+    }
+  }
 </script>
 
 {#snippet exerciseCard(ex: GeneratedExercise)}
@@ -236,6 +341,86 @@
 <div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   <h1 class="text-2xl font-bold mb-6">Generate Workout</h1>
 
+  {#if programLoading}
+    <div class="flex justify-center py-4 mb-4">
+      <div class="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  {:else if activeProgram}
+    <!-- Mode Toggle -->
+    <div class="flex rounded-xl overflow-hidden mb-4" style="background-color: #1a1a1a;">
+      <button
+        onclick={() => mode = 'program'}
+        class="flex-1 py-2.5 text-sm font-medium text-center transition-colors {mode === 'program' ? 'bg-green-500/20 text-green-400' : 'text-neutral-400 hover:text-neutral-200'}"
+      >Program</button>
+      <button
+        onclick={() => mode = 'freestyle'}
+        class="flex-1 py-2.5 text-sm font-medium text-center transition-colors {mode === 'freestyle' ? 'bg-green-500/20 text-green-400' : 'text-neutral-400 hover:text-neutral-200'}"
+      >Freestyle</button>
+    </div>
+  {/if}
+
+  <!-- Program Mode -->
+  {#if mode === 'program' && activeProgram && !programLoading}
+    <div class="rounded-xl p-4 mb-4" style="background-color: #1a1a1a;">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-xs text-neutral-500">{activeProgram.program.name}</span>
+        <a href="/programs/{activeProgram.program.id}" class="text-xs text-neutral-500 hover:text-green-400">View program</a>
+      </div>
+      <h2 class="text-xl font-bold">{activeProgram.day.name}</h2>
+      {#if activeProgram.day.musclesFocus}
+        <p class="text-sm text-neutral-400 mt-0.5">{activeProgram.day.musclesFocus}</p>
+      {/if}
+      <p class="text-xs text-neutral-600 mt-1">Day {activeProgram.dayIndex + 1} of {activeProgram.totalDays}</p>
+    </div>
+
+    <div class="space-y-2 mb-6">
+      {#each activeProgram.day.exercises as ex}
+        <div class="rounded-xl p-4 relative" style="background-color: #1a1a1a;">
+          <div class="absolute top-3 right-3 flex items-center gap-2">
+            {#if ex.progression === 'up'}
+              <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #22c55e20; color: #22c55e;">
+                ↑ PROGRESS
+              </span>
+            {:else if ex.progression === 'deload'}
+              <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #ef444420; color: #ef4444;">
+                ↓ DELOAD
+              </span>
+            {/if}
+          </div>
+          <p class="font-medium mb-1 pr-24">{ex.exerciseName}</p>
+          <div class="text-sm text-neutral-400">
+            {ex.targetSets || 3} &times; {ex.targetReps || '10'}
+            {#if ex.suggestedWeightKg && ex.suggestedWeightKg > 0}
+              @ {kgToLbs(ex.suggestedWeightKg)} lbs
+            {/if}
+          </div>
+          {#if ex.restSeconds}
+            <span class="text-xs text-neutral-600">
+              {ex.restSeconds >= 60 ? `${Math.round(ex.restSeconds / 60)}m` : `${ex.restSeconds}s`} rest
+            </span>
+          {/if}
+          {#if ex.notes}
+            <p class="text-xs text-neutral-500 mt-1">{ex.notes}</p>
+          {/if}
+          {#if ex.repRange}
+            <span class="text-xs text-neutral-600 ml-2">target: {ex.repRange.min}–{ex.repRange.max} reps</span>
+          {/if}
+        </div>
+      {/each}
+    </div>
+
+    <button
+      onclick={startProgramWorkout}
+      disabled={startingProgram}
+      class="w-full font-semibold text-lg py-4 rounded-xl disabled:opacity-50"
+      style="background-color: #22c55e; color: #0f0f0f;"
+    >
+      {startingProgram ? 'Starting...' : 'Start Workout'}
+    </button>
+  {/if}
+
+  <!-- Freestyle Mode -->
+  {#if mode === 'freestyle' && !programLoading}
   <!-- Equipment Toggle -->
   <div class="flex items-center justify-between mb-4 rounded-xl p-4" style="background-color: #1a1a1a;">
     <span class="text-sm font-medium text-neutral-300">Equipment</span>
@@ -378,5 +563,12 @@
         {/if}
       </div>
     </div>
+  {/if}
+
+  {#if !activeProgram}
+    <p class="text-center text-sm text-neutral-600 mt-6">
+      <a href="/programs" class="hover:text-green-400">Have a program? Manage programs &rarr;</a>
+    </p>
+  {/if}
   {/if}
 </div>
