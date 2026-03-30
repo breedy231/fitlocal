@@ -72,9 +72,7 @@
   function getApiBase(): string {
     if (typeof window === 'undefined') return 'http://localhost:3001';
     const { hostname, port, protocol } = window.location;
-    if (port === '5173') {
-      return hostname === 'localhost' ? 'http://localhost:3001' : `http://${hostname}:3001`;
-    }
+    if (port === '5173') return '/api';
     return `${protocol}//${hostname}${port ? ':' + port : ''}/api`;
   }
 

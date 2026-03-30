@@ -3,13 +3,10 @@ import { showToast } from './toast';
 
 function getApiBase(): string {
   if (typeof window === 'undefined') return 'http://localhost:3001';
-  // Production: API is served from same origin under /api
   const { hostname, port, protocol } = window.location;
   if (port === '5173') {
-    // Dev mode — SvelteKit dev server, API on separate port
-    return hostname === 'localhost'
-      ? 'http://localhost:3001'
-      : `http://${hostname}:3001`;
+    // Dev mode — proxy through Vite to avoid mixed-content (HTTPS frontend → HTTP API)
+    return '/api';
   }
   // Production — same origin, /api prefix
   return `${protocol}//${hostname}${port ? ':' + port : ''}/api`;
