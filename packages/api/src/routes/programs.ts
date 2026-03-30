@@ -4,6 +4,59 @@ import { db, schema } from '../db.js';
 import { parseMASPdf } from '../lib/pdf-parser.js';
 import { computeProgression } from '../lib/progression.js';
 
+// Normalize exercise name for fuzzy matching: lowercase, strip parentheticals, common prefixes, plurals
+function normalizeExName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\(.*?\)/g, '') // remove parentheticals
+    .replace(/^(barbell|dumbbell|cable|machine|smith machine|ez bar|flat|seated|standing|weighted)\s+/g, '')
+    .replace(/\s+(barbell|dumbbell|cable|machine)\s*/g, ' ')
+    .replace(/deadlifts/g, 'deadlift')
+    .replace(/squats/g, 'squat')
+    .replace(/curls/g, 'curl')
+    .replace(/raises/g, 'raise')
+    .replace(/extensions/g, 'extension')
+    .replace(/presses/g, 'press')
+    .replace(/rows/g, 'row')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Find best matching exercise from DB by fuzzy name comparison
+// Prefers exercises with workout history over exact-name matches with none
+function fuzzyMatchExercise(name: string, allExercises: { id: number; name: string; workouts: number }[]): { id: number; name: string; workouts: number } | null {
+  const norm = normalizeExName(name);
+  if (!norm) return null;
+
+  // Collect all normalized matches
+  const exactNormMatches = allExercises.filter(ex => normalizeExName(ex.name) === norm);
+  if (exactNormMatches.length > 0) {
+    // Prefer the one with most workout history
+    exactNormMatches.sort((a, b) => b.workouts - a.workouts);
+    return exactNormMatches[0];
+  }
+
+  // Fuzzy: word overlap scoring, with history as tiebreaker
+  const normWords = norm.split(' ').filter(w => w.length > 2);
+  let bestMatch: { id: number; name: string; workouts: number } | null = null;
+  let bestScore = 0;
+  let bestWorkouts = 0;
+
+  for (const ex of allExercises) {
+    const exNorm = normalizeExName(ex.name);
+    const exWords = exNorm.split(' ').filter(w => w.length > 2);
+    const overlap = normWords.filter(w => exWords.includes(w)).length;
+    const score = overlap / Math.max(normWords.length, exWords.length);
+    if (score >= 0.5 && (score > bestScore || (score === bestScore && ex.workouts > bestWorkouts))) {
+      bestScore = score;
+      bestMatch = ex;
+      bestWorkouts = ex.workouts;
+    }
+  }
+
+  return bestMatch;
+}
+
 export async function programRoutes(app: FastifyInstance) {
 
   // List all programs
@@ -41,7 +94,7 @@ export async function programRoutes(app: FastifyInstance) {
   });
 
   // Import program from M&S PDF
-  app.post('/programs/import-pdf', async (req, reply) => {
+  app.post('/programs/import-pdf', { bodyLimit: 50 * 1024 * 1024 }, async (req, reply) => {
     const pdfBuffer = Buffer.isBuffer(req.body)
       ? req.body
       : Buffer.from(req.body as string, 'binary');
@@ -80,10 +133,22 @@ export async function programRoutes(app: FastifyInstance) {
       for (let exIdx = 0; exIdx < pDay.exercises.length; exIdx++) {
         const pEx = pDay.exercises[exIdx];
 
-        // Try to match to existing exercise in DB
-        const match = db.all<{ id: number }>(sql`
-          SELECT id FROM exercises WHERE lower(name) = lower(${pEx.name}) LIMIT 1
-        `);
+        // Try to match to existing exercise in DB (exact first, then fuzzy)
+        const allExercises = db.all<{ id: number; name: string; workouts: number }>(sql`
+          SELECT e.id, e.name, COUNT(DISTINCT we.workout_id) as workouts
+          FROM exercises e
+          LEFT JOIN workout_exercises we ON we.exercise_id = e.id
+          GROUP BY e.id`);
+        // Prefer exact name match WITH history, then fuzzy match with history
+        const exactMatches = allExercises.filter(e => e.name.toLowerCase() === pEx.name.toLowerCase());
+        exactMatches.sort((a, b) => b.workouts - a.workouts);
+        const match = exactMatches.length > 0 ? [exactMatches[0]] : [];
+        if (match.length === 0 || match[0].workouts === 0) {
+          const fuzzy = fuzzyMatchExercise(pEx.name, allExercises);
+          if (fuzzy && fuzzy.workouts > (match[0]?.workouts ?? 0)) {
+            match[0] = fuzzy;
+          }
+        }
 
         db.insert(schema.programExercises).values({
           programDayId: day.id,
@@ -162,12 +227,30 @@ export async function programRoutes(app: FastifyInstance) {
       .orderBy(asc(schema.programExercises.displayOrder))
       .all();
 
-    // Enrich with progression data
+    // Enrich with progression data — fuzzy match unlinked exercises on the fly
+    const allExercises = db.all<{ id: number; name: string; workouts: number }>(sql`
+      SELECT e.id, e.name, COUNT(DISTINCT we.workout_id) as workouts
+      FROM exercises e
+      LEFT JOIN workout_exercises we ON we.exercise_id = e.id
+      GROUP BY e.id`);
     const enriched = exercises.map(ex => {
-      if (ex.exerciseId) {
-        const prog = computeProgression(ex.exerciseId, ex.exerciseName, db);
+      let exerciseId = ex.exerciseId;
+
+      // If no linked exercise, try fuzzy match
+      if (!exerciseId) {
+        const fuzzy = fuzzyMatchExercise(ex.exerciseName, allExercises);
+        if (fuzzy) {
+          exerciseId = fuzzy.id;
+          // Persist the link for future lookups
+          db.run(sql`UPDATE program_exercises SET exercise_id = ${fuzzy.id} WHERE id = ${ex.id}`);
+        }
+      }
+
+      if (exerciseId) {
+        const prog = computeProgression(exerciseId, ex.exerciseName, db);
         return {
           ...ex,
+          exerciseId,
           progression: prog.directive,
           suggestedWeightKg: prog.weightKg,
           suggestedReps: prog.reps,

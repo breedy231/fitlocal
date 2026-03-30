@@ -6,14 +6,14 @@ import { join } from 'path';
 export interface ParsedExercise {
   name: string;
   sets: number;
-  reps: string; // '15', 'AMRAP', etc.
+  reps: string; // '15', '8 - 10', 'AMRAP', '60 sec', etc.
   restSeconds: number | null;
   notes: string | null;
 }
 
 export interface ParsedDay {
-  name: string; // 'Push A', 'Pull B', etc.
-  musclesFocus: string | null; // 'Chest, Shoulders & Triceps'
+  name: string;
+  musclesFocus: string | null;
   exercises: ParsedExercise[];
 }
 
@@ -28,20 +28,20 @@ export interface ParsedProgram {
 
 function parseRestSeconds(rest: string): number | null {
   if (!rest || rest === 'N/A') return null;
-  // '90 - 120 sec' → take the higher value
   const nums = rest.match(/\d+/g);
   if (!nums) return null;
   return parseInt(nums[nums.length - 1]);
 }
 
-// Known M&S day headers — lines that start a new workout day
-const DAY_PATTERN = /^(Push|Pull|Legs|Upper|Lower|Chest|Back|Shoulders|Arms|Full Body|Day)\s*[A-Z0-9]?$/i;
-
-// Muscle focus lines that follow exercise tables
-const MUSCLE_FOCUS_PATTERN = /^(Chest|Back|Shoulders|Quads|Hamstrings|Arms|Biceps|Triceps|Calves|Traps|Glutes|Core|Legs)[,\s&]+/i;
+// Lines that are NOT exercise names
+const NOT_EXERCISE = /^(Exercise|Sets|Reps|Rep Goal|Rest|Total|N\/A|MUSCLEANDSTRENGTH)$/i;
+const REP_RANGE = /^\d+\s*[-–]\s*\d+$/;
+const DURATION_PATTERN = /^\d+\s*(sec|min)/i;
+const DAY_LABEL = /^Day\s+\d+$/i;
+// Match split labels like "Upper A", "Lower B" — must be exactly the label word + optional single letter
+const SPLIT_LABEL = /^(Upper|Lower|Push|Pull|Legs|Chest|Back|Shoulders|Arms|Full Body)\s?[A-Z]?$/;
 
 export function parseMASPdf(pdfBuffer: Buffer): ParsedProgram {
-  // Write buffer to temp file, run pdftotext, read output
   const tmpPath = join(tmpdir(), `fitlocal-pdf-${Date.now()}.pdf`);
   writeFileSync(tmpPath, pdfBuffer);
 
@@ -54,7 +54,7 @@ export function parseMASPdf(pdfBuffer: Buffer): ParsedProgram {
 
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-  // Extract program metadata from header
+  // Extract metadata
   let name = '';
   let description: string | null = null;
   let daysPerWeek: number | null = null;
@@ -62,114 +62,116 @@ export function parseMASPdf(pdfBuffer: Buffer): ParsedProgram {
   let source: string | null = null;
 
   for (const line of lines) {
-    if (line.startsWith('Link to Workout:')) {
-      source = line.replace('Link to Workout:', '').trim();
-    }
-    if (line.startsWith('Days Per Week:')) {
-      const m = line.match(/(\d+)/);
-      if (m) daysPerWeek = parseInt(m[1]);
-    }
-    if (line.startsWith('Program Duration:')) {
-      const m = line.match(/(\d+)/);
-      if (m) durationWeeks = parseInt(m[1]);
-    }
+    if (line.startsWith('Link to Workout:')) source = line.replace('Link to Workout:', '').trim();
+    if (line.startsWith('Days Per Week:')) { const m = line.match(/(\d+)/); if (m) daysPerWeek = parseInt(m[1]); }
+    if (line.startsWith('Program Duration:')) { const m = line.match(/(\d+)/); if (m) durationWeeks = parseInt(m[1]); }
   }
 
-  // Find the program title — typically the largest text block before metadata
-  // Look for ALL CAPS or multi-word title before the first day
+  // Find program title
+  const BOILERPLATE = /^(Store|Workouts|Diet Plans|Expert Guides|Videos|Tools|THE TOOLS|®|THE BODY|Link to|Main Goal|Training Level|Program Duration|Days Per Week|Time Per|Equipment:|Author:)/i;
   for (let i = 0; i < Math.min(lines.length, 30); i++) {
     const line = lines[i];
-    // Skip nav items and short labels
-    if (['Store', 'Workouts', 'Diet Plans', 'Expert Guides', 'Videos', 'Tools'].includes(line)) continue;
-    if (line.startsWith('THE TOOLS') || line.startsWith('®') || line.startsWith('THE BODY')) continue;
-    if (line.startsWith('Link to') || line.startsWith('Main Goal') || line.startsWith('Training Level')) continue;
-    if (line.startsWith('Program Duration') || line.startsWith('Days Per Week') || line.startsWith('Time Per')) continue;
-    if (line.startsWith('Equipment:') || line.startsWith('Author:')) continue;
+    if (BOILERPLATE.test(line)) continue;
     if (line.match(/muscleandstrength\.com/i)) continue;
-
-    // Title is usually the first substantial non-boilerplate line
     if (line.length > 5 && !name) {
       name = line;
-      // Check if next line continues the title or is a description
-      if (i + 1 < lines.length && !lines[i + 1].startsWith('Link to') && !lines[i + 1].match(/^(Main Goal|Training|Program|Days|Time|Equipment|Author)/)) {
-        const next = lines[i + 1];
-        if (next.length > 20 && !DAY_PATTERN.test(next)) {
-          description = next;
-        }
+      if (i + 1 < lines.length && !BOILERPLATE.test(lines[i + 1]) && lines[i + 1].length > 20) {
+        description = lines[i + 1];
       }
       break;
     }
   }
 
-  // Parse workout days
+  // Strategy: pdftotext may put all exercise tables first, then day labels at the bottom.
+  // Split exercise tables by "Exercise" + "Sets" + "Reps" header sequences.
+  // Each occurrence of this header starts a new day's table.
+
+  // Collect day names from the bottom of the document (Day N + optional split label)
+  const dayNames: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (DAY_LABEL.test(lines[i])) {
+      let label = lines[i];
+      // Check if next line is a split label (Upper A, Lower B, etc.)
+      if (i + 1 < lines.length && SPLIT_LABEL.test(lines[i + 1])) {
+        label += ' — ' + lines[i + 1];
+      }
+      dayNames.push(label);
+    }
+  }
+
+  // Find all table start positions.
+  // pdftotext may output: "Exercise" + "Sets" + "Reps" for the first table,
+  // but only "Sets" + "Reps" for subsequent tables (no "Exercise" keyword).
+  const tableStarts: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (/^(Exercise|Sets)$/i.test(lines[i])) {
+      // Check if "Sets" and "Reps" appear within the next 1-3 lines
+      let hasSets = /^Sets$/i.test(lines[i]);
+      let hasReps = false;
+      for (let j = i + 1; j < lines.length && j <= i + 3; j++) {
+        if (/^Sets$/i.test(lines[j])) hasSets = true;
+        if (/^Reps$/i.test(lines[j])) hasReps = true;
+      }
+      if (hasSets && hasReps) {
+        tableStarts.push(i);
+        // Skip past the header lines so we don't double-detect
+        i += 2;
+      }
+    }
+  }
+
+  // If no table headers found, fall back to looking for "Day N" before exercise data
+  if (tableStarts.length === 0) {
+    for (let i = 0; i < lines.length; i++) {
+      if (DAY_LABEL.test(lines[i])) tableStarts.push(i);
+    }
+  }
+
+  // Parse exercise rows between table starts
   const days: ParsedDay[] = [];
-  let i = 0;
 
-  while (i < lines.length) {
-    // Look for day headers
-    if (DAY_PATTERN.test(lines[i]) || isCustomDayHeader(lines, i)) {
-      const dayName = lines[i];
+  for (let t = 0; t < tableStarts.length; t++) {
+    let i = tableStarts[t];
+
+    // Skip past the header lines (Exercise, Sets, Reps)
+    while (i < lines.length && /^(Exercise|Sets|Reps|Rep Goal|Rest|Total)$/i.test(lines[i])) {
       i++;
+    }
 
-      // Skip the table header row (Exercise, Sets, ...)
-      if (i < lines.length && lines[i] === 'Exercise') {
+    // End is either the next table start or end of exercise data
+    const end = t + 1 < tableStarts.length ? tableStarts[t + 1] : lines.length;
+
+    const exercises: ParsedExercise[] = [];
+
+    while (i < end) {
+      const line = lines[i];
+
+      // Stop if we hit day labels section at the bottom
+      if (DAY_LABEL.test(line) && !exercises.length) break;
+      if (DAY_LABEL.test(line) || SPLIT_LABEL.test(line) || /^MUSCLEANDSTRENGTH/i.test(line)) {
         i++;
-        // Skip column headers (Sets, Rep Goal Total, Rest, Reps, etc.)
-        while (i < lines.length && /^(Sets|Reps|Rep Goal|Rest|Total)$/i.test(lines[i])) {
-          i++;
-        }
+        continue;
       }
 
-      const exercises: ParsedExercise[] = [];
-      let musclesFocus: string | null = null;
+      if (line.startsWith('*')) { i++; continue; }
 
-      // Parse exercise rows until we hit next day, footnotes, or muscle focus
-      while (i < lines.length) {
-        const line = lines[i];
-
-        // Stop conditions
-        if (DAY_PATTERN.test(line) || isCustomDayHeader(lines, i)) break;
-        if (line.match(/^MUSCLEANDSTRENGTH/i)) break;
-
-        // Muscle focus line
-        if (MUSCLE_FOCUS_PATTERN.test(line) && !line.match(/^\d/)) {
-          musclesFocus = line;
-          i++;
-          continue;
-        }
-
-        // Skip footnotes
-        if (line.startsWith('*') || line.startsWith('**')) {
-          i++;
-          continue;
-        }
-
-        // Try to parse as an exercise row
-        // Exercise names are followed by sets (number), reps (number or AMRAP), rest (time)
-        const exercise = tryParseExerciseRow(lines, i);
-        if (exercise) {
-          exercises.push(exercise.exercise);
-          i = exercise.nextIndex;
-        } else {
-          i++;
-        }
+      const exercise = tryParseExerciseRow(lines, i, end);
+      if (exercise) {
+        exercises.push(exercise.exercise);
+        i = exercise.nextIndex;
+      } else {
+        i++;
       }
+    }
 
-      if (exercises.length > 0) {
-        days.push({ name: dayName, musclesFocus, exercises });
-      }
-    } else {
-      i++;
+    if (exercises.length > 0) {
+      // Use collected day name, or generate one
+      const dayName = dayNames[t] || `Day ${t + 1}`;
+      days.push({ name: dayName, musclesFocus: null, exercises });
     }
   }
 
   return { name, description, daysPerWeek, durationWeeks, source, days };
-}
-
-function isCustomDayHeader(lines: string[], i: number): boolean {
-  // A day header is typically followed by 'Exercise' on the next line
-  if (i + 1 >= lines.length) return false;
-  return lines[i + 1] === 'Exercise' && !lines[i].match(/^\d/) && lines[i].length < 40;
 }
 
 interface ExerciseParseResult {
@@ -177,77 +179,71 @@ interface ExerciseParseResult {
   nextIndex: number;
 }
 
-function tryParseExerciseRow(lines: string[], startIdx: number): ExerciseParseResult | null {
-  // The M&S PDF format puts exercise name on one line (possibly spanning two if long),
-  // followed by sets (number), reps (number/text), rest (time string) on subsequent lines.
+function tryParseExerciseRow(lines: string[], startIdx: number, endIdx: number): ExerciseParseResult | null {
   let i = startIdx;
   const line = lines[i];
 
-  // Skip non-exercise lines
   if (!line || line.length < 3) return null;
-  if (/^(Exercise|Sets|Reps|Rep Goal|Rest|Total|N\/A)$/i.test(line)) return null;
-  if (/^\d+$/.test(line)) return null; // bare number
-  if (line.match(/^\d+\s*(sec|min)/i)) return null; // bare rest time
+  if (NOT_EXERCISE.test(line)) return null;
+  if (/^\d+$/.test(line)) return null;
+  if (DURATION_PATTERN.test(line)) return null;
+  if (REP_RANGE.test(line)) return null;
+  if (DAY_LABEL.test(line)) return null;
+  if (SPLIT_LABEL.test(line)) return null;
 
-  // The exercise name should not be purely numeric or a known header
   let exerciseName = line;
   i++;
 
-  // Check if next line is a continuation of the name (e.g. "(Dumbbell, Rope, or EZ Bar)")
-  if (i < lines.length && lines[i].startsWith('(') && !lines[i].match(/^\(\d/)) {
+  // Continuation: "(Dumbbell, Rope, or EZ Bar)"
+  if (i < endIdx && lines[i].startsWith('(') && !lines[i].match(/^\(\d/)) {
     exerciseName += ' ' + lines[i];
     i++;
   }
 
-  // Now expect: sets (number), reps (number/AMRAP), rest (time)
   let sets: number | null = null;
   let reps: string | null = null;
   let restSeconds: number | null = null;
   let notes: string | null = null;
 
-  // Collect next few values
   const remaining: string[] = [];
-  while (i < lines.length && remaining.length < 4) {
+  while (i < endIdx && remaining.length < 4) {
     const l = lines[i];
-    if (DAY_PATTERN.test(l) || isCustomDayHeader(lines, i)) break;
-    if (MUSCLE_FOCUS_PATTERN.test(l)) break;
+    if (NOT_EXERCISE.test(l)) break; // hit next table header
+    if (DAY_LABEL.test(l)) break;
+    if (SPLIT_LABEL.test(l)) break;
+    if (/^MUSCLEANDSTRENGTH/i.test(l)) break;
     if (l.startsWith('*')) break;
-    // If it looks like another exercise name (long text, not a number/time)
-    if (l.length > 15 && !l.match(/^\d/) && !l.match(/sec|min|N\/A|AMRAP|AMQRAP/i)) break;
+    // If it looks like another exercise name (has letters, not a number/time/range)
+    if (!l.match(/^\d/) && !DURATION_PATTERN.test(l) && !REP_RANGE.test(l) && !/^AMRAP|AMQRAP$/i.test(l) && /[a-zA-Z]{2,}/.test(l)) break;
     remaining.push(l);
     i++;
   }
 
-  // Parse the collected values
   for (const val of remaining) {
     if (sets === null && /^\d+$/.test(val)) {
       sets = parseInt(val);
     } else if (reps === null && /^\d+$/.test(val)) {
       reps = val;
+    } else if (reps === null && REP_RANGE.test(val)) {
+      reps = val;
     } else if (reps === null && /AMRAP|AMQRAP/i.test(val)) {
       reps = 'AMRAP';
-    } else if (/\d+\s*([-–]\s*\d+\s*)?(sec|min)/i.test(val) || val === 'N/A') {
+    } else if (reps === null && DURATION_PATTERN.test(val)) {
+      reps = val;
+    } else if (/\d+\s*([-–]\s*\d+\s*)?(sec|min)/i.test(val) && reps !== null) {
       restSeconds = parseRestSeconds(val);
     }
   }
 
-  // Must have at least sets to count as a valid exercise
   if (sets === null) return null;
 
-  // Handle AMRAP lines with notes
   if (exerciseName.endsWith('*')) {
     exerciseName = exerciseName.replace(/\*+$/, '').trim();
     notes = 'Back-off set: 20% less weight';
   }
 
   return {
-    exercise: {
-      name: exerciseName,
-      sets,
-      reps: reps || '10',
-      restSeconds,
-      notes,
-    },
+    exercise: { name: exerciseName, sets, reps: reps || '10', restSeconds, notes },
     nextIndex: i,
   };
 }

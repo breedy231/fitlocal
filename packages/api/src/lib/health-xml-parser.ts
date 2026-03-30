@@ -165,7 +165,11 @@ export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
   }
 
   // Stream-parse the XML line by line (export.xml can be 1GB+)
-  const samples: RawSample[] = [];
+  // Aggregate directly into byDate to avoid accumulating millions of samples in memory
+  const byDate = new Map<string, {
+    hrv: number[]; restingHr: number[];
+    steps: number[]; bodyWeight: number[]; calories: number[]; protein: number[];
+  }>();
   const sleepIntervals: SleepInterval[] = [];
   const stats: Record<string, number> = {};
 
@@ -190,27 +194,16 @@ export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
 
     const sample = parseRecordLine(trimmed);
     if (sample) {
-      samples.push(sample);
+      if (!byDate.has(sample.date)) {
+        byDate.set(sample.date, { hrv: [], restingHr: [], steps: [], bodyWeight: [], calories: [], protein: [] });
+      }
+      (byDate.get(sample.date)! as any)[sample.type].push(sample.value);
       stats[sample.type] = (stats[sample.type] || 0) + 1;
     }
   }
 
   // Cleanup
   try { execSync(`rm -rf "${tmpDir}"`); } catch { /* ignore */ }
-
-  // Aggregate non-sleep samples by date
-  const byDate = new Map<string, {
-    hrv: number[]; restingHr: number[];
-    steps: number[]; bodyWeight: number[]; calories: number[]; protein: number[];
-  }>();
-
-  for (const s of samples) {
-    if (!byDate.has(s.date)) {
-      byDate.set(s.date, { hrv: [], restingHr: [], steps: [], bodyWeight: [], calories: [], protein: [] });
-    }
-    const day = byDate.get(s.date)!;
-    (day as any)[s.type].push(s.value);
-  }
 
   // Group sleep segments into sessions by creationDate, then attribute each
   // session to its wake-up date (max endMs). Merge overlapping sessions per date.
@@ -222,16 +215,9 @@ export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
 
   const sleepByDate = new Map<string, SleepInterval[]>();
   for (const [, segments] of sleepSessions) {
-    // Session wake-up date = local date of the latest endMs
-    const maxEnd = Math.max(...segments.map(s => s.endMs));
-    // Convert to local date string from the original end time
-    // Find the segment with maxEnd to get its original date string
+    // Attribute session to the local date of the latest segment's creation date
+    // (creationDate is when Apple Watch uploaded, always after wake-up on the same local date)
     const latestSegment = segments.reduce((a, b) => b.endMs > a.endMs ? b : a);
-    const wakeDate = new Date(maxEnd);
-    // Use local date: offset back from UTC using the timezone from creation date
-    const dateStr = `${wakeDate.getFullYear()}-${String(wakeDate.getMonth() + 1).padStart(2, '0')}-${String(wakeDate.getDate()).padStart(2, '0')}`;
-    // Actually, better: extract from creation date which is when Apple Watch uploaded
-    // creationDate is always after wake-up, on the same local date
     const sessionDate = extractLocalDate(latestSegment.creationDate);
 
     if (!sleepByDate.has(sessionDate)) sleepByDate.set(sessionDate, []);

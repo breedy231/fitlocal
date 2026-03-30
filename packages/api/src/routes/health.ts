@@ -32,6 +32,7 @@ export async function healthRoutes(app: FastifyInstance) {
       sleepHours?: number;
       steps?: number;
       bodyWeightKg?: number;
+      bodyWeightLbs?: number;
       calories?: number;
       proteinG?: number;
     };
@@ -44,7 +45,10 @@ export async function healthRoutes(app: FastifyInstance) {
     const restingHr = raw.restingHr || null;
     const sleepHours = raw.sleepHours || null;
     const steps = raw.steps || null;
-    const bodyWeightKg = raw.bodyWeightKg || null;
+    // Accept weight in lbs or kg — store as kg
+    const bodyWeightKg = raw.bodyWeightLbs
+      ? Math.round(raw.bodyWeightLbs * 0.453592 * 100) / 100
+      : (raw.bodyWeightKg || null);
     const calories = raw.calories || null;
     const proteinG = raw.proteinG || null;
 
@@ -188,10 +192,10 @@ export async function healthRoutes(app: FastifyInstance) {
           sql`SELECT id FROM health_snapshots WHERE date = ${date} LIMIT 1`
         );
         if (existing.length > 0) {
-          tx.run(sql.raw(`UPDATE health_snapshots SET ${column} = ${value} WHERE date = '${date}'`));
+          tx.run(sql`UPDATE health_snapshots SET ${sql.raw(column)} = ${value} WHERE date = ${date}`);
           updated++;
         } else {
-          tx.run(sql.raw(`INSERT INTO health_snapshots (date, ${column}) VALUES ('${date}', ${value})`));
+          tx.run(sql`INSERT INTO health_snapshots (date, ${sql.raw(column)}) VALUES (${date}, ${value})`);
           inserted++;
         }
       }
@@ -207,7 +211,7 @@ export async function healthRoutes(app: FastifyInstance) {
   });
 
   // Import Apple Health export zip (Settings > Health > Export All Health Data)
-  app.post('/health/import-apple', async (req, reply) => {
+  app.post('/health/import-apple', { bodyLimit: 500 * 1024 * 1024 }, async (req, reply) => {
     const zipBuffer = Buffer.isBuffer(req.body)
       ? req.body
       : Buffer.from(req.body as string, 'binary');

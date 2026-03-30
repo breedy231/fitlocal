@@ -67,48 +67,31 @@ export async function reportRoutes(app: FastifyInstance) {
   // Muscle group distribution (last 30 days)
   app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/muscle-distribution', async (req) => {
     const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
-    const excludeSet = new Set(excludeIds);
-    const workouts = db.all(sql`
-      SELECT w.id FROM workouts w
+
+    const rows = db.all(sql`
+      SELECT
+        e.primary_muscles as primaryMuscles,
+        e.secondary_muscles as secondaryMuscles,
+        COUNT(CASE WHEN s.is_warmup = 0 THEN 1 END) as workingSets
+      FROM workouts w
+      JOIN workout_exercises we ON we.workout_id = w.id
+      JOIN exercises e ON e.id = we.exercise_id
+      LEFT JOIN sets s ON s.workout_exercise_id = we.id
       WHERE w.date >= date('now', '-30 days')
-    `) as { id: number }[];
+        AND ${STRENGTH_ONLY}
+        AND ${excludeFilter(excludeIds)}
+      GROUP BY we.id
+    `) as { primaryMuscles: string; secondaryMuscles: string; workingSets: number }[];
 
     const muscleMap: Record<string, number> = {};
-
-    for (const w of workouts) {
-      const wExercises = await db
-        .select()
-        .from(schema.workoutExercises)
-        .where(eq(schema.workoutExercises.workoutId, w.id));
-
-      for (const we of wExercises) {
-        const exercise = await db
-          .select()
-          .from(schema.exercises)
-          .where(eq(schema.exercises.id, we.exerciseId))
-          .get();
-        if (!exercise) continue;
-
-        // Skip stretching/foam roll exercises and user-excluded exercises
-        const eName = (exercise.name || '').toLowerCase();
-        if (eName.includes('stretch') || eName.includes('foam roll')) continue;
-        if (excludeSet.has(exercise.id)) continue;
-
-        const sets = await db
-          .select()
-          .from(schema.sets)
-          .where(eq(schema.sets.workoutExerciseId, we.id));
-
-        const workingSets = sets.filter((s) => !s.isWarmup).length;
-        const primary = (exercise.primaryMuscles as string[]) || [];
-        const secondary = (exercise.secondaryMuscles as string[]) || [];
-
-        for (const m of primary) {
-          muscleMap[m] = (muscleMap[m] || 0) + workingSets;
-        }
-        for (const m of secondary) {
-          muscleMap[m] = (muscleMap[m] || 0) + workingSets * 0.5;
-        }
+    for (const row of rows) {
+      const primary: string[] = JSON.parse(row.primaryMuscles || '[]');
+      const secondary: string[] = JSON.parse(row.secondaryMuscles || '[]');
+      for (const m of primary) {
+        muscleMap[m] = (muscleMap[m] || 0) + row.workingSets;
+      }
+      for (const m of secondary) {
+        muscleMap[m] = (muscleMap[m] || 0) + row.workingSets * 0.5;
       }
     }
 
@@ -125,7 +108,7 @@ export async function reportRoutes(app: FastifyInstance) {
     const rows = db.all(sql`
       SELECT
         e.name as exerciseName,
-        MAX(s.weight_kg) as maxWeightKg,
+        s.weight_kg as maxWeightKg,
         s.reps as repsAtMax,
         w.date as dateAchieved
       FROM sets s
@@ -136,8 +119,15 @@ export async function reportRoutes(app: FastifyInstance) {
         AND s.weight_kg > 0
         AND ${STRENGTH_ONLY}
         AND ${excludeFilter(excludeIds)}
+        AND s.weight_kg = (
+          SELECT MAX(s2.weight_kg)
+          FROM sets s2
+          JOIN workout_exercises we2 ON we2.id = s2.workout_exercise_id
+          WHERE we2.exercise_id = we.exercise_id
+            AND s2.is_warmup = 0
+            AND s2.weight_kg > 0
+        )
       GROUP BY e.id
-      HAVING MAX(s.weight_kg) = s.weight_kg
       ORDER BY s.weight_kg DESC
       LIMIT 20
     `) as { exerciseName: string; maxWeightKg: number; repsAtMax: number; dateAchieved: string }[];
@@ -209,10 +199,14 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Health trends (weight, steps, HRV, resting HR, sleep over time)
-  app.get('/reports/health-trends', async () => {
+  app.get<{ Querystring: { since?: string; until?: string } }>('/reports/health-trends', async (req) => {
+    const until = req.query.until || new Date().toISOString().slice(0, 10);
+    const since = req.query.since || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
     const rows = db.all(sql`
       SELECT *
       FROM health_snapshots
+      WHERE date >= ${since} AND date <= ${until}
       ORDER BY date ASC
     `) as {
       id: number;

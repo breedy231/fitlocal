@@ -21,7 +21,7 @@ const port = Number(process.env.PORT) || 3001;
 // Run migrations on startup
 await import('./migrate.js');
 
-const app = Fastify({ logger: true, bodyLimit: 500 * 1024 * 1024 }); // 500MB for health exports
+const app = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024 }); // 10MB default
 
 await app.register(cors, {
   origin: true, // allow all origins for local network use

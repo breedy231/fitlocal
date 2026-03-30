@@ -9,3 +9,4 @@ fitlocal.db-shm
 fitlocal.db-wal
 packages/api/fitlocal.db-shm
 packages/api/fitlocal.db-wal
+certs/
