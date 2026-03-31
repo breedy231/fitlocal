@@ -37,35 +37,44 @@ export async function workoutRoutes(app: FastifyInstance) {
         .offset(offset);
     }
 
-    const enriched = await Promise.all(
-      workouts.map(async (w) => {
-        const wExercises = await db
-          .select()
-          .from(schema.workoutExercises)
-          .where(eq(schema.workoutExercises.workoutId, w.id));
+    if (workouts.length === 0) return [];
 
-        let setCount = 0;
-        let exerciseNames: string[] = [];
+    const wIds = workouts.map(w => w.id);
 
-        for (const we of wExercises) {
-          const sets = await db.select().from(schema.sets).where(eq(schema.sets.workoutExerciseId, we.id));
-          setCount += sets.length;
-          if (req.query.detail === 'true') {
-            const ex = await db.select().from(schema.exercises).where(eq(schema.exercises.id, we.exerciseId)).get();
-            if (ex) exerciseNames.push(ex.name);
-          }
-        }
+    // Single query for exercise + set counts
+    const countRows = db.all<{ workout_id: number; exercise_count: number; set_count: number }>(sql`
+      SELECT we.workout_id,
+        COUNT(DISTINCT we.id) as exercise_count,
+        COUNT(s.id) as set_count
+      FROM workout_exercises we
+      LEFT JOIN sets s ON s.workout_exercise_id = we.id
+      WHERE we.workout_id IN (${sql.join(wIds.map(id => sql`${id}`), sql`, `)})
+      GROUP BY we.workout_id
+    `);
+    const countMap = new Map(countRows.map(r => [r.workout_id, r]));
 
-        return {
-          ...w,
-          exerciseCount: wExercises.length,
-          setCount,
-          ...(req.query.detail === 'true' ? { exerciseNames } : {}),
-        };
-      })
-    );
+    // Optional: exercise names for detail mode
+    let nameMap = new Map<number, string[]>();
+    if (req.query.detail === 'true') {
+      const nameRows = db.all<{ workout_id: number; names: string }>(sql`
+        SELECT we.workout_id, GROUP_CONCAT(e.name, '||') as names
+        FROM workout_exercises we
+        JOIN exercises e ON we.exercise_id = e.id
+        WHERE we.workout_id IN (${sql.join(wIds.map(id => sql`${id}`), sql`, `)})
+        GROUP BY we.workout_id
+      `);
+      nameMap = new Map(nameRows.map(r => [r.workout_id, r.names ? r.names.split('||') : []]));
+    }
 
-    return enriched;
+    return workouts.map(w => {
+      const counts = countMap.get(w.id);
+      return {
+        ...w,
+        exerciseCount: counts?.exercise_count ?? 0,
+        setCount: counts?.set_count ?? 0,
+        ...(req.query.detail === 'true' ? { exerciseNames: nameMap.get(w.id) ?? [] } : {}),
+      };
+    });
   });
 
   // Get single workout with exercises and sets
@@ -74,27 +83,126 @@ export async function workoutRoutes(app: FastifyInstance) {
     const workout = await db.select().from(schema.workouts).where(eq(schema.workouts.id, id)).get();
     if (!workout) return reply.status(404).send({ error: 'Not found' });
 
-    const wExercises = await db
-      .select()
-      .from(schema.workoutExercises)
-      .where(eq(schema.workoutExercises.workoutId, id))
-      .orderBy(schema.workoutExercises.displayOrder);
+    // Single JOIN query for all exercises + sets
+    const rows = db.all<{
+      we_id: number; exercise_id: number; display_order: number; superset_group: number | null;
+      ex_name: string; ex_rest_seconds: number | null; ex_image_url: string | null;
+      ex_primary_muscles: string | null; ex_secondary_muscles: string | null; ex_equipment: string | null;
+      set_id: number | null; set_reps: number | null; set_weight_kg: number | null;
+      set_is_warmup: number | null; set_rpe: number | null; set_multiplier: number | null;
+    }>(sql`
+      SELECT
+        we.id as we_id, we.exercise_id, we.display_order, we.superset_group,
+        e.name as ex_name, e.rest_seconds as ex_rest_seconds, e.image_url as ex_image_url,
+        e.primary_muscles as ex_primary_muscles, e.secondary_muscles as ex_secondary_muscles,
+        e.equipment as ex_equipment,
+        s.id as set_id, s.reps as set_reps, s.weight_kg as set_weight_kg,
+        s.is_warmup as set_is_warmup, s.rpe as set_rpe, s.multiplier as set_multiplier
+      FROM workout_exercises we
+      JOIN exercises e ON we.exercise_id = e.id
+      LEFT JOIN sets s ON s.workout_exercise_id = we.id
+      WHERE we.workout_id = ${id}
+      ORDER BY we.display_order, s.id
+    `);
 
-    const result = await Promise.all(
-      wExercises.map(async (we) => {
-        const exercise = await db.select().from(schema.exercises).where(eq(schema.exercises.id, we.exerciseId)).get();
-        const setsData = await db.select().from(schema.sets).where(eq(schema.sets.workoutExerciseId, we.id));
-        return { ...we, exercise, sets: setsData, restSeconds: exercise?.restSeconds ?? 60 };
-      })
-    );
+    // Group flat rows into nested structure
+    const exerciseMap = new Map<number, any>();
+    for (const r of rows) {
+      if (!exerciseMap.has(r.we_id)) {
+        exerciseMap.set(r.we_id, {
+          id: r.we_id,
+          workoutId: id,
+          exerciseId: r.exercise_id,
+          displayOrder: r.display_order,
+          supersetGroup: r.superset_group,
+          exercise: {
+            id: r.exercise_id,
+            name: r.ex_name,
+            restSeconds: r.ex_rest_seconds,
+            imageUrl: r.ex_image_url,
+            primaryMuscles: r.ex_primary_muscles,
+            secondaryMuscles: r.ex_secondary_muscles,
+            equipment: r.ex_equipment,
+          },
+          sets: [],
+          restSeconds: r.ex_rest_seconds ?? 60,
+        });
+      }
+      if (r.set_id != null) {
+        exerciseMap.get(r.we_id)!.sets.push({
+          id: r.set_id,
+          workoutExerciseId: r.we_id,
+          reps: r.set_reps,
+          weightKg: r.set_weight_kg,
+          isWarmup: r.set_is_warmup,
+          rpe: r.set_rpe,
+          multiplier: r.set_multiplier,
+        });
+      }
+    }
 
-    return { ...workout, exercises: result };
+    return { ...workout, exercises: Array.from(exerciseMap.values()) };
   });
 
   // Create workout
   app.post<{ Body: { date: string; locationProfile?: string; notes?: string } }>('/workouts', async (req, reply) => {
     const { date, locationProfile, notes } = req.body;
     const result = db.insert(schema.workouts).values({ date, locationProfile, notes }).returning().get();
+    return reply.status(201).send(result);
+  });
+
+  // Batch start workout — create workout + exercises + sets in a single transaction
+  app.post<{
+    Body: {
+      date: string;
+      notes?: string;
+      locationProfile?: string;
+      exercises: Array<{
+        exerciseId: number;
+        displayOrder: number;
+        supersetGroup?: number | null;
+        sets: Array<{
+          reps: number;
+          weightKg: number;
+          isWarmup?: boolean;
+        }>;
+      }>;
+    };
+  }>('/workouts/start', async (req, reply) => {
+    const { date, notes, locationProfile, exercises } = req.body;
+
+    const result = db.transaction((tx) => {
+      const workout = tx.insert(schema.workouts)
+        .values({ date, notes, locationProfile })
+        .returning()
+        .get();
+
+      for (const ex of exercises) {
+        const we = tx.insert(schema.workoutExercises)
+          .values({
+            workoutId: workout.id,
+            exerciseId: ex.exerciseId,
+            displayOrder: ex.displayOrder,
+            supersetGroup: ex.supersetGroup ?? null,
+          })
+          .returning()
+          .get();
+
+        for (const set of ex.sets) {
+          tx.insert(schema.sets)
+            .values({
+              workoutExerciseId: we.id,
+              reps: set.reps,
+              weightKg: set.weightKg,
+              isWarmup: set.isWarmup ?? false,
+            })
+            .run();
+        }
+      }
+
+      return workout;
+    });
+
     return reply.status(201).send(result);
   });
 

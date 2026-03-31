@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '$lib/api';
-  import { onMount } from 'svelte';
+  import { cachedGet } from '$lib/api-cache.svelte';
   import BarChart from '$lib/BarChart.svelte';
   import LineChart from '$lib/LineChart.svelte';
 
@@ -30,17 +30,9 @@
     bodyWeightKg: number | null;
   }
 
-  let loading = $state(true);
-  let summary: Summary = $state({ totalWorkouts: 0, totalWorkingSets: 0, totalVolumeKg: 0, currentStreak: 0, workoutsThisWeek: 0, workoutsThisMonth: 0 });
-  let frequency: FrequencyWeek[] = $state([]);
-  let volume: VolumeWorkout[] = $state([]);
-  let muscles: MuscleData[] = $state([]);
-  let records: PR[] = $state([]);
-  let exerciseOptions: ExerciseOption[] = $state([]);
   let selectedExerciseId: number | null = $state(null);
   let exerciseProgression: ExerciseDataPoint[] = $state([]);
   let exerciseProgressionName: string = $state('');
-  let healthSnapshots: HealthSnapshot[] = $state([]);
   let activeTab: 'training' | 'health' = $state('training');
   let healthRange: '30' | '90' | '365' | 'all' = $state('90');
 
@@ -130,6 +122,37 @@
     return url + (url.includes('?') ? '&' : '?') + excludeParam;
   }
 
+  const summaryCache = cachedGet<Summary>(withExclusions('/reports/summary'));
+  const freqCache = cachedGet<{ weeks: FrequencyWeek[] }>(withExclusions('/reports/frequency'));
+  const volCache = cachedGet<{ workouts: VolumeWorkout[] }>(withExclusions('/reports/volume'));
+  const muscleCache = cachedGet<{ muscles: MuscleData[] }>(withExclusions('/reports/muscle-distribution'));
+  const prCache = cachedGet<{ records: PR[] }>(withExclusions('/reports/personal-records'));
+  const exCache = cachedGet<{ exercises: ExerciseOption[] }>(withExclusions('/reports/exercises-with-history'));
+  const healthCache = cachedGet<{ snapshots: HealthSnapshot[] }>('/reports/health-trends');
+
+  const defaultSummary: Summary = { totalWorkouts: 0, totalWorkingSets: 0, totalVolumeKg: 0, currentStreak: 0, workoutsThisWeek: 0, workoutsThisMonth: 0 };
+
+  let summary = $derived(summaryCache.data ?? defaultSummary);
+  let frequency = $derived(freqCache.data?.weeks ?? []);
+  let volume = $derived(volCache.data?.workouts ?? []);
+  let muscles = $derived(muscleCache.data?.muscles ?? []);
+  let records = $derived(prCache.data?.records ?? []);
+  let exerciseOptions = $derived(exCache.data?.exercises ?? []);
+  let healthSnapshots = $derived(healthCache.data?.snapshots ?? []);
+  let loading = $derived(
+    summaryCache.loading && freqCache.loading && volCache.loading &&
+    muscleCache.loading && prCache.loading && exCache.loading && healthCache.loading
+  );
+
+  // Auto-load progression for first exercise once options are available
+  let autoLoadedProgression = $state(false);
+  $effect(() => {
+    if (exerciseOptions.length > 0 && !autoLoadedProgression && !selectedExerciseId) {
+      autoLoadedProgression = true;
+      loadExerciseProgression(exerciseOptions[0].id);
+    }
+  });
+
   async function loadExerciseProgression(exerciseId: number) {
     selectedExerciseId = exerciseId;
     try {
@@ -142,36 +165,6 @@
       exerciseProgression = [];
     }
   }
-
-  onMount(async () => {
-    try {
-      const [summaryData, freqData, volData, muscleData, prData, exData, healthData] = await Promise.all([
-        api<Summary>(withExclusions('/reports/summary')).catch(() => summary),
-        api<{ weeks: FrequencyWeek[] }>(withExclusions('/reports/frequency')).catch(() => ({ weeks: [] })),
-        api<{ workouts: VolumeWorkout[] }>(withExclusions('/reports/volume')).catch(() => ({ workouts: [] })),
-        api<{ muscles: MuscleData[] }>(withExclusions('/reports/muscle-distribution')).catch(() => ({ muscles: [] })),
-        api<{ records: PR[] }>(withExclusions('/reports/personal-records')).catch(() => ({ records: [] })),
-        api<{ exercises: ExerciseOption[] }>(withExclusions('/reports/exercises-with-history')).catch(() => ({ exercises: [] })),
-        api<{ snapshots: HealthSnapshot[] }>('/reports/health-trends').catch(() => ({ snapshots: [] })),
-      ]);
-
-      summary = summaryData;
-      frequency = freqData.weeks;
-      volume = volData.workouts;
-      muscles = muscleData.muscles;
-      records = prData.records;
-      exerciseOptions = exData.exercises;
-      healthSnapshots = healthData.snapshots;
-
-      if (exerciseOptions.length > 0) {
-        await loadExerciseProgression(exerciseOptions[0].id);
-      }
-    } catch {
-      // API not running
-    } finally {
-      loading = false;
-    }
-  });
 </script>
 
 <div class="p-4 max-w-lg md:max-w-5xl mx-auto">

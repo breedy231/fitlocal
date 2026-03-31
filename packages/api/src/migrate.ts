@@ -151,5 +151,16 @@ sqlite.exec(`
   );
 `);
 
+// Add cardio_plan JSON column to programs
+try { sqlite.exec('ALTER TABLE programs ADD COLUMN cardio_plan TEXT'); } catch { /* exists */ }
+
+// Performance indexes for JOIN-heavy queries
+sqlite.exec(`
+  CREATE INDEX IF NOT EXISTS idx_we_workout_id ON workout_exercises(workout_id);
+  CREATE INDEX IF NOT EXISTS idx_we_exercise_id ON workout_exercises(exercise_id);
+  CREATE INDEX IF NOT EXISTS idx_sets_we_id ON sets(workout_exercise_id);
+  CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts(date);
+`);
+
 console.log('Database migrated successfully');
 sqlite.close();

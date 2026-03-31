@@ -1,7 +1,5 @@
 <script lang="ts">
-  import { api } from '$lib/api';
-  import { onMount } from 'svelte';
-  import { showToast } from '$lib/toast';
+  import { cachedGet } from '$lib/api-cache.svelte';
 
   interface MuscleRecovery {
     name: string;
@@ -23,10 +21,16 @@
     day: { name: string; musclesFocus: string | null };
   }
 
-  let muscles: MuscleRecovery[] = $state([]);
-  let workouts: Workout[] = $state([]);
-  let activeProgram: ActiveProgram | null = $state(null);
-  let loading = $state(true);
+  const recovery = cachedGet<{ muscles: MuscleRecovery[] }>('/recovery-summary');
+  const workoutCache = cachedGet<Workout[]>('/workouts?limit=5');
+  const programCache = cachedGet<ActiveProgram>('/programs/active');
+
+  let muscles = $derived(recovery.data?.muscles ?? []);
+  let workouts = $derived(
+    (Array.isArray(workoutCache.data) ? workoutCache.data : []).slice(-5).reverse()
+  );
+  let activeProgram = $derived(programCache.data);
+  let loading = $derived(recovery.loading && workoutCache.loading && programCache.loading);
 
   function recoveryColor(pct: number): string {
     if (pct > 75) return 'bg-green-500/20 text-green-400 border-green-500/30';
@@ -39,23 +43,6 @@
     const d = new Date(dateStr + 'T12:00:00');
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   }
-
-  onMount(async () => {
-    try {
-      const [recoveryData, workoutData, activeProg] = await Promise.all([
-        api<{ muscles: MuscleRecovery[] }>('/recovery-summary').catch(() => ({ muscles: [] })),
-        api<Workout[]>('/workouts?limit=5').catch(() => []),
-        api<ActiveProgram>('/programs/active').catch(() => null),
-      ]);
-      muscles = recoveryData.muscles || [];
-      workouts = (Array.isArray(workoutData) ? workoutData : []).slice(-5).reverse();
-      activeProgram = activeProg;
-    } catch {
-      showToast('Cannot reach server — check that it\'s running', 'error');
-    } finally {
-      loading = false;
-    }
-  });
 </script>
 
 <div class="p-4 max-w-lg md:max-w-2xl mx-auto">

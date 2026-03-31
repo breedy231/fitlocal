@@ -1,5 +1,6 @@
 import { enqueue, replayQueue } from './offline-queue';
 import { showToast } from './toast';
+import { invalidateAfterMutation } from './api-cache.svelte';
 
 function getApiBase(): string {
   if (typeof window === 'undefined') return 'http://localhost:3001';
@@ -31,8 +32,13 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
       ...options,
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
-    if (res.status === 204) return undefined as T;
-    return res.json();
+    if (res.status === 204) {
+      if (isMutation(options)) invalidateAfterMutation(path);
+      return undefined as T;
+    }
+    const data = await res.json();
+    if (isMutation(options)) invalidateAfterMutation(path);
+    return data;
   } catch (err) {
     if (isNetworkError(err) && isMutation(options)) {
       // Queue the mutation for replay when back online

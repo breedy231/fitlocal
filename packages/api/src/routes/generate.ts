@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { generateWorkout } from '../lib/generator.js';
-import { computeProgression } from '../lib/progression.js';
+import { computeProgressionBatch } from '../lib/progression.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
 
 const DAY_TYPE_MUSCLES: Record<string, string[]> = {
@@ -134,22 +134,33 @@ export async function generateRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'No alternative exercises found' });
     }
 
-    // Enrich candidates with progression data and last-performed info
+    // Batch-fetch last performed dates and progression for all candidates
+    const candidateIds = candidates.map(e => e.id);
+    const lastPerformedRows = candidateIds.length > 0
+      ? db.all<{ exercise_id: number; last_date: string }>(sql`
+          SELECT we.exercise_id, MAX(w.date) as last_date
+          FROM workout_exercises we
+          JOIN workouts w ON we.workout_id = w.id
+          WHERE we.exercise_id IN (${sql.join(candidateIds.map(id => sql`${id}`), sql`, `)})
+          GROUP BY we.exercise_id
+        `)
+      : [];
+    const lastDates = new Map(lastPerformedRows.map(r => [r.exercise_id, r.last_date]));
+
+    const progressionMap = computeProgressionBatch(
+      candidates.map(e => ({ id: e.id, name: e.name })),
+      db
+    );
+
     const now = Date.now();
     const enriched = candidates.map(e => {
-      const lastPerformed = db.all<{ date: string }>(sql`
-        SELECT w.date FROM workouts w
-        JOIN workout_exercises we ON we.workout_id = w.id
-        WHERE we.exercise_id = ${e.id}
-        ORDER BY w.date DESC
-        LIMIT 1
-      `);
+      const lastDate = lastDates.get(e.id);
       let daysSince = 999;
-      if (lastPerformed.length > 0) {
-        daysSince = (now - new Date(lastPerformed[0].date).getTime()) / (1000 * 60 * 60 * 24);
+      if (lastDate) {
+        daysSince = (now - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24);
       }
 
-      const prog = computeProgression(e.id, e.name, db);
+      const prog = progressionMap.get(e.id)!;
 
       return {
         id: e.id,

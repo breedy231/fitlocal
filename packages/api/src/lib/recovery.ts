@@ -21,13 +21,20 @@ const MUSCLE_KEYWORDS: Record<string, RegExp> = {
   core: /crunch|plank|dead.?bug|windshield.?wiper|russian.?twist|toe.?toucher|vertical.?knee.?raise|abs/i,
 };
 
+// Cache: exercise name → muscle list (avoids re-running regex on every call)
+const muscleCache = new Map<string, string[]>();
+
 export function getMusclesForExercise(exerciseName: string): string[] {
+  let cached = muscleCache.get(exerciseName);
+  if (cached) return cached;
+
   const muscles: string[] = [];
   for (const [muscle, pattern] of Object.entries(MUSCLE_KEYWORDS)) {
     if (pattern.test(exerciseName)) {
       muscles.push(muscle);
     }
   }
+  muscleCache.set(exerciseName, muscles);
   return muscles;
 }
 
@@ -39,12 +46,24 @@ interface SetRow {
   exercise_name: string;
 }
 
-function getRecentSetsForMuscle(db: DB, muscle: string): SetRow[] {
+function percentile95(values: number[]): number {
+  if (values.length === 0) return 1;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.ceil(0.95 * sorted.length) - 1;
+  return sorted[Math.max(0, idx)];
+}
+
+/**
+ * Compute recovery for all muscle groups in 2 queries instead of 2 per muscle.
+ */
+export function computeAllMuscleRecoveries(db: DB): Map<string, number> {
+  const now = Date.now();
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - LOOKBACK_DAYS);
   const cutoffStr = cutoff.toISOString().split('T')[0];
 
-  const rows = db.all<SetRow>(sql`
+  // Query 1: Recent sets (for current fatigue calculation)
+  const recentRows = db.all<SetRow>(sql`
     SELECT s.reps, s.weight_kg, s.multiplier, w.date as workout_date, e.name as exercise_name
     FROM sets s
     JOIN workout_exercises we ON s.workout_exercise_id = we.id
@@ -53,12 +72,8 @@ function getRecentSetsForMuscle(db: DB, muscle: string): SetRow[] {
     WHERE w.date >= ${cutoffStr}
   `);
 
-  // Filter to sets whose exercise matches this muscle group
-  return rows.filter(r => getMusclesForExercise(r.exercise_name).includes(muscle));
-}
-
-function getAllHistoricalSessionFatigue(db: DB, muscle: string): number[] {
-  const rows = db.all<SetRow>(sql`
+  // Query 2: All historical sets (for percentile threshold)
+  const allRows = db.all<SetRow>(sql`
     SELECT s.reps, s.weight_kg, s.multiplier, w.date as workout_date, e.name as exercise_name
     FROM sets s
     JOIN workout_exercises we ON s.workout_exercise_id = we.id
@@ -66,40 +81,63 @@ function getAllHistoricalSessionFatigue(db: DB, muscle: string): number[] {
     JOIN exercises e ON we.exercise_id = e.id
   `);
 
-  // Group by workout date and sum fatigue per session
-  const bySession = new Map<string, number>();
-  for (const r of rows) {
-    if (!getMusclesForExercise(r.exercise_name).includes(muscle)) continue;
-    const load = (r.reps ?? 0) * (r.weight_kg ?? 0) * (r.multiplier ?? 1);
-    bySession.set(r.workout_date, (bySession.get(r.workout_date) ?? 0) + load);
+  // Bucket into muscle groups
+  const recentByMuscle = new Map<string, SetRow[]>();
+  const historicalByMuscle = new Map<string, Map<string, number>>(); // muscle → (date → sessionLoad)
+
+  for (const row of recentRows) {
+    for (const muscle of getMusclesForExercise(row.exercise_name)) {
+      if (!recentByMuscle.has(muscle)) recentByMuscle.set(muscle, []);
+      recentByMuscle.get(muscle)!.push(row);
+    }
   }
-  return Array.from(bySession.values());
+
+  for (const row of allRows) {
+    const load = (row.reps ?? 0) * (row.weight_kg ?? 0) * (row.multiplier ?? 1);
+    for (const muscle of getMusclesForExercise(row.exercise_name)) {
+      if (!historicalByMuscle.has(muscle)) historicalByMuscle.set(muscle, new Map());
+      const sessions = historicalByMuscle.get(muscle)!;
+      sessions.set(row.workout_date, (sessions.get(row.workout_date) ?? 0) + load);
+    }
+  }
+
+  // Compute recovery per muscle
+  const results = new Map<string, number>();
+
+  for (const [muscle] of Object.entries(MUSCLE_KEYWORDS)) {
+    const recentSets = recentByMuscle.get(muscle) ?? [];
+    if (recentSets.length === 0) {
+      results.set(muscle, 1);
+      continue;
+    }
+
+    // Current fatigue with exponential decay
+    let currentFatigue = 0;
+    for (const s of recentSets) {
+      const load = (s.reps ?? 0) * (s.weight_kg ?? 0) * (s.multiplier ?? 1);
+      const hoursElapsed = (now - new Date(s.workout_date).getTime()) / (1000 * 60 * 60);
+      currentFatigue += load * Math.exp(-Math.LN2 / PRIMARY_HALF_LIFE_HOURS * hoursElapsed);
+    }
+
+    // Historical session fatigue for percentile threshold
+    const sessions = historicalByMuscle.get(muscle);
+    const sessionFatigues = sessions ? Array.from(sessions.values()) : [];
+    const maxThreshold = percentile95(sessionFatigues);
+
+    const recovery = 1 - (currentFatigue / maxThreshold);
+    results.set(muscle, Math.max(0, Math.min(1, recovery)));
+  }
+
+  return results;
 }
 
-function percentile95(values: number[]): number {
-  if (values.length === 0) return 1;
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.ceil(0.95 * sorted.length) - 1;
-  return sorted[Math.max(0, idx)];
-}
-
+/** Single-muscle recovery (kept for backward compat if needed elsewhere) */
 export function computeMuscleRecovery(muscle: string, db: DB): number {
-  const recentSets = getRecentSetsForMuscle(db, muscle);
-  if (recentSets.length === 0) return 1;
-
-  const now = Date.now();
-  let currentFatigue = 0;
-  for (const s of recentSets) {
-    const load = (s.reps ?? 0) * (s.weight_kg ?? 0) * (s.multiplier ?? 1);
-    const hoursElapsed = (now - new Date(s.workout_date).getTime()) / (1000 * 60 * 60);
-    currentFatigue += load * Math.exp(-Math.LN2 / PRIMARY_HALF_LIFE_HOURS * hoursElapsed);
-  }
-
-  const sessionFatigues = getAllHistoricalSessionFatigue(db, muscle);
-  const maxThreshold = percentile95(sessionFatigues);
-
-  const recovery = 1 - (currentFatigue / maxThreshold);
-  return Math.max(0, Math.min(1, recovery));
+  // For single-muscle calls, delegate to the batch function
+  // This is less efficient than calling computeAllMuscleRecoveries once,
+  // but maintains the API for any code that still calls it
+  const all = computeAllMuscleRecoveries(db);
+  return all.get(muscle) ?? 1;
 }
 
 interface HealthSnapshot {

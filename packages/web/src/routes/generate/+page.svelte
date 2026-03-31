@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from '$lib/api';
+  import { cachedGet } from '$lib/api-cache.svelte';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
   import ExerciseDetail from '$lib/ExerciseDetail.svelte';
   import { showToast } from '$lib/toast';
 
@@ -41,6 +41,7 @@
     suggestedWeightKg: number | null;
     suggestedReps: number | null;
     repRange: { min: number; max: number } | null;
+    isEstimate?: boolean;
   }
 
   interface ActiveProgram {
@@ -53,30 +54,31 @@
       musclesFocus: string | null;
       exercises: ProgramExercise[];
     };
+    cardio: {
+      week: number;
+      sessions: number[];
+      completedThisWeek: number;
+    } | null;
   }
 
-  // Program state
-  let activeProgram: ActiveProgram | null = $state(null);
-  let mode: 'program' | 'freestyle' = $state('freestyle');
+  // Program state — cached so revisiting this page is instant
+  const programCached = cachedGet<ActiveProgram>('/programs/active');
+  let activeProgram: ActiveProgram | null = $derived(programCached.data);
+  let mode: 'program' | 'freestyle' = $derived(programCached.data ? 'program' : 'freestyle');
   let startingProgram = $state(false);
-  let programLoading = $state(true);
-
-  onMount(async () => {
-    try {
-      activeProgram = await api<ActiveProgram>('/programs/active');
-      mode = 'program';
-    } catch {
-      activeProgram = null;
-      mode = 'freestyle';
-    } finally {
-      programLoading = false;
-    }
-  });
+  let programLoading = $derived(programCached.loading);
 
   let swapTargetId: number | null = $state(null);
   let swapAlternatives: GeneratedExercise[] = $state([]);
   let loadingAlternatives = $state(false);
   let swapSearch = $state('');
+
+  // Add exercise to program day
+  let addExerciseOpen = $state(false);
+  let addExerciseSearch = $state('');
+  let addExerciseResults: { id: number; name: string }[] = $state([]);
+  let addExerciseLoading = $state(false);
+  let addSearchTimer: ReturnType<typeof setTimeout> | undefined;
 
   let filteredAlternatives = $derived(
     swapSearch.trim()
@@ -127,29 +129,23 @@
     try {
       const d = new Date();
       const now = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const created = await api<{ id: number }>('/workouts', {
-        method: 'POST',
-        body: JSON.stringify({ date: now, notes: `${workout.dayType} day` }),
-      });
 
-      // Create workout exercises and sets
-      for (let i = 0; i < workout.exercises.length; i++) {
-        const ex = workout.exercises[i];
-        const we = await api<{ id: number }>('/workout-exercises', {
-          method: 'POST',
-          body: JSON.stringify({ workoutId: created.id, exerciseId: ex.id, displayOrder: i, supersetGroup: ex.supersetGroup ?? null }),
-        });
-        for (let i = 0; i < ex.suggestedSets; i++) {
-          await api('/sets', {
-            method: 'POST',
-            body: JSON.stringify({
-              workoutExerciseId: we.id,
+      const created = await api<{ id: number }>('/workouts/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          date: now,
+          notes: `${workout.dayType} day`,
+          exercises: workout.exercises.map((ex, i) => ({
+            exerciseId: ex.id,
+            displayOrder: i,
+            supersetGroup: ex.supersetGroup ?? null,
+            sets: Array.from({ length: ex.suggestedSets }, () => ({
               reps: ex.suggestedReps,
               weightKg: ex.suggestedWeightKg,
-            }),
-          });
-        }
-      }
+            })),
+          })),
+        }),
+      });
 
       goto(`/log/${created.id}`);
     } catch (e: any) {
@@ -191,6 +187,75 @@
     }
     swapTargetId = null;
     swapAlternatives = [];
+  }
+
+  function openAddExercise() {
+    addExerciseOpen = true;
+    addExerciseSearch = '';
+    addExerciseResults = [];
+  }
+
+  function closeAddExercise() {
+    addExerciseOpen = false;
+    addExerciseSearch = '';
+    addExerciseResults = [];
+  }
+
+  async function searchExercisesForAdd(q: string) {
+    if (!q.trim()) { addExerciseResults = []; return; }
+    addExerciseLoading = true;
+    try {
+      addExerciseResults = await api<{ id: number; name: string }[]>(`/exercises/search?q=${encodeURIComponent(q)}`);
+    } catch {
+      addExerciseResults = [];
+    } finally {
+      addExerciseLoading = false;
+    }
+  }
+
+  function onAddExerciseInput(e: Event) {
+    const q = (e.target as HTMLInputElement).value;
+    addExerciseSearch = q;
+    clearTimeout(addSearchTimer);
+    addSearchTimer = setTimeout(() => searchExercisesForAdd(q), 250);
+  }
+
+  function pickExerciseToAdd(exercise: { id: number; name: string }) {
+    if (!activeProgram) return;
+    const nextOrder = activeProgram.day.exercises.length;
+    // Add to the local list immediately
+    activeProgram.day.exercises = [...activeProgram.day.exercises, {
+      id: -Date.now(), // temp id
+      exerciseName: exercise.name,
+      exerciseId: exercise.id,
+      displayOrder: nextOrder,
+      targetSets: 3,
+      targetReps: null,
+      restSeconds: null,
+      notes: null,
+      progression: null,
+      suggestedWeightKg: null,
+      suggestedReps: null,
+      repRange: null,
+      isEstimate: false,
+    }];
+    // Fetch progression for this exercise in the background
+    api<any>(`/exercises/${exercise.id}/progression`).then(prog => {
+      if (!activeProgram) return;
+      const idx = activeProgram.day.exercises.findIndex(ex => ex.exerciseId === exercise.id && ex.id < 0);
+      if (idx !== -1) {
+        activeProgram.day.exercises[idx] = {
+          ...activeProgram.day.exercises[idx],
+          suggestedWeightKg: prog.weightKg,
+          suggestedReps: prog.reps,
+          repRange: prog.repRange,
+          progression: prog.directive,
+          isEstimate: prog.isEstimate ?? false,
+        };
+        activeProgram.day.exercises = [...activeProgram.day.exercises];
+      }
+    }).catch(() => {});
+    closeAddExercise();
   }
 
   function closeSwapSheet() {
@@ -256,40 +321,37 @@
     try {
       const d = new Date();
       const now = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const created = await api<{ id: number }>('/workouts', {
+
+      // Resolve any unmatched exercises first
+      const resolvedExercises = await Promise.all(
+        activeProgram.day.exercises.map(async (ex) => {
+          let exerciseId = ex.exerciseId;
+          if (!exerciseId) {
+            const created = await api<{ id: number }>('/exercises', {
+              method: 'POST',
+              body: JSON.stringify({ name: ex.exerciseName }),
+            });
+            exerciseId = created.id;
+          }
+          return { ...ex, exerciseId };
+        })
+      );
+
+      const created = await api<{ id: number }>('/workouts/start', {
         method: 'POST',
-        body: JSON.stringify({ date: now, notes: `${activeProgram.program.name} — ${activeProgram.day.name}` }),
+        body: JSON.stringify({
+          date: now,
+          notes: `${activeProgram.program.name} — ${activeProgram.day.name}`,
+          exercises: resolvedExercises.map((ex, i) => ({
+            exerciseId: ex.exerciseId,
+            displayOrder: i,
+            sets: Array.from({ length: ex.targetSets || 3 }, () => ({
+              reps: ex.suggestedReps ?? parseTargetReps(ex.targetReps),
+              weightKg: ex.suggestedWeightKg ?? 0,
+            })),
+          })),
+        }),
       });
-
-      for (let i = 0; i < activeProgram.day.exercises.length; i++) {
-        const ex = activeProgram.day.exercises[i];
-
-        // Resolve exerciseId — create exercise if unmatched
-        let exerciseId = ex.exerciseId;
-        if (!exerciseId) {
-          const created = await api<{ id: number }>('/exercises', {
-            method: 'POST',
-            body: JSON.stringify({ name: ex.exerciseName }),
-          });
-          exerciseId = created.id;
-        }
-
-        const we = await api<{ id: number }>('/workout-exercises', {
-          method: 'POST',
-          body: JSON.stringify({ workoutId: created.id, exerciseId, displayOrder: i }),
-        });
-
-        const sets = ex.targetSets || 3;
-        const reps = ex.suggestedReps ?? parseTargetReps(ex.targetReps);
-        const weightKg = ex.suggestedWeightKg ?? 0;
-
-        for (let s = 0; s < sets; s++) {
-          await api('/sets', {
-            method: 'POST',
-            body: JSON.stringify({ workoutExerciseId: we.id, reps, weightKg }),
-          });
-        }
-      }
 
       // Advance to next day in program
       await api('/programs/active/advance', { method: 'POST' }).catch(() => {});
@@ -386,11 +448,31 @@
       <p class="text-xs text-neutral-600 mt-1">Day {activeProgram.dayIndex + 1} of {activeProgram.totalDays}</p>
     </div>
 
+    {#if activeProgram.cardio}
+      <div class="rounded-xl p-4 mb-4 border border-blue-500/20" style="background-color: #1a1a1a;">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-blue-400">Week {activeProgram.cardio.week} Cardio</p>
+            <p class="text-xs text-neutral-400 mt-0.5">
+              {activeProgram.cardio.sessions.length} sessions: {activeProgram.cardio.sessions.map(m => `${m} min`).join(', ')}
+            </p>
+          </div>
+          <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: {activeProgram.cardio.completedThisWeek >= activeProgram.cardio.sessions.length ? '#22c55e20' : '#3b82f620'}; color: {activeProgram.cardio.completedThisWeek >= activeProgram.cardio.sessions.length ? '#22c55e' : '#3b82f6'};">
+            {activeProgram.cardio.completedThisWeek}/{activeProgram.cardio.sessions.length}
+          </span>
+        </div>
+      </div>
+    {/if}
+
     <div class="space-y-2 mb-6">
       {#each activeProgram.day.exercises as ex}
         <div class="rounded-xl p-4 relative" style="background-color: #1a1a1a;">
           <div class="absolute top-3 right-3 flex items-center gap-2">
-            {#if ex.progression === 'up'}
+            {#if ex.isEstimate}
+              <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #8b5cf620; color: #8b5cf6;">
+                ~ EST
+              </span>
+            {:else if ex.progression === 'up'}
               <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #22c55e20; color: #22c55e;">
                 ↑ PROGRESS
               </span>
@@ -420,6 +502,13 @@
           {/if}
         </div>
       {/each}
+
+      <button
+        onclick={openAddExercise}
+        class="w-full py-3 rounded-xl border border-dashed border-neutral-600 text-neutral-400 hover:text-green-400 hover:border-green-500/50 transition-colors text-sm font-medium"
+      >
+        + Add Exercise
+      </button>
     </div>
 
     <button
@@ -579,6 +668,56 @@
                     {alt.lastPerformedDaysAgo < 1 ? 'today' : `${Math.round(alt.lastPerformedDaysAgo)}d ago`}
                   </span>
                 </div>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
+  <!-- Add Exercise Sheet (program mode) -->
+  {#if addExerciseOpen}
+    <div class="fixed inset-0 z-50 flex items-end justify-center">
+      <button class="absolute inset-0 bg-black/60" onclick={closeAddExercise} aria-label="Close"></button>
+      <div class="relative w-full max-w-lg bg-neutral-900 rounded-t-2xl p-4 pb-8 max-h-[70vh] flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold">Add Exercise</h2>
+          <button onclick={closeAddExercise} class="w-8 h-8 rounded-lg flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-800" aria-label="Close">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="relative mb-3">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"></path>
+          </svg>
+          <input
+            type="text"
+            placeholder="Search exercises..."
+            value={addExerciseSearch}
+            oninput={onAddExerciseInput}
+            class="w-full pl-9 pr-3 py-2 rounded-lg bg-neutral-800 text-white text-sm placeholder-neutral-500 border border-neutral-700 focus:outline-none focus:border-green-500"
+          />
+        </div>
+
+        {#if addExerciseLoading}
+          <div class="flex justify-center py-12">
+            <div class="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        {:else if addExerciseSearch && addExerciseResults.length === 0}
+          <p class="text-neutral-400 text-center py-8">No exercises found</p>
+        {:else}
+          <div class="overflow-y-auto space-y-2">
+            {#each addExerciseResults as exercise}
+              <button
+                onclick={() => pickExerciseToAdd(exercise)}
+                class="w-full text-left rounded-xl p-3 hover:bg-neutral-700 transition-colors"
+                style="background-color: #1a1a1a;"
+              >
+                <div class="font-medium">{exercise.name}</div>
               </button>
             {/each}
           </div>

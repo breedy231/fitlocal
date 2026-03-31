@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { api } from '$lib/api';
+  import { cachedGet } from '$lib/api-cache.svelte';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { showToast } from '$lib/toast';
@@ -33,19 +34,18 @@
     days: ProgramDay[];
   }
 
+  const activeCache = cachedGet<{ program: { id: number } }>('/programs/active');
   let program: Program | null = $state(null);
-  let isActive = $state(false);
+  let isActive = $derived.by(() => {
+    const a = activeCache.data;
+    return a != null && program != null && a.program.id === program.id;
+  });
   let loading = $state(true);
 
   onMount(async () => {
     const id = $page.params.id;
     try {
-      const [prog, active] = await Promise.all([
-        api<Program>(`/programs/${id}`),
-        api<{ program: { id: number } }>('/programs/active').catch(() => null),
-      ]);
-      program = prog;
-      isActive = active?.program.id === prog.id;
+      program = await api<Program>(`/programs/${id}`);
     } catch {
       showToast('Failed to load program', 'error');
     } finally {

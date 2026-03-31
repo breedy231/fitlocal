@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type * as schemaTypes from '../schema/index.js';
 import { getMusclesForExercise, getGlobalRecoveryModifier } from './recovery.js';
-import { computeProgression, type ProgressionDirective, type RepRange } from './progression.js';
+import { computeProgressionBatch, type ProgressionDirective, type RepRange } from './progression.js';
 
 type DB = BetterSQLite3Database<typeof schemaTypes>;
 
@@ -37,10 +37,6 @@ interface ExerciseRow {
   id: number;
   name: string;
   rest_seconds: number | null;
-}
-
-interface LastPerformedRow {
-  date: string;
 }
 
 export interface GeneratedExercise {
@@ -78,22 +74,33 @@ interface ScoredExercise extends ExerciseRow {
   muscles: string[];
 }
 
-function scoreExercises(candidates: ExerciseRow[], db: DB): ScoredExercise[] {
+/**
+ * Batch-fetch last performed dates for a set of exercise IDs in a single query.
+ */
+function batchLastPerformed(exerciseIds: number[], db: DB): Map<number, string> {
+  if (exerciseIds.length === 0) return new Map();
+  const rows = db.all<{ exercise_id: number; last_date: string }>(sql`
+    SELECT we.exercise_id, MAX(w.date) as last_date
+    FROM workout_exercises we
+    JOIN workouts w ON we.workout_id = w.id
+    WHERE we.exercise_id IN (${sql.join(exerciseIds.map(id => sql`${id}`), sql`, `)})
+    GROUP BY we.exercise_id
+  `);
+  const result = new Map<number, string>();
+  for (const r of rows) {
+    result.set(r.exercise_id, r.last_date);
+  }
+  return result;
+}
+
+function scoreExercisesWithDates(candidates: ExerciseRow[], lastDates: Map<number, string>): ScoredExercise[] {
   const now = Date.now();
   return candidates.map(e => {
-    const lastPerformed = db.all<LastPerformedRow>(sql`
-      SELECT w.date FROM workouts w
-      JOIN workout_exercises we ON we.workout_id = w.id
-      WHERE we.exercise_id = ${e.id}
-      ORDER BY w.date DESC
-      LIMIT 1
-    `);
-
+    const lastDate = lastDates.get(e.id);
     let daysSince = 7;
-    if (lastPerformed.length > 0) {
-      daysSince = (now - new Date(lastPerformed[0].date).getTime()) / (1000 * 60 * 60 * 24);
+    if (lastDate) {
+      daysSince = (now - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24);
     }
-
     const score = Math.min(1, daysSince / 7);
     const muscles = getMusclesForExercise(e.name);
     return { ...e, score, daysSince, muscles };
@@ -140,7 +147,24 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
     candidates = candidates.filter(e => TRAVEL_KEYWORDS.test(e.name));
   }
 
-  const scored = scoreExercises(candidates, db);
+  let coreCandidates = allExercises.filter(e => CORE_KEYWORDS.test(e.name));
+  if (equipment === 'travel') {
+    coreCandidates = coreCandidates.filter(e => TRAVEL_KEYWORDS.test(e.name) || /crunch|plank|dead.?bug|russian.?twist|toe.?toucher/i.test(e.name));
+  }
+
+  let cardioCandidates = allExercises.filter(e => CARDIO_KEYWORDS.test(e.name));
+
+  // Batch-fetch lastPerformed for ALL candidate exercises in one query
+  const allCandidateIds = [
+    ...candidates.map(e => e.id),
+    ...coreCandidates.map(e => e.id),
+    ...cardioCandidates.map(e => e.id),
+  ];
+  const lastDates = batchLastPerformed(allCandidateIds, db);
+
+  const scored = scoreExercisesWithDates(candidates, lastDates);
+  const scoredCore = scoreExercisesWithDates(coreCandidates, lastDates).sort((a, b) => b.score - a.score);
+  const scoredCardio = scoreExercisesWithDates(cardioCandidates, lastDates).sort((a, b) => b.score - a.score);
 
   // Pick exercises by muscle group targets
   let targets: [string, number][];
@@ -149,7 +173,6 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
   } else if (dayType === 'lower') {
     targets = LOWER_TARGETS;
   } else {
-    // fullbody: mix of upper and lower
     targets = [
       ['back', 1], ['chest', 1], ['shoulders', 1],
       ['quads', 1], ['hamstrings', 1], ['glutes', 1],
@@ -158,26 +181,21 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
   }
 
   const selected = pickByMuscleTargets(scored, targets);
-
-  // Pick core exercises (2)
-  let coreCandidates = allExercises.filter(e => CORE_KEYWORDS.test(e.name));
-  if (equipment === 'travel') {
-    coreCandidates = coreCandidates.filter(e => TRAVEL_KEYWORDS.test(e.name) || /crunch|plank|dead.?bug|russian.?twist|toe.?toucher/i.test(e.name));
-  }
-  const scoredCore = scoreExercises(coreCandidates, db).sort((a, b) => b.score - a.score);
   const coreSelected = scoredCore.slice(0, 2);
-
-  // Pick cardio exercise (1)
-  let cardioCandidates = allExercises.filter(e => CARDIO_KEYWORDS.test(e.name));
-  const scoredCardio = scoreExercises(cardioCandidates, db).sort((a, b) => b.score - a.score);
   const cardioSelected = scoredCardio.slice(0, 1);
 
   const globalModifier = getGlobalRecoveryModifier(db);
   const suppressProgression = globalModifier < 0.85;
 
-  // Build exercise suggestions using progressive overload
+  // Batch-compute progression for all selected exercises
+  const allSelected = [...selected, ...coreSelected, ...cardioSelected];
+  const progressionMap = computeProgressionBatch(
+    allSelected.map(e => ({ id: e.id, name: e.name })),
+    db
+  );
+
   const buildExercise = (e: ScoredExercise, isCardio: boolean): GeneratedExercise => {
-    const prog = computeProgression(e.id, e.name, db);
+    const prog = progressionMap.get(e.id)!;
 
     let suggestedSets = prog.sets;
     let suggestedReps = prog.reps;
@@ -187,7 +205,6 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
     // On bad recovery days, suppress progressions
     if (suppressProgression && directive === 'up') {
       directive = 'hold';
-      // Use last weight instead of progressed weight
       suggestedWeightKg = Math.max(0, suggestedWeightKg - prog.repRange.jump);
       suggestedSets = Math.max(2, suggestedSets - 1);
     }
@@ -218,15 +235,13 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
     const ex = buildExercise(e, false);
     exercises.push(ex);
 
-    // Focus = exercise that's progressing (or closest to it)
     if (ex.progression === 'up') {
-      const focusScore = e.score + 1; // Progressing exercises get priority
+      const focusScore = e.score + 1;
       if (focusScore > bestFocusScore) {
         bestFocusScore = focusScore;
         focusIndex = exercises.length - 1;
       }
     } else if (ex.progression === 'hold' && focusIndex < 0) {
-      // Fallback: pick the hold exercise with highest recovery score
       if (e.score > bestFocusScore) {
         bestFocusScore = e.score;
         focusIndex = exercises.length - 1;
@@ -234,22 +249,18 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
     }
   }
 
-  // Core exercises
   for (const e of coreSelected) {
     exercises.push(buildExercise(e, false));
   }
 
-  // Cardio
   for (const e of cardioSelected) {
     exercises.push(buildExercise(e, true));
   }
 
-  // Mark focus exercise
   if (focusIndex >= 0) {
     exercises[focusIndex].isFocus = true;
   }
 
-  // Assign superset pairs (max 3 per workout) unless disabled
   if (options?.supersets !== false) {
     assignSupersets(exercises);
   }
@@ -279,7 +290,6 @@ function assignSupersets(exercises: GeneratedExercise[]): void {
     const antagonist = getAntagonist(primaryMuscle);
     if (!antagonist) continue;
 
-    // Find a partner exercise that targets the antagonist muscle
     for (let j = i + 1; j < exercises.length; j++) {
       if (paired.has(j) || exercises[j].isCardio) continue;
       const partnerMuscles = getMusclesForExercise(exercises[j].name);
