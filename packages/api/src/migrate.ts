@@ -151,6 +151,9 @@ sqlite.exec(`
   );
 `);
 
+// Add effort_rating to workouts (post-workout RPE, 1-10)
+try { sqlite.exec('ALTER TABLE workouts ADD COLUMN effort_rating INTEGER'); } catch { /* exists */ }
+
 // Add cardio_plan JSON column to programs
 try { sqlite.exec('ALTER TABLE programs ADD COLUMN cardio_plan TEXT'); } catch { /* exists */ }
 

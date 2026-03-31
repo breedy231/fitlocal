@@ -6,6 +6,7 @@ export const workouts = sqliteTable('workouts', {
   date: text('date').notNull(),
   locationProfile: text('location_profile'),
   notes: text('notes'),
+  effortRating: integer('effort_rating'),
 });
 
 export const exercises = sqliteTable('exercises', {
