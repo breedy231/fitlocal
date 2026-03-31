@@ -16,6 +16,7 @@
     weightKg: number | null;
     isWarmup: boolean;
     completed?: boolean;
+    isPR?: boolean;
   }
 
   interface LastPerformance {
@@ -56,6 +57,8 @@
   // Completion tracking
   let startTime = $state(Date.now());
   let showCelebration = $state(false);
+  let showPRCelebration = $state(false);
+  let prExerciseName = $state('');
   let showSummary = $state(false);
   let allSetsCompleted = $state(false);
   let hasCelebrated = false;
@@ -296,6 +299,18 @@
       } catch {
         showToast('Failed to save set — will retry on finish', 'error');
       }
+      // PR detection: check if this set's weight exceeds the all-time best
+      if (set.weightKg && set.weightKg > 0 && ex.prWeightKg != null && set.weightKg > ex.prWeightKg) {
+        set.isPR = true;
+        ex.prWeightKg = set.weightKg; // Update so subsequent equal sets don't re-trigger
+        prExerciseName = ex.exercise?.name ?? 'Exercise';
+        showPRCelebration = true;
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate([100, 30, 100, 30, 100, 30, 200]);
+        }
+        setTimeout(() => { showPRCelebration = false; }, 2500);
+      }
+
       // Start rest timer — shorter rest between superset partners
       const restSec = ex.supersetGroup ? SUPERSET_REST_SECONDS : (ex.restSeconds ?? 60);
       if (restSec > 0) {
@@ -550,15 +565,20 @@
               </svg>
             </button>
 
-            <button
-              onclick={() => toggleComplete(set, ex)}
-              class="w-11 h-11 rounded-lg flex items-center justify-center transition-colors shrink-0 ml-auto
-                {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
-            >
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
-              </svg>
-            </button>
+            <div class="flex items-center gap-1 shrink-0 ml-auto">
+              {#if set.isPR}
+                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 animate-pulse">PR</span>
+              {/if}
+              <button
+                onclick={() => toggleComplete(set, ex)}
+                class="w-11 h-11 rounded-lg flex items-center justify-center transition-colors
+                  {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
+              >
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+                </svg>
+              </button>
+            </div>
           </div>
         {/each}
       {/if}
@@ -775,6 +795,26 @@
   </div>
 {/if}
 
+<!-- PR Celebration Animation -->
+{#if showPRCelebration}
+  <div class="fixed inset-0 z-[60] pointer-events-none flex items-center justify-center celebration-flash" style="animation: pr-flash-anim 2.5s ease-out forwards;">
+    <div class="text-center">
+      <div class="text-5xl font-bold text-amber-400 celebration-text" style="animation: celebration-text-anim 2.5s ease-out forwards;">NEW PR!</div>
+      <div class="text-lg text-amber-300/80 mt-2" style="animation: celebration-text-anim 2.5s ease-out 0.2s forwards; opacity: 0;">{prExerciseName}</div>
+    </div>
+    {#each Array(25) as _, i}
+      <div
+        class="absolute w-2.5 h-2.5 rounded-full confetti-piece"
+        style="
+          left: {15 + Math.random() * 70}%;
+          background-color: {['#f59e0b', '#fbbf24', '#d97706', '#22c55e', '#8b5cf6'][i % 5]};
+          animation-delay: {Math.random() * 0.5}s;
+        "
+      ></div>
+    {/each}
+  </div>
+{/if}
+
 <!-- Rest Timer Bottom Sheet -->
 {#if restTimerActive}
   <div class="fixed inset-0 z-50 flex items-end justify-center" style="background-color: rgba(0,0,0,0.5);">
@@ -795,6 +835,11 @@
   @keyframes celebration-flash-anim {
     0% { background-color: rgba(34, 197, 94, 0.3); }
     50% { background-color: rgba(34, 197, 94, 0.1); }
+    100% { background-color: transparent; }
+  }
+  @keyframes pr-flash-anim {
+    0% { background-color: rgba(245, 158, 11, 0.3); }
+    50% { background-color: rgba(245, 158, 11, 0.1); }
     100% { background-color: transparent; }
   }
   @keyframes celebration-text-anim {
