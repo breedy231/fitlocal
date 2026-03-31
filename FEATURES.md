@@ -11,7 +11,7 @@ Feature ideas sourced from competitive research (Fitbod, Apple Fitness, Peloton,
 - [x] **PR detection + celebration** — confetti + haptic when logging a new max weight
 - [x] **Non-blocking rest timer** — floating bottom bar, push notifications, per-exercise config
 - [x] **Training load indicator** — 28-day EWMA range bar on home page (well below → well above)
-- [ ] **Weekly training rings** — SVG rings on home page (volume, consistency, recovery)
+- [x] **Weekly training rings** — SVG rings on home page (volume, consistency, recovery)
 
 ---
 
