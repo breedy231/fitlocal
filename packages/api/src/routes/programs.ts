@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { sql, eq, asc } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 import { parseMASPdf } from '../lib/pdf-parser.js';
-import { computeProgression } from '../lib/progression.js';
+import { computeProgression, estimateWeightForNewExercise, classifyExercise, getRepRange } from '../lib/progression.js';
 
 // Normalize exercise name for fuzzy matching: lowercase, strip parentheticals, common prefixes, plurals
 function normalizeExName(name: string): string {
@@ -255,16 +255,71 @@ export async function programRoutes(app: FastifyInstance) {
           suggestedWeightKg: prog.weightKg,
           suggestedReps: prog.reps,
           repRange: prog.repRange,
+          isEstimate: prog.isEstimate ?? false,
         };
       }
-      return { ...ex, progression: null, suggestedWeightKg: null, suggestedReps: null, repRange: null };
+
+      // No matched exercise — try muscle-group estimation from name alone
+      const estimated = estimateWeightForNewExercise(ex.exerciseName, db);
+      const classification = classifyExercise(ex.exerciseName);
+      const repRange = getRepRange(classification);
+      return {
+        ...ex,
+        progression: null,
+        suggestedWeightKg: estimated,
+        suggestedReps: repRange.min + Math.floor((repRange.max - repRange.min) / 2),
+        repRange,
+        isEstimate: estimated > 0,
+      };
     });
+
+    // Compute cardio plan info for current week
+    let cardio: { week: number; sessions: number[]; completedThisWeek: number } | null = null;
+    if (program.cardioPlan) {
+      const plan = program.cardioPlan as { week: number; sessions: number[] }[];
+      const startDate = new Date(active.startDate);
+      const now = new Date();
+      const daysSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      const currentWeek = Math.min(Math.floor(daysSinceStart / 7) + 1, plan.length);
+      const weekPlan = plan.find(p => p.week === currentWeek);
+
+      if (weekPlan) {
+        // Count cardio workouts this calendar week (Mon-Sun)
+        const today = new Date();
+        const dayOfWeek = today.getDay(); // 0=Sun
+        const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - mondayOffset);
+        const mondayStr = monday.toISOString().slice(0, 10);
+
+        const cardioCount = db.all<{ cnt: number }>(sql`
+          SELECT COUNT(DISTINCT w.id) as cnt
+          FROM workouts w
+          JOIN workout_exercises we ON we.workout_id = w.id
+          JOIN exercises e ON we.exercise_id = e.id
+          WHERE w.date >= ${mondayStr}
+            AND (lower(e.name) GLOB '*treadmill*'
+              OR lower(e.name) GLOB '*elliptical*'
+              OR lower(e.name) GLOB '*cycling*'
+              OR lower(e.name) GLOB '*rowing*'
+              OR lower(e.name) GLOB '*cardio*'
+              OR lower(e.name) GLOB '*swimming*')
+        `);
+
+        cardio = {
+          week: currentWeek,
+          sessions: weekPlan.sessions,
+          completedThisWeek: cardioCount[0]?.cnt ?? 0,
+        };
+      }
+    }
 
     return {
       program: { id: program.id, name: program.name },
       dayIndex: active.currentDayIndex,
       totalDays: days.length,
       day: { ...currentDay, exercises: enriched },
+      cardio,
     };
   });
 

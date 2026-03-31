@@ -63,6 +63,31 @@ await app.register(programRoutes, { prefix: apiPrefix });
 
 app.get(`${apiPrefix}/health`, async () => ({ status: 'ok' }));
 
+// Cache-Control headers for GET responses
+app.addHook('onSend', (_request, reply, _payload, done) => {
+  if (_request.method !== 'GET') { done(); return; }
+
+  const url = _request.url.replace(/^\/api/, ''); // normalize path
+
+  if (url.startsWith('/exercises') && !url.includes('search')) {
+    reply.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+  } else if (url.startsWith('/stretches')) {
+    reply.header('Cache-Control', 'public, max-age=3600');
+  } else if (url.startsWith('/reports/')) {
+    reply.header('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
+  } else if (url.startsWith('/recovery-summary')) {
+    reply.header('Cache-Control', 'private, max-age=30, stale-while-revalidate=120');
+  } else if (url.startsWith('/programs/active')) {
+    reply.header('Cache-Control', 'private, max-age=30, stale-while-revalidate=120');
+  } else if (url.startsWith('/workouts')) {
+    reply.header('Cache-Control', 'private, max-age=10, stale-while-revalidate=60');
+  } else if (url.startsWith('/generate-workout')) {
+    reply.header('Cache-Control', 'no-cache');
+  }
+
+  done();
+});
+
 // In production, serve the SvelteKit static build
 if (isProduction) {
   const webBuildPath = path.resolve(__dirname, '../../web/build');

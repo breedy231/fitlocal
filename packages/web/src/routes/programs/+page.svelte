@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '$lib/api';
-  import { onMount } from 'svelte';
+  import { cachedGet } from '$lib/api-cache.svelte';
   import { showToast } from '$lib/toast';
 
   interface Program {
@@ -19,9 +19,12 @@
     day: { name: string; musclesFocus: string | null };
   }
 
-  let programs: Program[] = $state([]);
-  let active: ActiveProgram | null = $state(null);
-  let loading = $state(true);
+  const programsCache = cachedGet<Program[]>('/programs');
+  const activeCache = cachedGet<ActiveProgram>('/programs/active');
+
+  let programs = $derived(programsCache.data ?? []);
+  let active = $derived(activeCache.data);
+  let loading = $derived(programsCache.loading);
   let importing = $state(false);
   let importResult = $state('');
 
@@ -33,21 +36,9 @@
   }
 
   async function loadData() {
-    try {
-      const [programList, activeData] = await Promise.all([
-        api<Program[]>('/programs'),
-        api<ActiveProgram>('/programs/active').catch(() => null),
-      ]);
-      programs = programList;
-      active = activeData;
-    } catch {
-      showToast('Failed to load programs', 'error');
-    } finally {
-      loading = false;
-    }
+    programsCache.refresh();
+    activeCache.refresh();
   }
-
-  onMount(loadData);
 
   async function handlePdfImport(e: Event) {
     const input = e.target as HTMLInputElement;

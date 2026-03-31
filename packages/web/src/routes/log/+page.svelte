@@ -1,21 +1,11 @@
 <script lang="ts">
-  import { api } from '$lib/api';
-  import { goto } from '$app/navigation';
-  import { showToast } from '$lib/toast';
-  import { onMount } from 'svelte';
+  import { cachedGet } from '$lib/api-cache.svelte';
 
-  let workouts: any[] = $state([]);
-  let loading = $state(true);
-
-  onMount(async () => {
-    try {
-      const data = await api<any[]>('/workouts');
-      workouts = [...data].reverse().slice(0, 5);
-    } catch {
-      showToast('Cannot reach server', 'error');
-    }
-    loading = false;
-  });
+  const workoutCache = cachedGet<any[]>('/workouts');
+  let workouts = $derived(
+    [...(workoutCache.data ?? [])].reverse().slice(0, 5)
+  );
+  let loading = $derived(workoutCache.loading);
 </script>
 
 <div class="p-4 max-w-lg md:max-w-2xl mx-auto">

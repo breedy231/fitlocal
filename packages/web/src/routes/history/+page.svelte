@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from '$lib/api';
+  import { cachedGet } from '$lib/api-cache.svelte';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
 
   interface Workout {
     id: number;
@@ -12,8 +12,9 @@
     exercises?: { exercise?: { name: string }; sets?: any[] }[];
   }
 
+  const workoutCache = cachedGet<Workout[]>('/workouts');
   let workouts: Workout[] = $state([]);
-  let loading = $state(true);
+  let loading = $derived(workoutCache.loading && workouts.length === 0);
   let expandedId: number | null = $state(null);
   let deleteConfirmId: number | null = $state(null);
   let deleting = $state(false);
@@ -65,14 +66,19 @@
     }
   }
 
-  async function loadWorkouts(exerciseName?: string) {
+  // Populate from cache immediately when data arrives
+  $effect(() => {
+    const cached = workoutCache.data;
+    if (cached && workouts.length === 0 && !searchQuery) {
+      workouts = cached;
+      enrichWorkouts(cached);
+    }
+  });
+
+  async function enrichWorkouts(data: Workout[]) {
     try {
-      const params = exerciseName ? `?exerciseName=${encodeURIComponent(exerciseName)}` : '';
-      const data = await api<Workout[]>(`/workouts${params}`);
-      workouts = data;
-      // Fetch details for expanded views
       const detailed = await Promise.all(
-        workouts.slice(0, 20).map(w => api<Workout>(`/workouts/${w.id}`).catch(() => w))
+        data.slice(0, 20).map(w => api<Workout>(`/workouts/${w.id}`).catch(() => w))
       );
       for (const d of detailed) {
         const idx = workouts.findIndex(w => w.id === d.id);
@@ -80,8 +86,18 @@
       }
     } catch {
       // API not running
+    }
+  }
+
+  async function loadWorkouts(exerciseName?: string) {
+    try {
+      const params = exerciseName ? `?exerciseName=${encodeURIComponent(exerciseName)}` : '';
+      const data = await api<Workout[]>(`/workouts${params}`);
+      workouts = data;
+      await enrichWorkouts(data);
+    } catch {
+      // API not running
     } finally {
-      loading = false;
       searching = false;
     }
   }
@@ -135,7 +151,7 @@
     }
   }
 
-  onMount(loadWorkouts);
+  // Initial load handled by cachedGet + $effect above; search triggers loadWorkouts directly
 </script>
 
 <div class="p-4 max-w-lg md:max-w-3xl mx-auto pb-20">

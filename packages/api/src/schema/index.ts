@@ -57,6 +57,7 @@ export const programs = sqliteTable('programs', {
   daysPerWeek: integer('days_per_week'),
   durationWeeks: integer('duration_weeks'),
   source: text('source'), // e.g. 'muscleandstrength.com'
+  cardioPlan: text('cardio_plan', { mode: 'json' }).$type<{ week: number; sessions: number[] }[]>(),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
 

@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { eq, like } from 'drizzle-orm';
 import { db, schema } from '../db.js';
+import { computeProgression } from '../lib/progression.js';
 
 export async function exerciseRoutes(app: FastifyInstance) {
   app.get('/exercises', async () => {
@@ -44,6 +45,14 @@ export async function exerciseRoutes(app: FastifyInstance) {
     const result = db.update(schema.exercises).set(req.body).where(eq(schema.exercises.id, id)).returning().get();
     if (!result) return reply.status(404).send({ error: 'Not found' });
     return result;
+  });
+
+  // Get progression/estimation for an exercise
+  app.get<{ Params: { id: string } }>('/exercises/:id/progression', async (req, reply) => {
+    const id = parseInt(req.params.id);
+    const exercise = db.select().from(schema.exercises).where(eq(schema.exercises.id, id)).get();
+    if (!exercise) return reply.status(404).send({ error: 'Not found' });
+    return computeProgression(id, exercise.name, db);
   });
 
   app.delete<{ Params: { id: string } }>('/exercises/:id', async (req, reply) => {
