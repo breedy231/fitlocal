@@ -207,7 +207,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   });
 
   // Update workout (PUT)
-  app.put<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string } }>(
+  app.put<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string; effortRating?: number } }>(
     '/workouts/:id',
     async (req, reply) => {
       const id = parseInt(req.params.id);
@@ -218,7 +218,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   );
 
   // Update workout (PATCH)
-  app.patch<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string } }>(
+  app.patch<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string; effortRating?: number } }>(
     '/workouts/:id',
     async (req, reply) => {
       const id = parseInt(req.params.id);

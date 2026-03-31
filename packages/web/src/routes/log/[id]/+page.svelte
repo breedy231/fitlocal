@@ -80,6 +80,7 @@
   }
 
   let summaryData: WorkoutSummary | null = $state(null);
+  let effortRating = $state(5);
 
   function computeSummary(): WorkoutSummary {
     if (!workout) return { totalSets: 0, totalVolumeLbs: 0, exerciseCount: 0, durationMin: 0, exercises: [] };
@@ -603,8 +604,36 @@
         </div>
       </div>
 
+      <!-- Effort Rating -->
+      <div class="rounded-xl p-4 mb-6" style="background-color: #1a1a1a;">
+        <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">How hard was that?</h2>
+        <div class="flex justify-between mb-2">
+          {#each [1,2,3,4,5,6,7,8,9,10] as n}
+            <button
+              onclick={() => effortRating = n}
+              class="w-8 h-8 rounded-full text-xs font-bold transition-all {effortRating === n
+                ? n <= 3 ? 'bg-green-500 text-black scale-110' : n <= 6 ? 'bg-yellow-500 text-black scale-110' : n <= 8 ? 'bg-orange-500 text-black scale-110' : 'bg-red-500 text-black scale-110'
+                : 'bg-neutral-800 text-neutral-500 hover:bg-neutral-700'}"
+            >{n}</button>
+          {/each}
+        </div>
+        <div class="flex justify-between text-xs text-neutral-600">
+          <span>Easy</span>
+          <span>Moderate</span>
+          <span>Max effort</span>
+        </div>
+      </div>
+
       <button
-        onclick={() => goto('/history')}
+        onclick={async () => {
+          if (workout) {
+            await api(`/workouts/${workout.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ effortRating }),
+            }).catch(() => {});
+          }
+          goto('/history');
+        }}
         class="w-full font-semibold text-lg py-4 rounded-xl"
         style="background-color: #22c55e; color: #0f0f0f;"
       >
