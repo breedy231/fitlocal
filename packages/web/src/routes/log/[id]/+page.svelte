@@ -18,6 +18,11 @@
     completed?: boolean;
   }
 
+  interface LastPerformance {
+    date: string;
+    sets: { reps: number; weightKg: number }[];
+  }
+
   interface WorkoutExercise {
     id: number;
     exerciseId: number;
@@ -26,6 +31,8 @@
     restSeconds?: number;
     expanded?: boolean;
     supersetGroup?: number | null;
+    lastPerformance?: LastPerformance | null;
+    prWeightKg?: number | null;
   }
 
   interface Workout {
@@ -491,8 +498,14 @@
         {/each}
       {:else}
         {#each ex.sets as set, idx}
+          {@const lastSet = ex.lastPerformance?.sets[idx]}
           <div class="flex items-center gap-2 py-1.5 {idx > 0 ? 'border-t border-neutral-800/50' : ''}">
-            <span class="w-6 text-center text-xs text-neutral-500 shrink-0">{idx + 1}</span>
+            <div class="w-6 text-center shrink-0">
+              <span class="text-xs text-neutral-500">{idx + 1}</span>
+              {#if lastSet}
+                <div class="text-[9px] text-neutral-600 leading-tight mt-0.5" title="Last session">{kgToLbs(lastSet.weightKg)}×{lastSet.reps}</div>
+              {/if}
+            </div>
 
             <div class="flex items-center gap-1 shrink-0">
               <button
