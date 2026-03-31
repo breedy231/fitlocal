@@ -121,6 +121,7 @@
 
   // Rest timer state
   let restTimeLeft = $state(0);
+  let restTotalTime = $state(0);
   let restTimerActive = $state(false);
   let restTimerInterval: ReturnType<typeof setInterval> | null = null;
   let hasVibrated10s = false;
@@ -319,11 +320,19 @@
     }
   }
 
+  function requestNotificationPermission() {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }
+
   function startRestTimer(seconds: number) {
     if (restTimerInterval) clearInterval(restTimerInterval);
     restTimeLeft = seconds;
+    restTotalTime = seconds;
     restTimerActive = true;
     hasVibrated10s = false;
+    requestNotificationPermission();
     restTimerInterval = setInterval(() => {
       restTimeLeft--;
       if (restTimeLeft === 10 && !hasVibrated10s) {
@@ -333,6 +342,13 @@
         }
       }
       if (restTimeLeft <= 0) {
+        // Fire notification for rest complete
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          new Notification('Rest Complete', { body: 'Time for your next set', tag: 'rest-timer' });
+        }
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate([300, 100, 300]);
+        }
         dismissRestTimer();
       }
     }, 1000);
@@ -815,18 +831,30 @@
   </div>
 {/if}
 
-<!-- Rest Timer Bottom Sheet -->
+<!-- Non-blocking Rest Timer Bar -->
 {#if restTimerActive}
-  <div class="fixed inset-0 z-50 flex items-end justify-center" style="background-color: rgba(0,0,0,0.5);">
-    <div class="w-full max-w-lg rounded-t-2xl p-6 pb-10 text-center" style="background-color: #1a1a1a;">
-      <p class="text-sm text-neutral-400 uppercase tracking-wider mb-2">Rest</p>
-      <p class="text-6xl font-mono font-bold text-white mb-6">{formatTime(restTimeLeft)}</p>
-      <button
-        onclick={dismissRestTimer}
-        class="px-8 py-3 rounded-xl font-medium text-sm bg-neutral-700 text-neutral-200 hover:bg-neutral-600 transition-colors"
-      >
-        Skip Rest
-      </button>
+  <div class="fixed bottom-20 left-0 right-0 z-40 flex justify-center pointer-events-none px-4">
+    <div class="w-full max-w-lg rounded-xl px-4 py-3 pointer-events-auto shadow-lg" style="background-color: #1a1a1a; border: 1px solid #333;">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="text-xs text-neutral-500 uppercase tracking-wider shrink-0">Rest</span>
+          <span class="text-2xl font-mono font-bold text-white">{formatTime(restTimeLeft)}</span>
+        </div>
+        <div class="flex-1 mx-2">
+          <div class="h-1 rounded-full bg-neutral-800 overflow-hidden">
+            <div
+              class="h-full rounded-full transition-all duration-1000 ease-linear"
+              style="width: {restTotalTime > 0 ? ((restTotalTime - restTimeLeft) / restTotalTime) * 100 : 0}%; background-color: #22c55e;"
+            ></div>
+          </div>
+        </div>
+        <button
+          onclick={dismissRestTimer}
+          class="text-xs font-medium text-neutral-400 hover:text-white transition-colors shrink-0 px-2 py-1 rounded-md hover:bg-neutral-800"
+        >
+          Skip
+        </button>
+      </div>
     </div>
   </div>
 {/if}
