@@ -8,7 +8,7 @@ Feature ideas sourced from competitive research (Fitbod, Apple Fitness, Peloton,
 
 - [x] **Post-workout effort rating** — 1-10 discrete buttons on summary screen, stored as `effort_rating` on workouts table
 - [x] **Pre-fill sets with last performance** — show "Last: 185 lbs x 8" per set, pre-fill inputs
-- [ ] **PR detection + celebration** — confetti + haptic when logging a new max weight
+- [x] **PR detection + celebration** — confetti + haptic when logging a new max weight
 - [ ] **Non-blocking rest timer** — floating bottom bar, push notifications, per-exercise config
 - [ ] **Training load indicator** — 28-day EWMA range bar on home page (well below → well above)
 - [ ] **Weekly training rings** — SVG rings on home page (volume, consistency, recovery)
