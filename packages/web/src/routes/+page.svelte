@@ -21,9 +21,19 @@
     day: { name: string; musclesFocus: string | null };
   }
 
+  interface TrainingLoad {
+    label: 'well_below' | 'below' | 'steady' | 'above' | 'well_above';
+    ratio: number;
+    currentLoad: number;
+    baselineLoad: number;
+  }
+
   const recovery = cachedGet<{ muscles: MuscleRecovery[] }>('/recovery-summary');
   const workoutCache = cachedGet<Workout[]>('/workouts?limit=5');
   const programCache = cachedGet<ActiveProgram>('/programs/active');
+  const trainingLoadCache = cachedGet<TrainingLoad>('/training-load');
+
+  let trainingLoad = $derived(trainingLoadCache.data);
 
   let muscles = $derived(recovery.data?.muscles ?? []);
   let workouts = $derived(
@@ -63,6 +73,30 @@
               {muscle.name} {Math.round(muscle.recoveryPct)}%
             </span>
           {/each}
+        </div>
+      </section>
+    {/if}
+
+    <!-- Training Load -->
+    {#if trainingLoad}
+      {@const labels = ['well_below', 'below', 'steady', 'above', 'well_above'] as const}
+      {@const displayLabels = ['Well Below', 'Below', 'Steady', 'Above', 'Well Above']}
+      {@const colors = ['#3b82f6', '#60a5fa', '#22c55e', '#f59e0b', '#ef4444']}
+      {@const activeIdx = labels.indexOf(trainingLoad.label)}
+      <section class="mb-6">
+        <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Training Load</h2>
+        <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
+          <div class="flex gap-1 mb-2">
+            {#each labels as label, idx}
+              <div class="flex-1 h-2 rounded-full {idx === activeIdx ? '' : 'opacity-30'}" style="background-color: {colors[idx]};"></div>
+            {/each}
+          </div>
+          <div class="flex justify-between text-[10px] text-neutral-600">
+            {#each displayLabels as label, idx}
+              <span class="{idx === activeIdx ? 'text-neutral-200 font-bold' : ''}">{label}</span>
+            {/each}
+          </div>
+          <p class="text-xs text-neutral-500 mt-2">Based on your last 4 weeks vs prior 4 weeks</p>
         </div>
       </section>
     {/if}
