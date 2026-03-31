@@ -18,6 +18,62 @@ export async function recoveryRoutes(app: FastifyInstance) {
     return { muscles };
   });
 
+  // Weekly goals: current week stats vs 4-week average targets
+  app.get('/weekly-goals', async () => {
+    // Current week (Mon-Sun)
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0=Sun
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - mondayOffset);
+    const mondayStr = monday.toISOString().slice(0, 10);
+
+    // 4 weeks back for baseline
+    const fourWeeksAgo = new Date(monday);
+    fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+    const fourWeeksStr = fourWeeksAgo.toISOString().slice(0, 10);
+
+    // Weekly stats for last 4 weeks + current
+    const weekRows = db.all<{ week_start: string; days_trained: number; working_sets: number }>(sql`
+      SELECT date(w.date, 'weekday 1', '-7 days') as week_start,
+        COUNT(DISTINCT w.date) as days_trained,
+        COUNT(s.id) as working_sets
+      FROM workouts w
+      JOIN workout_exercises we ON we.workout_id = w.id
+      LEFT JOIN sets s ON s.workout_exercise_id = we.id AND s.is_warmup = 0 AND s.reps > 0
+      WHERE w.date >= ${fourWeeksStr}
+      GROUP BY week_start
+      ORDER BY week_start
+    `);
+
+    // Current week stats
+    const currentWeek = weekRows.find(r => r.week_start >= mondayStr);
+    const priorWeeks = weekRows.filter(r => r.week_start < mondayStr);
+
+    const avgDays = priorWeeks.length > 0
+      ? Math.round(priorWeeks.reduce((s, w) => s + w.days_trained, 0) / priorWeeks.length)
+      : 4;
+    const avgSets = priorWeeks.length > 0
+      ? Math.round(priorWeeks.reduce((s, w) => s + w.working_sets, 0) / priorWeeks.length)
+      : 60;
+
+    // Recovery average
+    const recoveries = computeAllMuscleRecoveries(db);
+    let recoverySum = 0;
+    let recoveryCount = 0;
+    for (const pct of recoveries.values()) {
+      recoverySum += pct;
+      recoveryCount++;
+    }
+    const recoveryAvg = recoveryCount > 0 ? Math.round((recoverySum / recoveryCount) * 100) : 100;
+
+    return {
+      volume: { current: currentWeek?.working_sets ?? 0, target: Math.max(avgSets, 1) },
+      consistency: { current: currentWeek?.days_trained ?? 0, target: Math.max(avgDays, 1) },
+      recovery: { current: recoveryAvg, target: 100 },
+    };
+  });
+
   // Training load: 28-day EWMA of daily workout volume
   app.get('/training-load', async () => {
     // Get daily volume for the last 56 days (28 for current EWMA, 28 more for baseline)

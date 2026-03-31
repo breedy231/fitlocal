@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cachedGet } from '$lib/api-cache.svelte';
+  import TrainingRings from '$lib/TrainingRings.svelte';
 
   interface MuscleRecovery {
     name: string;
@@ -33,7 +34,24 @@
   const programCache = cachedGet<ActiveProgram>('/programs/active');
   const trainingLoadCache = cachedGet<TrainingLoad>('/training-load');
 
+  interface WeeklyGoals {
+    volume: { current: number; target: number };
+    consistency: { current: number; target: number };
+    recovery: { current: number; target: number };
+  }
+
+  const weeklyGoalsCache = cachedGet<WeeklyGoals>('/weekly-goals');
+
   let trainingLoad = $derived(trainingLoadCache.data);
+  let weeklyGoals = $derived(weeklyGoalsCache.data);
+  let weeklyRings = $derived.by(() => {
+    if (!weeklyGoals) return null;
+    return [
+      { label: 'Sets', current: weeklyGoals.volume.current, target: weeklyGoals.volume.target, color: '#22c55e' },
+      { label: 'Days', current: weeklyGoals.consistency.current, target: weeklyGoals.consistency.target, color: '#3b82f6' },
+      { label: 'Recovery', current: weeklyGoals.recovery.current, target: weeklyGoals.recovery.target, color: '#f59e0b', unit: '%' },
+    ];
+  });
 
   let muscles = $derived(recovery.data?.muscles ?? []);
   let workouts = $derived(
@@ -63,6 +81,16 @@
       <div class="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
     </div>
   {:else}
+    <!-- Weekly Training Rings -->
+    {#if weeklyRings}
+      <section class="mb-6">
+        <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">This Week</h2>
+        <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
+          <TrainingRings rings={weeklyRings} />
+        </div>
+      </section>
+    {/if}
+
     <!-- Recovery Section -->
     {#if muscles.length > 0}
       <section class="mb-6">
