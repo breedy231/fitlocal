@@ -141,6 +141,57 @@ export async function workoutRoutes(app: FastifyInstance) {
       }
     }
 
+    // Enrich with last performance + PR data for each exercise
+    const exerciseIds = [...new Set(Array.from(exerciseMap.values()).map((e: any) => e.exerciseId as number))];
+    if (exerciseIds.length > 0) {
+      // Last session's sets per exercise (excluding current workout)
+      const lastRows = db.all<{
+        exercise_id: number; workout_date: string; reps: number; weight_kg: number;
+      }>(sql`
+        SELECT we.exercise_id, w.date as workout_date, s.reps, s.weight_kg
+        FROM sets s
+        JOIN workout_exercises we ON s.workout_exercise_id = we.id
+        JOIN workouts w ON we.workout_id = w.id
+        WHERE we.exercise_id IN (${sql.join(exerciseIds.map(eid => sql`${eid}`), sql`, `)})
+          AND w.id != ${id}
+          AND s.is_warmup = 0
+          AND s.reps > 0
+        ORDER BY w.date DESC, s.id ASC
+      `);
+
+      // Group by exercise → most recent date → sets
+      const lastPerf = new Map<number, { date: string; sets: { reps: number; weightKg: number }[] }>();
+      for (const r of lastRows) {
+        if (!lastPerf.has(r.exercise_id)) {
+          lastPerf.set(r.exercise_id, { date: r.workout_date, sets: [] });
+        }
+        const entry = lastPerf.get(r.exercise_id)!;
+        // Only include sets from the most recent session
+        if (r.workout_date === entry.date) {
+          entry.sets.push({ reps: r.reps, weightKg: r.weight_kg });
+        }
+      }
+
+      // PR weight per exercise (all-time max, excluding current workout)
+      const prRows = db.all<{ exercise_id: number; max_weight: number }>(sql`
+        SELECT we.exercise_id, MAX(s.weight_kg) as max_weight
+        FROM sets s
+        JOIN workout_exercises we ON s.workout_exercise_id = we.id
+        JOIN workouts w ON we.workout_id = w.id
+        WHERE we.exercise_id IN (${sql.join(exerciseIds.map(eid => sql`${eid}`), sql`, `)})
+          AND w.id != ${id}
+          AND s.is_warmup = 0
+          AND s.weight_kg > 0
+        GROUP BY we.exercise_id
+      `);
+      const prMap = new Map(prRows.map(r => [r.exercise_id, r.max_weight]));
+
+      for (const ex of exerciseMap.values()) {
+        ex.lastPerformance = lastPerf.get(ex.exerciseId) ?? null;
+        ex.prWeightKg = prMap.get(ex.exerciseId) ?? null;
+      }
+    }
+
     return { ...workout, exercises: Array.from(exerciseMap.values()) };
   });
 
