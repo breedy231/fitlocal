@@ -102,6 +102,48 @@
       showToast('Failed to delete program', 'error');
     }
   }
+
+  async function exportProgram(id: number, name: string) {
+    try {
+      const data = await api(`/programs/${id}/export`);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Program exported', 'success');
+    } catch {
+      showToast('Failed to export program', 'error');
+    }
+  }
+
+  async function handleJsonImport(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    importing = true;
+    importResult = '';
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const result = await api<{ id: number; name: string; daysImported: number; exercisesImported: number }>(
+        '/programs/import-json',
+        { method: 'POST', body: JSON.stringify(data) }
+      );
+      importResult = `Imported "${result.name}" — ${result.daysImported} days, ${result.exercisesImported} exercises`;
+      showToast(importResult, 'success');
+      await loadData();
+    } catch (err: any) {
+      importResult = err.message || 'Invalid JSON file';
+      showToast(importResult, 'error');
+    } finally {
+      importing = false;
+      input.value = '';
+    }
+  }
 </script>
 
 <div class="p-4 max-w-lg md:max-w-2xl mx-auto">
@@ -141,18 +183,26 @@
     <!-- Import PDF -->
     <div class="rounded-xl p-4 mb-4" style="background-color: #1a1a1a;">
       <h2 class="font-medium mb-2">Import Program</h2>
-      <p class="text-sm text-neutral-400 mb-3">Upload a workout PDF from muscleandstrength.com</p>
-      <label class="block w-full cursor-pointer">
-        <div class="py-3 px-4 rounded-lg bg-neutral-800 text-center text-neutral-300 min-h-[48px] flex items-center justify-center">
-          {#if importing}
-            <div class="w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full animate-spin mr-2"></div>
-            Importing...
-          {:else}
-            Select PDF File
-          {/if}
-        </div>
-        <input type="file" accept=".pdf" onchange={handlePdfImport} class="hidden" disabled={importing} />
-      </label>
+      <p class="text-sm text-neutral-400 mb-3">Upload a workout PDF or JSON file</p>
+      <div class="flex gap-2">
+        <label class="flex-1 cursor-pointer">
+          <div class="py-3 px-4 rounded-lg bg-neutral-800 text-center text-neutral-300 min-h-[48px] flex items-center justify-center text-sm">
+            {#if importing}
+              <div class="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin mr-2"></div>
+              Importing...
+            {:else}
+              Import PDF
+            {/if}
+          </div>
+          <input type="file" accept=".pdf" onchange={handlePdfImport} class="hidden" disabled={importing} />
+        </label>
+        <label class="flex-1 cursor-pointer">
+          <div class="py-3 px-4 rounded-lg bg-neutral-800 text-center text-neutral-300 min-h-[48px] flex items-center justify-center text-sm">
+            Import JSON
+          </div>
+          <input type="file" accept=".json" onchange={handleJsonImport} class="hidden" disabled={importing} />
+        </label>
+      </div>
       {#if importResult && !importing}
         <p class="text-sm mt-2 {importResult.startsWith('Imported') ? 'text-green-400' : 'text-red-400'}">
           {importResult}
@@ -194,6 +244,15 @@
                   class="text-xs px-2 py-1 rounded-lg bg-neutral-700 text-neutral-300 hover:bg-green-500/20 hover:text-green-400"
                 >Activate</button>
               {/if}
+              <button
+                onclick={() => exportProgram(program.id, program.name)}
+                class="w-7 h-7 rounded-lg flex items-center justify-center text-neutral-600 hover:text-blue-400 hover:bg-neutral-800"
+                title="Export as JSON"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+              </button>
               <button
                 onclick={() => deleteProgram(program.id, program.name)}
                 class="w-7 h-7 rounded-lg flex items-center justify-center text-neutral-600 hover:text-red-400 hover:bg-neutral-800"

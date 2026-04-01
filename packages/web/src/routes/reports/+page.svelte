@@ -3,6 +3,9 @@
   import { cachedGet } from '$lib/api-cache.svelte';
   import BarChart from '$lib/BarChart.svelte';
   import LineChart from '$lib/LineChart.svelte';
+  import BenchmarkBar from '$lib/BenchmarkBar.svelte';
+  import VolumeHeatmap from '$lib/VolumeHeatmap.svelte';
+  import Expandable from '$lib/Expandable.svelte';
 
   interface Summary {
     totalWorkouts: number;
@@ -16,9 +19,20 @@
   interface FrequencyWeek { week: string; weekStart: string; count: number }
   interface VolumeWorkout { id: number; date: string; notes: string | null; totalVolume: number; exerciseCount: number; setCount: number }
   interface MuscleData { name: string; sets: number }
-  interface PR { exerciseName: string; maxWeightKg: number; repsAtMax: number; dateAchieved: string }
+  interface PR { exerciseName: string; maxWeightKg: number; repsAtMax: number; dateAchieved: string; estimated1RmKg: number }
+  interface BenchmarkExercise {
+    name: string;
+    estimated1RmKg: number;
+    ratio: number;
+    level: string;
+    thresholds: Record<string, number>;
+  }
+  interface VolumeWeek {
+    weekStart: string;
+    days: { date: string; muscles: Record<string, number> }[];
+  }
   interface ExerciseOption { id: number; name: string; workoutCount: number }
-  interface ExerciseDataPoint { date: string; maxWeight: number; maxReps: number; sessionVolume: number }
+  interface ExerciseDataPoint { date: string; maxWeight: number; maxReps: number; sessionVolume: number; estimated1RmKg: number }
   interface HealthSnapshot {
     date: string;
     restingHr: number | null;
@@ -35,6 +49,12 @@
   let exerciseProgressionName: string = $state('');
   let activeTab: 'training' | 'health' = $state('training');
   let healthRange: '30' | '90' | '365' | 'all' = $state('90');
+  let show1RM = $state(false);
+  let benchmarkGender: 'male' | 'female' = $state('male');
+  let showFrequencyDetail = $state(false);
+  let showVolumeDetail = $state(false);
+  let showMuscleDetail = $state(false);
+  let showPRDetail = $state(false);
 
   // Filter + downsample health data based on selected range
   let filteredHealth = $derived.by(() => {
@@ -129,6 +149,7 @@
   const prCache = cachedGet<{ records: PR[] }>(withExclusions('/reports/personal-records'));
   const exCache = cachedGet<{ exercises: ExerciseOption[] }>(withExclusions('/reports/exercises-with-history'));
   const healthCache = cachedGet<{ snapshots: HealthSnapshot[] }>('/reports/health-trends');
+  const volumeHeatmapCache = cachedGet<{ muscles: string[]; weeks: VolumeWeek[] }>('/reports/volume-heatmap?weeks=4');
 
   const defaultSummary: Summary = { totalWorkouts: 0, totalWorkingSets: 0, totalVolumeKg: 0, currentStreak: 0, workoutsThisWeek: 0, workoutsThisMonth: 0 };
 
@@ -139,6 +160,19 @@
   let records = $derived(prCache.data?.records ?? []);
   let exerciseOptions = $derived(exCache.data?.exercises ?? []);
   let healthSnapshots = $derived(healthCache.data?.snapshots ?? []);
+  let benchmarks: BenchmarkExercise[] = $state([]);
+  let bodyWeightKg: number | null = $state(null);
+  let volumeHeatmap = $derived(volumeHeatmapCache.data);
+
+  // Load benchmarks reactively when gender changes
+  async function loadBenchmarks(gender: 'male' | 'female') {
+    try {
+      const result = await api<{ bodyWeightKg: number | null; exercises: BenchmarkExercise[] }>(`/reports/benchmarks?gender=${gender}`);
+      benchmarks = result.exercises;
+      bodyWeightKg = result.bodyWeightKg;
+    } catch { benchmarks = []; }
+  }
+  $effect(() => { loadBenchmarks(benchmarkGender); });
   let loading = $derived(
     summaryCache.loading && freqCache.loading && volCache.loading &&
     muscleCache.loading && prCache.loading && exCache.loading && healthCache.loading
@@ -282,7 +316,8 @@
                 <div class="flex justify-between items-center py-1.5 border-b border-neutral-800 last:border-0">
                   <span class="text-sm text-neutral-200 flex-1">{pr.exerciseName}</span>
                   <span class="text-sm font-semibold text-green-400 ml-2">{kgToLbs(pr.maxWeightKg)} lbs</span>
-                  <span class="text-xs text-neutral-500 ml-2 w-16 text-right">{formatDate(pr.dateAchieved)}</span>
+                  <span class="text-xs text-neutral-500 ml-1 w-14 text-right" title="Estimated 1RM">{kgToLbs(pr.estimated1RmKg)}e</span>
+                  <span class="text-xs text-neutral-500 ml-1 w-14 text-right">{formatDate(pr.dateAchieved)}</span>
                 </div>
               {/each}
             </div>
@@ -290,6 +325,50 @@
             <p class="text-neutral-500 text-sm text-center py-4">No records yet</p>
           {/if}
         </section>
+      </div>
+
+      <!-- Volume Heatmap + Benchmarks: side by side on desktop -->
+      <div class="md:grid md:grid-cols-2 md:gap-5 md:mt-5">
+        {#if volumeHeatmap && volumeHeatmap.weeks.length > 0}
+          <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+            <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Volume by Muscle (4 wks)</h2>
+            <VolumeHeatmap muscles={volumeHeatmap.muscles} weeks={volumeHeatmap.weeks} />
+          </section>
+        {/if}
+
+        {#if benchmarks.length > 0}
+          <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide">Strength Benchmarks</h2>
+              <button
+                onclick={() => benchmarkGender = benchmarkGender === 'male' ? 'female' : 'male'}
+                class="text-[10px] px-2 py-0.5 rounded-full border border-neutral-700 text-neutral-500"
+              >
+                {benchmarkGender === 'male' ? '♂ Male' : '♀ Female'}
+              </button>
+            </div>
+            {#if bodyWeightKg}
+              <p class="text-[10px] text-neutral-600 mb-3">Based on {kgToLbs(bodyWeightKg)} lbs body weight</p>
+            {/if}
+            <div class="space-y-3">
+              {#each benchmarks as bench}
+                <div>
+                  <div class="flex justify-between items-center mb-1">
+                    <span class="text-xs text-neutral-300">{bench.name}</span>
+                    <span class="text-[10px] font-semibold capitalize px-1.5 py-0.5 rounded {
+                      bench.level === 'elite' ? 'bg-red-500/20 text-red-400' :
+                      bench.level === 'advanced' ? 'bg-orange-500/20 text-orange-400' :
+                      bench.level === 'intermediate' ? 'bg-green-500/20 text-green-400' :
+                      bench.level === 'novice' ? 'bg-blue-500/20 text-blue-400' :
+                      'bg-neutral-700 text-neutral-400'
+                    }">{bench.level}</span>
+                  </div>
+                  <BenchmarkBar ratio={bench.ratio} thresholds={bench.thresholds} level={bench.level} />
+                </div>
+              {/each}
+            </div>
+          </section>
+        {/if}
       </div>
 
       <!-- Exercise Progression: full width -->
@@ -309,13 +388,21 @@
           </select>
 
           {#if exerciseProgression.length > 0}
-            <p class="text-xs text-neutral-500 mb-2">Max weight per session</p>
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-xs text-neutral-500">{show1RM ? 'Estimated 1RM per session' : 'Max weight per session'}</p>
+              <button
+                onclick={() => show1RM = !show1RM}
+                class="text-[10px] px-2 py-0.5 rounded-full border {show1RM ? 'border-blue-500 text-blue-400 bg-blue-500/10' : 'border-neutral-700 text-neutral-500'}"
+              >
+                Est. 1RM
+              </button>
+            </div>
             <LineChart
               data={exerciseProgression.map((d) => ({
                 label: shortDate(d.date),
-                value: kgToLbs(d.maxWeight),
+                value: show1RM ? kgToLbs(d.estimated1RmKg) : kgToLbs(d.maxWeight),
               }))}
-              color="#3b82f6"
+              color={show1RM ? '#f59e0b' : '#3b82f6'}
               height={140}
               unit="lb"
             />

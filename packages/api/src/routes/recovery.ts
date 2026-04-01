@@ -146,4 +146,43 @@ export async function recoveryRoutes(app: FastifyInstance) {
       baselineLoad: Math.round(baselineLoad),
     };
   });
+
+  // Deload suggestion — analyze weekly volume trend
+  app.get('/deload-check', async () => {
+    const rows = db.all(sql`
+      SELECT
+        strftime('%Y-W%W', w.date) as week,
+        SUM(CASE WHEN s.is_warmup = 0 THEN s.reps * s.weight_kg * s.multiplier ELSE 0 END) as weeklyVolume
+      FROM workouts w
+      JOIN workout_exercises we ON we.workout_id = w.id
+      JOIN sets s ON s.workout_exercise_id = we.id
+      WHERE w.date >= date('now', '-56 days')
+      GROUP BY strftime('%Y-W%W', w.date)
+      ORDER BY week ASC
+    `) as { week: string; weeklyVolume: number }[];
+
+    if (rows.length < 4) {
+      return { suggest: false, reason: 'Not enough data (need 4+ weeks)', consecutiveWeeks: 0 };
+    }
+
+    // Count consecutive weeks of increasing volume
+    let consecutive = 0;
+    for (let i = rows.length - 1; i > 0; i--) {
+      if (rows[i].weeklyVolume > rows[i - 1].weeklyVolume) {
+        consecutive++;
+      } else {
+        break;
+      }
+    }
+
+    const suggest = consecutive >= 4;
+    return {
+      suggest,
+      consecutiveWeeks: consecutive,
+      message: suggest
+        ? `You've increased volume for ${consecutive} straight weeks. Consider reducing volume 40% this week.`
+        : null,
+      weeklyVolumes: rows.map(r => ({ week: r.week, volume: Math.round(r.weeklyVolume) })),
+    };
+  });
 }

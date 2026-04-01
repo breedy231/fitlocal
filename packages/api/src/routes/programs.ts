@@ -174,6 +174,109 @@ export async function programRoutes(app: FastifyInstance) {
     });
   });
 
+  // Export program as JSON
+  app.get<{ Params: { id: string } }>('/programs/:id/export', async (req, reply) => {
+    const id = parseInt(req.params.id);
+    const program = db.select().from(schema.programs).where(eq(schema.programs.id, id)).get();
+    if (!program) return reply.status(404).send({ error: 'Program not found' });
+
+    const days = db.select().from(schema.programDays)
+      .where(eq(schema.programDays.programId, id))
+      .orderBy(asc(schema.programDays.dayOrder))
+      .all();
+
+    const exported = {
+      version: 1,
+      name: program.name,
+      description: program.description,
+      daysPerWeek: program.daysPerWeek,
+      durationWeeks: program.durationWeeks,
+      source: program.source,
+      cardioPlan: program.cardioPlan,
+      days: days.map(day => {
+        const exercises = db.select().from(schema.programExercises)
+          .where(eq(schema.programExercises.programDayId, day.id))
+          .orderBy(asc(schema.programExercises.displayOrder))
+          .all();
+        return {
+          name: day.name,
+          musclesFocus: day.musclesFocus,
+          exercises: exercises.map(ex => ({
+            name: ex.exerciseName,
+            sets: ex.targetSets,
+            reps: ex.targetReps,
+            restSeconds: ex.restSeconds,
+            notes: ex.notes,
+          })),
+        };
+      }),
+    };
+
+    reply.header('Content-Disposition', `attachment; filename="${program.name.replace(/[^a-zA-Z0-9]/g, '_')}.json"`);
+    return exported;
+  });
+
+  // Import program from JSON
+  app.post('/programs/import-json', async (req, reply) => {
+    const data = req.body as any;
+    if (!data?.name || !data?.days?.length) {
+      return reply.status(400).send({ error: 'Invalid program JSON: requires name and days' });
+    }
+
+    // Fetch all exercises for matching
+    const allExercises = db.all<{ id: number; name: string; workouts: number }>(sql`
+      SELECT e.id, e.name, COUNT(DISTINCT we.workout_id) as workouts
+      FROM exercises e
+      LEFT JOIN workout_exercises we ON we.exercise_id = e.id
+      GROUP BY e.id`);
+
+    const program = db.insert(schema.programs).values({
+      name: data.name,
+      description: data.description || null,
+      daysPerWeek: data.daysPerWeek || data.days.length,
+      durationWeeks: data.durationWeeks || null,
+      source: data.source || 'json-import',
+      cardioPlan: data.cardioPlan || null,
+    }).returning().get();
+
+    let totalExercises = 0;
+
+    for (let dayIdx = 0; dayIdx < data.days.length; dayIdx++) {
+      const pDay = data.days[dayIdx];
+      const day = db.insert(schema.programDays).values({
+        programId: program.id,
+        name: pDay.name || `Day ${dayIdx + 1}`,
+        dayOrder: dayIdx,
+        musclesFocus: pDay.musclesFocus || null,
+      }).returning().get();
+
+      for (let exIdx = 0; exIdx < (pDay.exercises?.length || 0); exIdx++) {
+        const pEx = pDay.exercises[exIdx];
+        const match = fuzzyMatchExercise(pEx.name, allExercises);
+
+        db.insert(schema.programExercises).values({
+          programDayId: day.id,
+          exerciseName: pEx.name,
+          exerciseId: match?.id || null,
+          displayOrder: exIdx,
+          targetSets: pEx.sets || null,
+          targetReps: pEx.reps || null,
+          restSeconds: pEx.restSeconds || null,
+          notes: pEx.notes || null,
+        }).run();
+
+        totalExercises++;
+      }
+    }
+
+    return reply.status(201).send({
+      id: program.id,
+      name: program.name,
+      daysImported: data.days.length,
+      exercisesImported: totalExercises,
+    });
+  });
+
   // Delete a program
   app.delete<{ Params: { id: string } }>('/programs/:id', async (req, reply) => {
     const id = parseInt(req.params.id);
