@@ -9,12 +9,14 @@
 
   let detailExerciseId: number | null = $state(null);
   let plateCalcWeightLbs: number | null = $state(null);
+  let plateCalcSet: SetData | null = $state(null);
 
   interface SetData {
     id: number;
     reps: number | null;
     weightKg: number | null;
     isWarmup: boolean;
+    rpe?: number | null;
     completed?: boolean;
     isPR?: boolean;
   }
@@ -295,7 +297,7 @@
       try {
         await api(`/sets/${set.id}`, {
           method: 'PUT',
-          body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg }),
+          body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe }),
         });
       } catch {
         showToast('Failed to save set — will retry on finish', 'error');
@@ -312,7 +314,20 @@
         setTimeout(() => { showPRCelebration = false; }, 2500);
       }
 
+      // Superset auto-cycling: scroll to the partner exercise
+      if (ex.supersetGroup && workout) {
+        const partners = workout.exercises.filter(e => e.supersetGroup === ex.supersetGroup);
+        const currentIdx = partners.indexOf(ex);
+        const nextPartner = partners[(currentIdx + 1) % partners.length];
+        if (nextPartner && nextPartner.id !== ex.id) {
+          setTimeout(() => {
+            document.getElementById(`exercise-${nextPartner.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 300);
+        }
+      }
+
       // Start rest timer — shorter rest between superset partners
+      // For supersets, only start the full rest after ALL partners have a completed set in the current round
       const restSec = ex.supersetGroup ? SUPERSET_REST_SECONDS : (ex.restSeconds ?? 60);
       if (restSec > 0) {
         startRestTimer(restSec);
@@ -387,6 +402,15 @@
     }
   }
 
+  async function deleteSet(exercise: WorkoutExercise, setId: number) {
+    try {
+      await api(`/sets/${setId}`, { method: 'DELETE' });
+      exercise.sets = exercise.sets.filter(s => s.id !== setId);
+    } catch {
+      showToast('Failed to delete set', 'error');
+    }
+  }
+
   async function finishWorkout() {
     if (!workout) return;
     finishing = true;
@@ -395,7 +419,7 @@
         for (const set of ex.sets) {
           await api(`/sets/${set.id}`, {
             method: 'PUT',
-            body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg }),
+            body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe }),
           });
         }
       }
@@ -456,6 +480,106 @@
     }
   }
 
+  async function generateShareCard() {
+    if (!summaryData || !workout) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 800;
+    const ctx = canvas.getContext('2d')!;
+
+    // Background
+    ctx.fillStyle = '#0f0f0f';
+    ctx.fillRect(0, 0, 600, 800);
+
+    // Header accent
+    ctx.fillStyle = '#22c55e';
+    ctx.fillRect(0, 0, 600, 4);
+
+    // Date
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '16px system-ui, -apple-system, sans-serif';
+    ctx.fillText(new Date(workout.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }), 32, 48);
+
+    // Title
+    ctx.fillStyle = '#22c55e';
+    ctx.font = 'bold 32px system-ui, -apple-system, sans-serif';
+    ctx.fillText('Workout Complete', 32, 96);
+
+    // Stats grid
+    const stats = [
+      { label: 'Sets', value: String(summaryData.totalSets) },
+      { label: 'Volume', value: `${summaryData.totalVolumeLbs.toLocaleString()} lbs` },
+      { label: 'Exercises', value: String(summaryData.exerciseCount) },
+      { label: 'Duration', value: `${summaryData.durationMin} min` },
+    ];
+
+    let y = 140;
+    for (let i = 0; i < stats.length; i += 2) {
+      for (let j = 0; j < 2; j++) {
+        const s = stats[i + j];
+        const x = 32 + j * 280;
+        // Card bg
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath();
+        ctx.roundRect(x, y, 256, 80, 12);
+        ctx.fill();
+        // Value
+        ctx.fillStyle = '#22c55e';
+        ctx.font = 'bold 28px system-ui, -apple-system, sans-serif';
+        ctx.fillText(s.value, x + 16, y + 40);
+        // Label
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '14px system-ui, -apple-system, sans-serif';
+        ctx.fillText(s.label, x + 16, y + 64);
+      }
+      y += 96;
+    }
+
+    // Exercises
+    y += 16;
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '12px system-ui, -apple-system, sans-serif';
+    ctx.fillText('EXERCISES', 32, y);
+    y += 24;
+
+    for (const ex of summaryData.exercises.slice(0, 8)) {
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '16px system-ui, -apple-system, sans-serif';
+      ctx.fillText(ex.name, 32, y);
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '14px system-ui, -apple-system, sans-serif';
+      const detail = `${ex.sets} sets @ ${ex.avgWeightLbs} lbs`;
+      ctx.fillText(detail, 600 - 32 - ctx.measureText(detail).width, y);
+      y += 32;
+    }
+
+    // Footer branding
+    ctx.fillStyle = '#374151';
+    ctx.font = '12px system-ui, -apple-system, sans-serif';
+    ctx.fillText('FitLocal', 32, 770);
+
+    // Export
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        try {
+          await navigator.share({
+            files: [new File([blob], 'workout.png', { type: 'image/png' })],
+            title: 'Workout Complete',
+          });
+          return;
+        } catch { /* user cancelled or share not supported */ }
+      }
+      // Fallback: download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `workout-${workout!.date}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  }
+
   function skipStretches() {
     if (stretchTimerInterval) clearInterval(stretchTimerInterval);
     finishStretchPhase();
@@ -487,20 +611,33 @@
       {#if isCardio(ex)}
         {#each ex.sets as set, idx}
           <div class="space-y-2 py-2 {idx > 0 ? 'border-t border-neutral-800' : ''}">
-            <div class="grid grid-cols-[1fr_1fr_48px] gap-2 items-center">
+            <div class="grid grid-cols-[1fr_1fr_1fr_48px] gap-2 items-center">
               <div>
                 <label class="text-xs text-neutral-500 block mb-1">Duration (min)</label>
                 <div class="flex items-center justify-center gap-1">
                   <button
                     onclick={() => adjustReps(set, -1)}
-                    class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+                    class="w-8 h-8 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-sm active:bg-neutral-700"
                   >−</button>
-                  <span class="w-8 text-center text-sm font-bold">{set.reps ?? 0}</span>
+                  <span class="w-7 text-center text-sm font-bold">{set.reps ?? 0}</span>
                   <button
                     onclick={() => adjustReps(set, 1)}
-                    class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+                    class="w-8 h-8 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-sm active:bg-neutral-700"
                   >+</button>
                 </div>
+              </div>
+              <div>
+                <label class="text-xs text-neutral-500 block mb-1">Resistance</label>
+                <input
+                  type="number"
+                  value={set.rpe ?? ''}
+                  onchange={(e) => { set.rpe = parseFloat(e.currentTarget.value) || 0; }}
+                  placeholder="level"
+                  class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
+                  step="1"
+                  min="0"
+                  max="30"
+                />
               </div>
               <div>
                 <label class="text-xs text-neutral-500 block mb-1">Distance (km)</label>
@@ -508,7 +645,7 @@
                   type="number"
                   value={set.weightKg ?? ''}
                   onchange={(e) => { set.weightKg = parseFloat(e.currentTarget.value) || 0; }}
-                  placeholder="optional"
+                  placeholder="opt."
                   class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
                   step="0.1"
                 />
@@ -572,7 +709,7 @@
             </div>
 
             <button
-              onclick={() => plateCalcWeightLbs = kgToLbs(set.weightKg)}
+              onclick={() => { plateCalcWeightLbs = kgToLbs(set.weightKg); plateCalcSet = set; }}
               class="w-7 h-7 rounded-md flex items-center justify-center text-neutral-500 hover:text-neutral-300 hover:bg-neutral-700 transition-colors shrink-0"
               title="Plate calculator"
             >
@@ -599,12 +736,23 @@
         {/each}
       {/if}
 
-      <button
-        onclick={() => addSet(ex)}
-        class="w-full py-2 rounded-lg text-sm text-neutral-400 bg-neutral-800/50 hover:bg-neutral-800 transition-colors mt-2"
-      >
-        + Add Set
-      </button>
+      <div class="flex gap-2 mt-2">
+        <button
+          onclick={() => addSet(ex)}
+          class="flex-1 py-2 rounded-lg text-sm text-neutral-400 bg-neutral-800/50 hover:bg-neutral-800 transition-colors"
+        >
+          + Add Set
+        </button>
+        {#if ex.sets.length > 1}
+          <button
+            onclick={() => { const last = ex.sets[ex.sets.length - 1]; if (last && !last.completed) deleteSet(ex, last.id); }}
+            class="px-3 py-2 rounded-lg text-sm text-red-400/70 bg-neutral-800/50 hover:bg-red-500/10 transition-colors"
+            title="Remove last set"
+          >
+            − Set
+          </button>
+        {/if}
+      </div>
     </div>
   {/if}
 {/snippet}
@@ -673,21 +821,32 @@
         </div>
       </div>
 
-      <button
-        onclick={async () => {
-          if (workout) {
-            await api(`/workouts/${workout.id}`, {
-              method: 'PATCH',
-              body: JSON.stringify({ effortRating }),
-            }).catch(() => {});
-          }
-          goto('/history');
-        }}
-        class="w-full font-semibold text-lg py-4 rounded-xl"
-        style="background-color: #22c55e; color: #0f0f0f;"
-      >
-        Done
-      </button>
+      <div class="flex gap-3">
+        <button
+          onclick={generateShareCard}
+          class="py-4 px-6 rounded-xl text-sm font-medium bg-neutral-800 text-neutral-300 hover:bg-neutral-700 transition-colors flex items-center gap-2"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+          </svg>
+          Share
+        </button>
+        <button
+          onclick={async () => {
+            if (workout) {
+              await api(`/workouts/${workout.id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ effortRating }),
+              }).catch(() => {});
+            }
+            goto('/history');
+          }}
+          class="flex-1 font-semibold text-lg py-4 rounded-xl"
+          style="background-color: #22c55e; color: #0f0f0f;"
+        >
+          Done
+        </button>
+      </div>
     </div>
   {:else if stretchPhase !== null}
     <!-- Stretch Screen (warm-up or cool-down) -->
@@ -750,20 +909,24 @@
     <div class="space-y-4 mb-6">
       {#each exerciseGroups as group}
         {#if group.supersetGroup !== null && group.exercises.length > 1}
-          <!-- Superset group -->
-          <div class="rounded-xl overflow-hidden border border-blue-500/30" style="background-color: #1a1a1a;">
+          <!-- Superset group with visual bracket -->
+          <div class="flex gap-0">
+            <!-- Bracket -->
+            <div class="w-1.5 shrink-0 rounded-full my-2" style="background-color: #3b82f6;"></div>
+          <div class="flex-1 rounded-xl overflow-hidden border border-blue-500/30" style="background-color: #1a1a1a;">
             <div class="px-4 py-1.5 text-xs font-bold text-blue-400 uppercase tracking-wider border-b border-blue-500/20" style="background-color: #1e3a5f20;">
               Superset · 30s rest between
             </div>
             {#each group.exercises as ex, gIdx}
-              <div class="{gIdx > 0 ? 'border-t border-neutral-800' : ''}">
+              <div id="exercise-{ex.id}" class="{gIdx > 0 ? 'border-t border-neutral-800' : ''}">
                 {@render exerciseBlock(ex)}
               </div>
             {/each}
           </div>
+          </div>
         {:else}
           {#each group.exercises as ex}
-            <div class="rounded-xl overflow-hidden" style="background-color: #1a1a1a;">
+            <div id="exercise-{ex.id}" class="rounded-xl overflow-hidden" style="background-color: #1a1a1a;">
               {@render exerciseBlock(ex)}
             </div>
           {/each}
@@ -790,7 +953,11 @@
 </div>
 
 {#if plateCalcWeightLbs !== null}
-  <PlateCalculator weightLbs={plateCalcWeightLbs} onclose={() => plateCalcWeightLbs = null} />
+  <PlateCalculator
+    weightLbs={plateCalcWeightLbs}
+    onclose={() => { plateCalcWeightLbs = null; plateCalcSet = null; }}
+    onapply={(lbs) => { if (plateCalcSet) { plateCalcSet.weightKg = lbsToKg(lbs); } }}
+  />
 {/if}
 
 <!-- Celebration Animation -->

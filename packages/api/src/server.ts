@@ -13,6 +13,8 @@ import { recoveryRoutes } from './routes/recovery.js';
 import { stretchRoutes } from './routes/stretches.js';
 import { reportRoutes } from './routes/reports.js';
 import { programRoutes } from './routes/programs.js';
+import { challengeRoutes } from './routes/challenges.js';
+import { achievementRoutes } from './routes/achievements.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === 'production';
@@ -60,6 +62,8 @@ await app.register(recoveryRoutes, { prefix: apiPrefix });
 await app.register(stretchRoutes, { prefix: apiPrefix });
 await app.register(reportRoutes, { prefix: apiPrefix });
 await app.register(programRoutes, { prefix: apiPrefix });
+await app.register(challengeRoutes, { prefix: apiPrefix });
+await app.register(achievementRoutes, { prefix: apiPrefix });
 
 app.get(`${apiPrefix}/health`, async () => ({ status: 'ok' }));
 
@@ -79,6 +83,8 @@ app.addHook('onSend', (_request, reply, _payload, done) => {
     reply.header('Cache-Control', 'private, max-age=30, stale-while-revalidate=120');
   } else if (url.startsWith('/programs/active')) {
     reply.header('Cache-Control', 'private, max-age=30, stale-while-revalidate=120');
+  } else if (url.startsWith('/challenges')) {
+    reply.header('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
   } else if (url.startsWith('/workouts')) {
     reply.header('Cache-Control', 'private, max-age=10, stale-while-revalidate=60');
   } else if (url.startsWith('/generate-workout')) {

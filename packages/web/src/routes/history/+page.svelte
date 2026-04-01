@@ -2,6 +2,7 @@
   import { api } from '$lib/api';
   import { cachedGet } from '$lib/api-cache.svelte';
   import { goto } from '$app/navigation';
+  import CalendarHeatmap from '$lib/CalendarHeatmap.svelte';
 
   interface Workout {
     id: number;
@@ -26,6 +27,25 @@
   let editMode = $state(false);
   let selectedIds: Set<number> = $state(new Set());
   let bulkDeleteConfirm = $state(false);
+
+  // Calendar heatmap
+  let calYear = $state(new Date().getFullYear());
+  let calMonth = $state(new Date().getMonth() + 1);
+
+  interface CalendarDay {
+    date: string;
+    workoutCount: number;
+    totalSets: number;
+    primaryMuscles: string[];
+  }
+
+  let calendarCache = $derived(cachedGet<{ year: number; month: number; days: CalendarDay[] }>(`/reports/calendar?year=${calYear}&month=${calMonth}`));
+  let calendarDays = $derived(calendarCache.data?.days ?? []);
+
+  function onCalendarNavigate(y: number, m: number) {
+    calYear = y;
+    calMonth = m;
+  }
 
   // Error toast
   let errorMessage = $state('');
@@ -200,6 +220,20 @@
     {/if}
   </div>
 
+  <!-- Calendar Heatmap -->
+  <section class="mb-4 rounded-xl p-3" style="background-color: #1a1a1a;">
+    <CalendarHeatmap
+      year={calYear}
+      month={calMonth}
+      days={calendarDays}
+      onNavigate={onCalendarNavigate}
+      onDayClick={(date) => {
+        const w = workouts.find(w => w.date === date);
+        if (w) { expandedId = w.id; document.getElementById(`workout-${w.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      }}
+    />
+  </section>
+
   {#if loading}
     <div class="flex justify-center py-12">
       <div class="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
@@ -211,7 +245,7 @@
   {:else}
     <div class="space-y-2">
       {#each workouts as workout}
-        <div class="rounded-xl overflow-hidden" style="background-color: #1a1a1a;">
+        <div id="workout-{workout.id}" class="rounded-xl overflow-hidden" style="background-color: #1a1a1a;">
           <button
             onclick={() => editMode ? toggleSelect(workout.id) : toggleExpand(workout.id)}
             class="w-full text-left p-4"

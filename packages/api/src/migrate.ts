@@ -157,6 +157,32 @@ try { sqlite.exec('ALTER TABLE workouts ADD COLUMN effort_rating INTEGER'); } ca
 // Add cardio_plan JSON column to programs
 try { sqlite.exec('ALTER TABLE programs ADD COLUMN cardio_plan TEXT'); } catch { /* exists */ }
 
+// Achievements table
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS achievements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    icon TEXT NOT NULL,
+    unlocked_at TEXT
+  );
+`);
+
+// Monthly challenges table
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS challenges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    month TEXT NOT NULL,
+    type TEXT NOT NULL,
+    description TEXT NOT NULL,
+    target_value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    completed INTEGER DEFAULT 0,
+    completed_at TEXT
+  );
+`);
+
 // Performance indexes for JOIN-heavy queries
 sqlite.exec(`
   CREATE INDEX IF NOT EXISTS idx_we_workout_id ON workout_exercises(workout_id);

@@ -1,5 +1,5 @@
 <script lang="ts">
-  let { weightLbs = 0, onclose }: { weightLbs: number; onclose: () => void } = $props();
+  let { weightLbs = 0, onclose, onapply }: { weightLbs: number; onclose: () => void; onapply?: (lbs: number) => void } = $props();
 
   const BAR_WEIGHT_LBS = 45;
   const PLATES = [45, 35, 25, 10, 5, 2.5];
@@ -126,6 +126,16 @@
           <p class="text-xs text-amber-400 mt-3">Closest loadable: {achievable} lbs</p>
         {/if}
       </div>
+    {/if}
+
+    {#if onapply && targetLbs !== weightLbs}
+      <button
+        onclick={() => { onapply?.(achievable); onclose(); }}
+        class="w-full mt-4 py-3 rounded-xl text-sm font-semibold transition-colors"
+        style="background-color: #22c55e; color: #0f0f0f;"
+      >
+        Apply {achievable} lbs
+      </button>
     {/if}
   </div>
 </div>

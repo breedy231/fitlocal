@@ -89,6 +89,26 @@ export const activeProgram = sqliteTable('active_program', {
   currentDayIndex: integer('current_day_index').notNull().default(0), // which program_day is next
 });
 
+export const achievements = sqliteTable('achievements', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  key: text('key').notNull().unique(), // e.g. 'workouts_100', 'streak_4'
+  name: text('name').notNull(),
+  description: text('description').notNull(),
+  icon: text('icon').notNull(), // emoji
+  unlockedAt: text('unlocked_at'),
+});
+
+export const challenges = sqliteTable('challenges', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  month: text('month').notNull(), // '2026-04'
+  type: text('type').notNull(), // 'workouts' | 'sets' | 'volume'
+  description: text('description').notNull(),
+  targetValue: real('target_value').notNull(),
+  unit: text('unit').notNull(),
+  completed: integer('completed', { mode: 'boolean' }).default(false),
+  completedAt: text('completed_at'),
+});
+
 export const healthSnapshots = sqliteTable('health_snapshots', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   date: text('date').notNull(),

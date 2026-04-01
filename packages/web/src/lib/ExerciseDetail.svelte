@@ -6,6 +6,7 @@
     name: string;
     description: string | null;
     imageUrl: string | null;
+    wgerId: number | null;
     primaryMuscles: string[];
     secondaryMuscles: string[];
     equipment: string[];
@@ -179,6 +180,22 @@
               {exercise.description || 'No description available'}
             </p>
           </div>
+
+          <!-- Demo link -->
+          <a
+            href={exercise.wgerId
+              ? `https://wger.de/en/exercise/${exercise.wgerId}/view/base`
+              : `https://exrx.net/Lists/Directory?q=${encodeURIComponent(exercise.name)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium bg-neutral-800 text-neutral-300 hover:text-green-400 hover:bg-neutral-700 transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            How to perform this exercise
+          </a>
         </div>
       {:else}
         <div class="flex justify-center py-16 text-neutral-500">
