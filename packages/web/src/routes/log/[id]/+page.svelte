@@ -5,9 +5,23 @@
   import { onMount, onDestroy } from 'svelte';
   import ExerciseDetail from '$lib/ExerciseDetail.svelte';
   import PlateCalculator from '$lib/PlateCalculator.svelte';
+  import NutritionCard from '$lib/NutritionCard.svelte';
+  import { cachedGet } from '$lib/api-cache.svelte';
   import { showToast } from '$lib/toast';
 
   let detailExerciseId: number | null = $state(null);
+
+  // Daily nutrition for post-workout summary
+  interface NutritionData {
+    calories: { current: number | null; target: number | null };
+    protein: { current: number | null; target: number | null };
+    isInCut: boolean;
+    deficitMagnitude: number | null;
+    deficitPct: number | null;
+    date: string;
+  }
+  const nutritionCache = cachedGet<NutritionData>('/goals/daily-nutrition');
+  let nutritionData = $derived(nutritionCache.data);
   let plateCalcWeightLbs: number | null = $state(null);
   let plateCalcSet: SetData | null = $state(null);
 
@@ -800,6 +814,13 @@
           {/each}
         </div>
       </div>
+
+      <!-- Daily Nutrition (if goals are set) -->
+      {#if nutritionData && nutritionData.calories.target != null}
+        <div class="mb-6">
+          <NutritionCard data={nutritionData} />
+        </div>
+      {/if}
 
       <!-- Effort Rating -->
       <div class="rounded-xl p-4 mb-6" style="background-color: #1a1a1a;">

@@ -197,4 +197,112 @@ export async function goalRoutes(app: FastifyInstance) {
       cutEndDate: g?.cut_end_date ?? null,
     };
   });
+
+  // GET /goals/weekly-progress — weekly cut progress summary
+  app.get('/goals/weekly-progress', async () => {
+    const goals = db.all(sql`SELECT * FROM user_goals LIMIT 1`) as any[];
+    if (goals.length === 0) return { isInCut: false };
+
+    const g = goals[0];
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+
+    const isInCut = g.cut_start_date && g.cut_end_date &&
+      todayStr >= g.cut_start_date && todayStr <= g.cut_end_date;
+    if (!isInCut) return { isInCut: false };
+
+    // Monday of current week
+    const dayOfWeek = today.getDay();
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - mondayOffset);
+    const mondayStr = monday.toISOString().slice(0, 10);
+
+    const maintenance = g.maintenance_calories || 2200;
+    const targetCalories = g.target_calories || maintenance;
+    const targetDeficit = maintenance - targetCalories;
+
+    // This week's nutrition data
+    const calRows = db.all<{ calories: number; protein_g: number | null }>(sql`
+      SELECT calories, protein_g FROM health_snapshots
+      WHERE date >= ${mondayStr} AND date <= ${todayStr}
+        AND calories IS NOT NULL AND calories > 0
+    `);
+
+    const daysLogged = calRows.length;
+    const avgCalories = daysLogged > 0
+      ? Math.round(calRows.reduce((s, r) => s + r.calories, 0) / daysLogged)
+      : null;
+    const avgDeficit = avgCalories != null ? maintenance - avgCalories : null;
+
+    // Weight trend: compare current 7-day avg to 7 days ago
+    const weightRows = db.all<{ date: string; body_weight_kg: number }>(sql`
+      SELECT date, body_weight_kg FROM health_snapshots
+      WHERE body_weight_kg IS NOT NULL AND body_weight_kg > 0
+        AND date >= date(${todayStr}, '-14 days')
+      ORDER BY date ASC
+    `);
+
+    const weightByDate = new Map<string, number>();
+    for (const r of weightRows) weightByDate.set(r.date, r.body_weight_kg);
+
+    function trendAvg(refDate: Date): number | null {
+      const weights: number[] = [];
+      for (let d = 0; d < 7; d++) {
+        const checkDate = new Date(refDate.getTime() - d * 86400000).toISOString().slice(0, 10);
+        const w = weightByDate.get(checkDate);
+        if (w != null) weights.push(w);
+      }
+      return weights.length >= 2 ? weights.reduce((a, b) => a + b, 0) / weights.length : null;
+    }
+
+    const currentTrendKg = trendAvg(today);
+    const weekAgoTrendKg = trendAvg(new Date(today.getTime() - 7 * 86400000));
+
+    let changeLbs: number | null = null;
+    if (currentTrendKg != null && weekAgoTrendKg != null) {
+      changeLbs = Math.round((currentTrendKg - weekAgoTrendKg) * KG_TO_LBS * 10) / 10;
+    }
+
+    // Target pace: lbs/week needed to reach goal by end date
+    let weeklyTargetLbs: number | null = null;
+    if (g.target_weight_kg && g.cut_end_date && currentTrendKg) {
+      const weeksRemaining = Math.max(1,
+        (new Date(g.cut_end_date).getTime() - today.getTime()) / (7 * 86400000)
+      );
+      weeklyTargetLbs = Math.round((g.target_weight_kg - currentTrendKg) * KG_TO_LBS / weeksRemaining * 10) / 10;
+    }
+
+    // Pace classification
+    let pace: string | null = null;
+    if (changeLbs != null && daysLogged >= 3) {
+      if (changeLbs < -2.0) {
+        pace = 'ahead'; // losing too fast
+      } else if (changeLbs <= 0 && avgDeficit != null && avgDeficit >= targetDeficit * 0.8) {
+        pace = 'on_track';
+      } else if (changeLbs > 0) {
+        pace = 'behind';
+      } else if (avgDeficit != null && avgDeficit >= targetDeficit * 0.5) {
+        pace = 'on_track';
+      } else {
+        pace = 'behind';
+      }
+    }
+
+    return {
+      isInCut: true,
+      week: {
+        avgCalories,
+        avgDeficit,
+        targetDeficit,
+        daysLogged,
+      },
+      weight: {
+        currentTrendLbs: currentTrendKg != null ? Math.round(currentTrendKg * KG_TO_LBS * 10) / 10 : null,
+        changeLbs,
+        weeklyTargetLbs,
+      },
+      pace,
+    };
+  });
 }
