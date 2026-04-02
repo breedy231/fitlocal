@@ -3,6 +3,7 @@
   import TrainingRings from '$lib/TrainingRings.svelte';
   import ChallengeCard from '$lib/ChallengeCard.svelte';
   import NutritionCard from '$lib/NutritionCard.svelte';
+  import CutProgressCard from '$lib/CutProgressCard.svelte';
   import Expandable from '$lib/Expandable.svelte';
   import BarChart from '$lib/BarChart.svelte';
 
@@ -59,6 +60,15 @@
   }
   const nutritionCache = cachedGet<NutritionData>('/goals/daily-nutrition');
   let nutritionData = $derived(nutritionCache.data);
+
+  interface WeeklyProgress {
+    isInCut: boolean;
+    week: { avgCalories: number | null; avgDeficit: number | null; targetDeficit: number; daysLogged: number };
+    weight: { currentTrendLbs: number | null; changeLbs: number | null; weeklyTargetLbs: number | null };
+    pace: 'on_track' | 'ahead' | 'behind' | null;
+  }
+  const weeklyProgressCache = cachedGet<WeeklyProgress>('/goals/weekly-progress');
+  let weeklyProgress = $derived(weeklyProgressCache.data);
 
   interface Challenge {
     id: number;
@@ -137,6 +147,13 @@
     {#if nutritionData && (nutritionData.isInCut || (nutritionData.calories.target != null))}
       <section class="mb-6">
         <NutritionCard data={nutritionData} />
+      </section>
+    {/if}
+
+    <!-- Weekly Cut Progress -->
+    {#if weeklyProgress?.isInCut}
+      <section class="mb-6">
+        <CutProgressCard data={weeklyProgress} />
       </section>
     {/if}
 
