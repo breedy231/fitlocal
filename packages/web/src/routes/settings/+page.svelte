@@ -1,6 +1,82 @@
 <script lang="ts">
   import { api } from '$lib/api';
+  import { cachedGet } from '$lib/api-cache.svelte';
+  import { invalidateAfterMutation } from '$lib/api-cache.svelte';
   import { showToast } from '$lib/toast';
+
+  const KG_TO_LBS = 2.20462;
+  const LBS_TO_KG = 1 / KG_TO_LBS;
+
+  // Cut phase goals
+  interface Goals {
+    maintenanceCalories: number | null;
+    targetCalories: number | null;
+    targetProteinG: number | null;
+    targetWeightKg: number | null;
+    cutStartDate: string | null;
+    cutEndDate: string | null;
+  }
+  const goalsCache = cachedGet<Goals>('/goals');
+  let goalsLoaded = $state(false);
+  let cutMaintenance = $state('');
+  let cutTargetCal = $state('');
+  let cutTargetProtein = $state('');
+  let cutTargetWeightLbs = $state('');
+  let cutStartDate = $state('');
+  let cutEndDate = $state('');
+  let cutSaving = $state(false);
+
+  $effect(() => {
+    const g = goalsCache.data;
+    if (g && !goalsLoaded) {
+      goalsLoaded = true;
+      cutMaintenance = g.maintenanceCalories?.toString() ?? '';
+      cutTargetCal = g.targetCalories?.toString() ?? '';
+      cutTargetProtein = g.targetProteinG?.toString() ?? '';
+      cutTargetWeightLbs = g.targetWeightKg ? Math.round(g.targetWeightKg * KG_TO_LBS).toString() : '';
+      cutStartDate = g.cutStartDate ?? '';
+      cutEndDate = g.cutEndDate ?? '';
+    }
+  });
+
+  async function saveCutGoals() {
+    cutSaving = true;
+    try {
+      await api('/goals', {
+        method: 'PUT',
+        body: JSON.stringify({
+          maintenanceCalories: cutMaintenance ? parseInt(cutMaintenance) : null,
+          targetCalories: cutTargetCal ? parseInt(cutTargetCal) : null,
+          targetProteinG: cutTargetProtein ? parseFloat(cutTargetProtein) : null,
+          targetWeightKg: cutTargetWeightLbs ? parseFloat(cutTargetWeightLbs) * LBS_TO_KG : null,
+          cutStartDate: cutStartDate || null,
+          cutEndDate: cutEndDate || null,
+        }),
+      });
+      invalidateAfterMutation('/goals');
+      showToast('Cut goals saved!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save', 'error');
+    } finally {
+      cutSaving = false;
+    }
+  }
+
+  function setDefaultDates() {
+    if (!cutStartDate) {
+      // Default to next Monday
+      const d = new Date();
+      const daysUntilMon = (8 - d.getDay()) % 7 || 7;
+      d.setDate(d.getDate() + daysUntilMon);
+      cutStartDate = d.toISOString().slice(0, 10);
+    }
+    if (!cutEndDate && cutStartDate) {
+      // Default to 12 weeks from start
+      const end = new Date(cutStartDate + 'T12:00:00');
+      end.setDate(end.getDate() + 84);
+      cutEndDate = end.toISOString().slice(0, 10);
+    }
+  }
 
   let equipment = $state(
     typeof localStorage !== 'undefined'
@@ -178,6 +254,85 @@
 <div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   <h1 class="text-2xl font-bold mb-6">Settings</h1>
   <div class="space-y-4">
+    <!-- Cut Phase -->
+    <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
+      <h2 class="font-medium mb-3">Cut Phase</h2>
+      <p class="text-sm text-neutral-400 mb-4">Set your caloric deficit targets for the cut. These drive the nutrition card on the home page and adjust workout volume automatically.</p>
+
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-neutral-500 block mb-1">Maintenance (cal)</label>
+            <input
+              type="number"
+              bind:value={cutMaintenance}
+              placeholder="2200"
+              class="w-full px-3 py-2 rounded-lg bg-neutral-800 text-neutral-200 text-sm border-none outline-none"
+            />
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500 block mb-1">Daily Target (cal)</label>
+            <input
+              type="number"
+              bind:value={cutTargetCal}
+              placeholder="1800"
+              class="w-full px-3 py-2 rounded-lg bg-neutral-800 text-neutral-200 text-sm border-none outline-none"
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-neutral-500 block mb-1">Protein Target (g)</label>
+            <input
+              type="number"
+              bind:value={cutTargetProtein}
+              placeholder="180"
+              class="w-full px-3 py-2 rounded-lg bg-neutral-800 text-neutral-200 text-sm border-none outline-none"
+            />
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500 block mb-1">Goal Weight (lbs)</label>
+            <input
+              type="number"
+              bind:value={cutTargetWeightLbs}
+              placeholder="175"
+              class="w-full px-3 py-2 rounded-lg bg-neutral-800 text-neutral-200 text-sm border-none outline-none"
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-neutral-500 block mb-1">Start Date</label>
+            <input
+              type="date"
+              bind:value={cutStartDate}
+              onfocus={setDefaultDates}
+              class="w-full px-3 py-2 rounded-lg bg-neutral-800 text-neutral-200 text-sm border-none outline-none"
+            />
+          </div>
+          <div>
+            <label class="text-xs text-neutral-500 block mb-1">End Date</label>
+            <input
+              type="date"
+              bind:value={cutEndDate}
+              onfocus={setDefaultDates}
+              class="w-full px-3 py-2 rounded-lg bg-neutral-800 text-neutral-200 text-sm border-none outline-none"
+            />
+          </div>
+        </div>
+
+        <button
+          onclick={saveCutGoals}
+          disabled={cutSaving}
+          class="w-full py-3 px-4 rounded-lg bg-green-600 text-white font-medium text-sm min-h-[48px] disabled:opacity-50"
+        >
+          {cutSaving ? 'Saving...' : 'Save Cut Goals'}
+        </button>
+      </div>
+    </div>
+
     <!-- Equipment Preference -->
     <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
       <h2 class="font-medium mb-3">Equipment Preference</h2>
@@ -279,14 +434,17 @@
 
           <div class="rounded-lg bg-neutral-800/50 p-3">
             <p class="text-neutral-300 font-medium mb-2">2. Add Health queries</p>
-            <p class="text-neutral-400 text-xs mb-2">Add a <strong>Find Health Samples</strong> action for each metric below. Set each to sort by <strong>Start Date (newest first)</strong>, limit to <strong>1</strong>.</p>
+            <p class="text-neutral-400 text-xs mb-2">Add a <strong>Find Health Samples</strong> action for each metric below. Set each to sort by <strong>Start Date (newest first)</strong>, limit to <strong>1</strong> (except calories/protein — see note).</p>
             <div class="text-xs text-neutral-500 space-y-1 ml-2">
               <p>• <span class="text-neutral-400">Heart Rate Variability</span> → save to variable <code class="text-green-400/80">hrv</code></p>
               <p>• <span class="text-neutral-400">Resting Heart Rate</span> → save to variable <code class="text-green-400/80">restingHr</code></p>
               <p>• <span class="text-neutral-400">Sleep Analysis</span> → save to variable <code class="text-green-400/80">sleep</code></p>
               <p>• <span class="text-neutral-400">Steps</span> (start date = today) → save to variable <code class="text-green-400/80">steps</code></p>
               <p>• <span class="text-neutral-400">Body Mass</span> → save to variable <code class="text-green-400/80">weight</code></p>
+              <p>• <span class="text-neutral-400">Dietary Energy</span> (start date = today) → use <strong>Calculate Statistics</strong> (Sum) → save to variable <code class="text-green-400/80">calories</code></p>
+              <p>• <span class="text-neutral-400">Protein</span> (start date = today) → use <strong>Calculate Statistics</strong> (Sum) → save to variable <code class="text-green-400/80">protein</code></p>
             </div>
+            <p class="text-neutral-500 text-xs mt-1.5">Calories and protein have multiple entries per day (one per meal from MyFitnessPal). Use <strong>Calculate Statistics → Sum</strong> to get the daily total.</p>
           </div>
 
           <div class="rounded-lg bg-neutral-800/50 p-3">
@@ -296,7 +454,9 @@
 restingHr: <span class="text-green-400/80">restingHr</span> (number)
 sleepHours: <span class="text-green-400/80">sleep</span> (number)
 steps: <span class="text-green-400/80">steps</span> (number)
-bodyWeightKg: <span class="text-green-400/80">weight</span> (number)</pre>
+bodyWeightKg: <span class="text-green-400/80">weight</span> (number)
+calories: <span class="text-green-400/80">calories</span> (number)
+proteinG: <span class="text-green-400/80">protein</span> (number)</pre>
             <p class="text-neutral-500 text-xs mt-1.5">For sleep: use the duration value in hours. For weight: Shortcuts gives kg if your Health app is set to metric — otherwise add a <strong>Convert Measurement</strong> action first.</p>
           </div>
 
@@ -311,9 +471,13 @@ bodyWeightKg: <span class="text-green-400/80">weight</span> (number)</pre>
           </div>
 
           <div class="rounded-lg bg-neutral-800/50 p-3">
-            <p class="text-neutral-300 font-medium mb-2">5. Automate it</p>
-            <p class="text-neutral-400 text-xs">Go to <strong>Automation</strong> tab → <strong>New Automation</strong> → <strong>Time of Day</strong> (e.g. 7:00 AM) → choose <strong>Run Immediately</strong> → select <strong>FitLocal Sync</strong></p>
-            <p class="text-neutral-500 text-xs mt-1.5">Tip: pick a time after you typically wake up so sleep data is finalized.</p>
+            <p class="text-neutral-300 font-medium mb-2">5. Automate it (run twice daily)</p>
+            <p class="text-neutral-400 text-xs">Go to <strong>Automation</strong> tab → create <strong>two</strong> automations that both run <strong>FitLocal Sync</strong>:</p>
+            <div class="text-xs text-neutral-500 ml-2 space-y-0.5 mt-1">
+              <p>• <strong>Morning (~7 AM)</strong> — captures sleep, HRV, resting HR, weight</p>
+              <p>• <strong>Evening (~10 PM)</strong> — captures the full day's calories, protein, and steps</p>
+            </div>
+            <p class="text-neutral-500 text-xs mt-1.5">Set both to <strong>Run Immediately</strong>. The endpoint merges data — running twice is safe and ensures nutrition totals are complete for the day.</p>
           </div>
         </div>
       {/if}

@@ -8,36 +8,60 @@
   let { ratio, thresholds, level }: Props = $props();
 
   const LEVELS = ['beginner', 'novice', 'intermediate', 'advanced', 'elite'] as const;
-  const COLORS = ['#6b7280', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444'];
-  const LABELS = ['Beg', 'Nov', 'Int', 'Adv', 'Elite'];
+  const COLORS: Record<string, string> = {
+    beginner: '#6b7280',
+    novice: '#3b82f6',
+    intermediate: '#22c55e',
+    advanced: '#f59e0b',
+    elite: '#ef4444',
+  };
 
-  let markerPct = $derived.by(() => {
-    const maxThreshold = thresholds.elite * 1.2;
-    return Math.min((ratio / maxThreshold) * 100, 98);
-  });
+  let fillColor = $derived(COLORS[level] ?? '#6b7280');
+
+  // Scale: 0 to elite threshold. Dot and tick marks on the same linear scale.
+  let maxVal = $derived(thresholds.elite);
+
+  // Dot position as percentage of the full bar
+  let dotPct = $derived(Math.min((ratio / maxVal) * 100, 100));
+
+  // Tick positions for each level threshold
+  let ticks = $derived(
+    LEVELS.map((lvl) => ({
+      lvl,
+      pct: (thresholds[lvl] / maxVal) * 100,
+      label: lvl.slice(0, 3).replace(/^./, c => c.toUpperCase()),
+    }))
+  );
 </script>
 
 <div class="w-full">
-  <div class="flex gap-0.5 h-3 rounded-full overflow-hidden relative">
-    {#each LEVELS as lvl, idx}
-      {@const prevThreshold = idx === 0 ? 0 : Object.values(thresholds)[idx - 1]}
-      {@const thisThreshold = Object.values(thresholds)[idx]}
-      {@const maxT = thresholds.elite * 1.2}
-      {@const widthPct = ((thisThreshold - prevThreshold) / maxT) * 100}
+  <!-- Bar -->
+  <div class="relative h-3 rounded-full overflow-hidden" style="background-color: #262626;">
+    <!-- Filled portion up to the dot -->
+    <div
+      class="h-full rounded-full"
+      style="width: {dotPct}%; background-color: {fillColor};"
+    ></div>
+    <!-- Tick marks at each threshold -->
+    {#each ticks as tick}
       <div
-        class="h-full {level === lvl ? 'opacity-100' : 'opacity-30'}"
-        style="background-color: {COLORS[idx]}; width: {widthPct}%;"
+        class="absolute top-0 h-full w-px"
+        style="left: {tick.pct}%; background-color: #404040;"
       ></div>
     {/each}
-    <!-- Marker dot -->
+    <!-- Dot -->
     <div
-      class="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white shadow-lg"
-      style="left: {markerPct}%; background-color: {COLORS[LEVELS.indexOf(level as any)] ?? '#22c55e'};"
+      class="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow-lg"
+      style="left: {dotPct}%; transform: translate(-50%, -50%); background-color: {fillColor};"
     ></div>
   </div>
-  <div class="flex justify-between mt-1">
-    {#each LABELS as label, idx}
-      <span class="text-[9px] {level === LEVELS[idx] ? 'text-neutral-200 font-bold' : 'text-neutral-600'}">{label}</span>
+  <!-- Labels at tick marks -->
+  <div class="relative mt-1 h-3">
+    {#each ticks as tick}
+      <span
+        class="absolute text-[9px] -translate-x-1/2 {level === tick.lvl ? 'text-neutral-200 font-bold' : 'text-neutral-600'}"
+        style="left: {tick.pct}%;"
+      >{tick.label}</span>
     {/each}
   </div>
 </div>

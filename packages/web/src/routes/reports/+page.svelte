@@ -5,6 +5,7 @@
   import LineChart from '$lib/LineChart.svelte';
   import BenchmarkBar from '$lib/BenchmarkBar.svelte';
   import VolumeHeatmap from '$lib/VolumeHeatmap.svelte';
+  import WeightTrendChart from '$lib/WeightTrendChart.svelte';
   import Expandable from '$lib/Expandable.svelte';
 
   interface Summary {
@@ -151,6 +152,58 @@
   const healthCache = cachedGet<{ snapshots: HealthSnapshot[] }>('/reports/health-trends');
   const volumeHeatmapCache = cachedGet<{ muscles: string[]; weeks: VolumeWeek[] }>('/reports/volume-heatmap?weeks=4');
 
+  interface WeightTrendPoint { date: string; rawKg: number; trendKg: number }
+  interface WeightTrendData {
+    points: WeightTrendPoint[];
+    weeklyRateLbs: number | null;
+    targetWeightKg: number | null;
+    cutStartDate: string | null;
+    cutEndDate: string | null;
+  }
+  // Fetch all available weight trend data (uses default 90d, but we request 365d to cover all filters)
+  const weightTrendCache = cachedGet<WeightTrendData>('/goals/weight-trend?since=' + new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10));
+  let weightTrendRaw = $derived(weightTrendCache.data);
+
+  // Filter weight trend points by the same healthRange used for other health charts
+  let weightTrend = $derived.by(() => {
+    if (!weightTrendRaw) return null;
+    let points = weightTrendRaw.points;
+    if (healthRange !== 'all') {
+      const days = parseInt(healthRange);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      points = points.filter(p => p.date >= cutoffStr);
+    }
+    if (points.length === 0) return null;
+
+    // Recalculate weekly rate from filtered data
+    const KG_TO_LBS = 2.20462;
+    let weeklyRateLbs: number | null = null;
+    if (points.length >= 2) {
+      const latest = points[points.length - 1];
+      const targetDate = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      let priorIdx = 0;
+      let bestDiff = Infinity;
+      for (let i = 0; i < points.length; i++) {
+        const diff = Math.abs(points[i].date.localeCompare(targetDate));
+        if (diff < bestDiff) { bestDiff = diff; priorIdx = i; }
+      }
+      if (priorIdx !== points.length - 1) {
+        const daysDiff = (new Date(latest.date).getTime() - new Date(points[priorIdx].date).getTime()) / 86400000;
+        if (daysDiff > 0) {
+          weeklyRateLbs = Math.round((latest.trendKg - points[priorIdx].trendKg) / daysDiff * 7 * KG_TO_LBS * 10) / 10;
+        }
+      }
+    }
+
+    return {
+      ...weightTrendRaw,
+      points,
+      weeklyRateLbs,
+    };
+  });
+
   const defaultSummary: Summary = { totalWorkouts: 0, totalWorkingSets: 0, totalVolumeKg: 0, currentStreak: 0, workoutsThisWeek: 0, workoutsThisMonth: 0 };
 
   let summary = $derived(summaryCache.data ?? defaultSummary);
@@ -286,23 +339,26 @@
       <!-- Muscle Distribution + PRs: side by side on desktop -->
       <div class="md:grid md:grid-cols-2 md:gap-5 md:mt-5">
         <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
-          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Muscle Distribution (30d)</h2>
+          <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Training Balance (30d)</h2>
           {#if muscles.length > 0}
-            {@const maxSets = Math.max(...muscles.map((m) => m.sets))}
-            <div class="space-y-2">
+            {@const totalSets = muscles.reduce((s, m) => s + m.sets, 0)}
+            {@const maxPct = Math.max(...muscles.map((m) => m.sets / totalSets))}
+            <div class="space-y-1.5">
               {#each muscles as muscle}
-                <div class="flex items-center gap-3">
-                  <span class="text-xs text-neutral-400 w-24 text-right capitalize">{muscle.name}</span>
-                  <div class="flex-1 h-5 rounded-full overflow-hidden" style="background-color: #262626;">
+                {@const pct = Math.round((muscle.sets / totalSets) * 100)}
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-neutral-400 w-20 text-right capitalize">{muscle.name}</span>
+                  <div class="flex-1 h-4 rounded overflow-hidden" style="background-color: #262626;">
                     <div
-                      class="h-full rounded-full"
-                      style="width: {(muscle.sets / maxSets) * 100}%; background-color: #22c55e; opacity: {0.5 + (muscle.sets / maxSets) * 0.5};"
+                      class="h-full rounded"
+                      style="width: {(muscle.sets / totalSets / maxPct) * 100}%; background-color: {pct >= 12 ? '#22c55e' : pct >= 6 ? '#f59e0b' : '#ef4444'};"
                     ></div>
                   </div>
-                  <span class="text-xs text-neutral-500 w-8">{Math.round(muscle.sets)}</span>
+                  <span class="text-xs text-neutral-500 w-8 text-right">{pct}%</span>
                 </div>
               {/each}
             </div>
+            <p class="text-[10px] text-neutral-600 mt-2 text-center">{Math.round(totalSets)} total sets — color shows relative volume (green = well-trained, amber = moderate, red = undertrained)</p>
           {:else}
             <p class="text-neutral-500 text-sm text-center py-4">No data yet</p>
           {/if}
@@ -432,7 +488,16 @@
       {/if}
 
       <div class="md:grid md:grid-cols-2 md:gap-5">
-        {#if filteredHealth.some((s) => s.bodyWeightKg != null)}
+        {#if weightTrend && weightTrend.points.length > 0}
+          <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
+            <WeightTrendChart
+              points={weightTrend.points}
+              weeklyRateLbs={weightTrend.weeklyRateLbs}
+              targetWeightKg={weightTrend.targetWeightKg}
+              height={160}
+            />
+          </section>
+        {:else if filteredHealth.some((s) => s.bodyWeightKg != null)}
           <section class="mb-5 md:mb-0 rounded-xl p-4" style="background-color: #1a1a1a;">
             <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Body Weight (lbs)</h2>
             <LineChart

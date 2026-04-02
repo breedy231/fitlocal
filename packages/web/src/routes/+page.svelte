@@ -2,6 +2,7 @@
   import { cachedGet } from '$lib/api-cache.svelte';
   import TrainingRings from '$lib/TrainingRings.svelte';
   import ChallengeCard from '$lib/ChallengeCard.svelte';
+  import NutritionCard from '$lib/NutritionCard.svelte';
   import Expandable from '$lib/Expandable.svelte';
   import BarChart from '$lib/BarChart.svelte';
 
@@ -47,6 +48,17 @@
   const deloadCache = cachedGet<{ suggest: boolean; consecutiveWeeks: number; message: string | null }>('/deload-check');
   let deloadSuggestion = $derived(deloadCache.data);
   let deloadDismissed = $state(false);
+
+  interface NutritionData {
+    date: string;
+    calories: { current: number | null; target: number | null };
+    protein: { current: number | null; target: number | null };
+    isInCut: boolean;
+    deficitMagnitude: number | null;
+    deficitPct: number | null;
+  }
+  const nutritionCache = cachedGet<NutritionData>('/goals/daily-nutrition');
+  let nutritionData = $derived(nutritionCache.data);
 
   interface Challenge {
     id: number;
@@ -118,6 +130,13 @@
             </div>
           </Expandable>
         </div>
+      </section>
+    {/if}
+
+    <!-- Daily Nutrition (during cut or when goals are configured) -->
+    {#if nutritionData && (nutritionData.isInCut || (nutritionData.calories.target != null))}
+      <section class="mb-6">
+        <NutritionCard data={nutritionData} />
       </section>
     {/if}
 

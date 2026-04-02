@@ -31,18 +31,24 @@ export async function generateRoutes(app: FastifyInstance) {
       try {
         const workout = generateWorkout(dayType, equipment, db, { supersets });
 
-        // Nutrition integration: reduce volume if in caloric deficit
-        // Reads from health_snapshots (synced via HealthKit or iOS Shortcut)
-        const maintenance = Number(process.env.MAINTENANCE_CALORIES) || 2200;
+        // Nutrition integration: graduated volume reduction based on deficit magnitude
+        const goals = db.all<{ maintenance_calories: number | null }>(
+          sql`SELECT maintenance_calories FROM user_goals LIMIT 1`
+        );
+        const maintenance = goals.length > 0 && goals[0].maintenance_calories
+          ? goals[0].maintenance_calories
+          : (Number(process.env.MAINTENANCE_CALORIES) || 2200);
         const today = new Date().toISOString().slice(0, 10);
         const snapshot = db.all<{ calories: number | null }>(
           sql`SELECT calories FROM health_snapshots WHERE date = ${today} LIMIT 1`
         );
         if (snapshot.length > 0 && snapshot[0].calories && snapshot[0].calories > 0) {
-          const deficit = maintenance - snapshot[0].calories;
-          if (deficit > 300) {
+          const deficitPct = (maintenance - snapshot[0].calories) / maintenance;
+          // Graduated: no reduction below 10%, linear up to 20% reduction at 30%+ deficit
+          if (deficitPct > 0.10) {
+            const volumeMultiplier = 1.0 - Math.min((deficitPct - 0.10) / 0.20, 1.0) * 0.20;
             for (const ex of workout.exercises) {
-              ex.suggestedSets = Math.max(2, Math.round(ex.suggestedSets * 0.9));
+              ex.suggestedSets = Math.max(2, Math.round(ex.suggestedSets * volumeMultiplier));
             }
           }
         }

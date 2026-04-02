@@ -147,7 +147,7 @@ export async function recoveryRoutes(app: FastifyInstance) {
     };
   });
 
-  // Deload suggestion — analyze weekly volume trend
+  // Deload suggestion — analyze weekly volume trend (lower threshold during cuts)
   app.get('/deload-check', async () => {
     const rows = db.all(sql`
       SELECT
@@ -161,9 +161,17 @@ export async function recoveryRoutes(app: FastifyInstance) {
       ORDER BY week ASC
     `) as { week: string; weeklyVolume: number }[];
 
-    if (rows.length < 4) {
-      return { suggest: false, reason: 'Not enough data (need 4+ weeks)', consecutiveWeeks: 0 };
+    if (rows.length < 3) {
+      return { suggest: false, reason: 'Not enough data (need 3+ weeks)', consecutiveWeeks: 0 };
     }
+
+    // Check if currently in a cut phase
+    const today = new Date().toISOString().slice(0, 10);
+    const goals = db.all<{ cut_start_date: string | null; cut_end_date: string | null }>(
+      sql`SELECT cut_start_date, cut_end_date FROM user_goals LIMIT 1`
+    );
+    const isInCut = goals.length > 0 && goals[0].cut_start_date && goals[0].cut_end_date &&
+      today >= goals[0].cut_start_date && today <= goals[0].cut_end_date;
 
     // Count consecutive weeks of increasing volume
     let consecutive = 0;
@@ -175,12 +183,17 @@ export async function recoveryRoutes(app: FastifyInstance) {
       }
     }
 
-    const suggest = consecutive >= 4;
+    // During a cut, fatigue accumulates faster — trigger deload after 3 weeks instead of 4
+    const threshold = isInCut ? 3 : 4;
+    const suggest = consecutive >= threshold;
     return {
       suggest,
       consecutiveWeeks: consecutive,
+      isInCut: !!isInCut,
       message: suggest
-        ? `You've increased volume for ${consecutive} straight weeks. Consider reducing volume 40% this week.`
+        ? isInCut
+          ? `You've increased volume for ${consecutive} straight weeks during a cut. Recovery is reduced in a deficit — consider a deload week (reduce volume 40%).`
+          : `You've increased volume for ${consecutive} straight weeks. Consider reducing volume 40% this week.`
         : null,
       weeklyVolumes: rows.map(r => ({ week: r.week, volume: Math.round(r.weeklyVolume) })),
     };
