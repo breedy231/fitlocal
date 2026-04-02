@@ -9,6 +9,8 @@ interface CacheEntry<T = unknown> {
 const cache = new Map<string, CacheEntry>();
 const MAX_ENTRIES = 100;
 const inflight = new Map<string, Promise<unknown>>();
+// Active refreshers: path → doFetch callback, so invalidateCache can trigger re-fetches
+const refreshers = new Map<string, () => void>();
 
 // Staleness TTLs in milliseconds by path prefix (longest prefix match wins)
 const STALE_MS: [string, number][] = [
@@ -98,6 +100,9 @@ export function cachedGet<T>(path: string): { data: T | null; loading: boolean; 
     state.loading = false;
   }
 
+  // Register so invalidateCache can trigger a re-fetch
+  refreshers.set(path, doFetch);
+
   return {
     get data() { return state.data; },
     get loading() { return state.loading; },
@@ -112,6 +117,12 @@ export function invalidateCache(pathPrefix: string) {
   for (const key of cache.keys()) {
     if (key.startsWith(pathPrefix)) {
       cache.delete(key);
+    }
+  }
+  // Trigger re-fetch on any active cachedGet instances matching this prefix
+  for (const [key, refresh] of refreshers) {
+    if (key.startsWith(pathPrefix)) {
+      refresh();
     }
   }
 }
@@ -141,6 +152,12 @@ export function invalidateAfterMutation(path: string) {
   // Health data changes
   if (path.startsWith('/health')) {
     invalidateCache('/health');
+    invalidateCache('/reports/');
+  }
+
+  // Goals changes
+  if (path.startsWith('/goals')) {
+    invalidateCache('/goals');
     invalidateCache('/reports/');
   }
 

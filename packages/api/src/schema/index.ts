@@ -120,3 +120,14 @@ export const healthSnapshots = sqliteTable('health_snapshots', {
   steps: integer('steps'),
   bodyWeightKg: real('body_weight_kg'),
 });
+
+export const userGoals = sqliteTable('user_goals', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  maintenanceCalories: integer('maintenance_calories'),
+  targetCalories: integer('target_calories'),
+  targetProteinG: real('target_protein_g'),
+  targetWeightKg: real('target_weight_kg'),
+  cutStartDate: text('cut_start_date'),
+  cutEndDate: text('cut_end_date'),
+  updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+});

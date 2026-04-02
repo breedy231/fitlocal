@@ -192,8 +192,7 @@ export async function reportRoutes(app: FastifyInstance) {
 
     const rows = db.all(sql`
       SELECT
-        e.primary_muscles as primaryMuscles,
-        e.secondary_muscles as secondaryMuscles,
+        e.name as exerciseName,
         COUNT(CASE WHEN s.is_warmup = 0 THEN 1 END) as workingSets
       FROM workouts w
       JOIN workout_exercises we ON we.workout_id = w.id
@@ -203,17 +202,13 @@ export async function reportRoutes(app: FastifyInstance) {
         AND ${STRENGTH_ONLY}
         AND ${excludeFilter(excludeIds)}
       GROUP BY we.id
-    `) as { primaryMuscles: string; secondaryMuscles: string; workingSets: number }[];
+    `) as { exerciseName: string; workingSets: number }[];
 
     const muscleMap: Record<string, number> = {};
     for (const row of rows) {
-      const primary: string[] = JSON.parse(row.primaryMuscles || '[]');
-      const secondary: string[] = JSON.parse(row.secondaryMuscles || '[]');
-      for (const m of primary) {
+      const muscles = getMusclesForExercise(row.exerciseName);
+      for (const m of muscles) {
         muscleMap[m] = (muscleMap[m] || 0) + row.workingSets;
-      }
-      for (const m of secondary) {
-        muscleMap[m] = (muscleMap[m] || 0) + row.workingSets * 0.5;
       }
     }
 
