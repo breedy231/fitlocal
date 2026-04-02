@@ -183,12 +183,38 @@ sqlite.exec(`
   );
 `);
 
+// User goals (single-row table for cut/bulk phase tracking)
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS user_goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    maintenance_calories INTEGER,
+    target_calories INTEGER,
+    target_protein_g REAL,
+    target_weight_kg REAL,
+    cut_start_date TEXT,
+    cut_end_date TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
 // Performance indexes for JOIN-heavy queries
 sqlite.exec(`
   CREATE INDEX IF NOT EXISTS idx_we_workout_id ON workout_exercises(workout_id);
   CREATE INDEX IF NOT EXISTS idx_we_exercise_id ON workout_exercises(exercise_id);
   CREATE INDEX IF NOT EXISTS idx_sets_we_id ON sets(workout_exercise_id);
   CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts(date);
+`);
+
+// Exercise data cleanup: fix German text, 'Is english' artifacts, embedded markup, mismatched descriptions
+sqlite.exec(`
+  UPDATE exercises SET description = 'Lie face down and place a foam roller under your hip flexors. Roll slowly from the hip crease to just above the knee, pausing on tight areas.'
+  WHERE description LIKE '%Is english%' AND lower(name) LIKE '%hip flexor%';
+
+  UPDATE exercises SET description = 'Place a foam roller under your chest near the armpit. Roll slowly across the pec muscles, pausing on tender areas.'
+  WHERE id = 14 AND description LIKE '%calves%';
+
+  DELETE FROM exercises WHERE name IN ('10 - 12', '8 - 10')
+    AND id NOT IN (SELECT exercise_id FROM workout_exercises);
 `);
 
 console.log('Database migrated successfully');
