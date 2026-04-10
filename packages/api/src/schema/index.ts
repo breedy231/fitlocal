@@ -38,6 +38,7 @@ export const sets = sqliteTable('sets', {
   isWarmup: integer('is_warmup', { mode: 'boolean' }).default(false),
   rpe: real('rpe'),
   multiplier: real('multiplier').default(1.0),
+  durationSeconds: integer('duration_seconds'),
 });
 
 export const muscleGroups = sqliteTable('muscle_groups', {
@@ -119,6 +120,13 @@ export const healthSnapshots = sqliteTable('health_snapshots', {
   proteinG: real('protein_g'),
   steps: integer('steps'),
   bodyWeightKg: real('body_weight_kg'),
+});
+
+export const routines = sqliteTable('routines', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  exercises: text('exercises', { mode: 'json' }).$type<{ exerciseName: string; exerciseId: number | null; targetSets: number; targetReps: string }[]>().notNull(),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
 
 export const userGoals = sqliteTable('user_goals', {

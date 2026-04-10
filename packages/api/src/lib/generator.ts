@@ -6,9 +6,12 @@ import { computeProgressionBatch, type ProgressionDirective, type RepRange } fro
 
 type DB = BetterSQLite3Database<typeof schemaTypes>;
 
-const DAY_TYPE_MUSCLES: Record<string, string[]> = {
+export const DAY_TYPE_MUSCLES: Record<string, string[]> = {
   upper: ['chest', 'shoulders', 'triceps', 'back', 'biceps'],
   lower: ['quads', 'hamstrings', 'glutes', 'calves'],
+  push: ['chest', 'shoulders', 'triceps'],
+  pull: ['back', 'biceps', 'shoulders'],
+  legs: ['quads', 'hamstrings', 'glutes', 'calves'],
   fullbody: ['chest', 'shoulders', 'triceps', 'back', 'biceps', 'quads', 'hamstrings', 'glutes', 'calves'],
 };
 
@@ -28,10 +31,91 @@ const LOWER_TARGETS: [string, number][] = [
   ['calves', 1],
 ];
 
+const PUSH_TARGETS: [string, number][] = [
+  ['chest', 4],
+  ['shoulders', 3],
+  ['triceps', 3],
+];
+
+const PULL_TARGETS: [string, number][] = [
+  ['back', 4],
+  ['biceps', 3],
+  ['shoulders', 2],
+];
+
+const LEGS_TARGETS: [string, number][] = [
+  ['quads', 3],
+  ['hamstrings', 3],
+  ['glutes', 3],
+  ['calves', 2],
+];
+
+// Trainer-prescribed exercises (LVAC PT) — prioritized during PPL generation
+const TRAINER_EXERCISES: Record<string, string[]> = {
+  push: [
+    'Barbell Bench Press', 'Dumbbell Shoulder Press', 'Incline Bench Press',
+    'Dumbbell Kickbacks', 'Machine Fly', 'Push Up',
+  ],
+  pull: [
+    'Lat Pulldown', 'TRX Row', 'Dumbbell Row', 'Preacher Curl',
+    'Assisted Pull Up', 'Dumbbell Rear Delt Raise',
+  ],
+  legs: [
+    'Back Squat', 'Seated Leg Curl', 'Leg Extension', 'Barbell Hip Thrust',
+    'Dumbbell Bulgarian Split Squat', 'Walking Lunge', 'Calf Raise',
+  ],
+};
+
 const CORE_KEYWORDS = /crunch|plank|dead.?bug|windshield.?wiper|reverse.?crunch|cable.?crunch|exercise.?ball.?crunch|russian.?twist|toe.?toucher|vertical.?knee.?raise/i;
 const CARDIO_KEYWORDS = /treadmill|elliptical|cycling|rowing/i;
 
 const TRAVEL_KEYWORDS = /dumbbell|bodyweight|band|trx|cardio/i;
+
+interface DurationProfile {
+  maxStrength: number;
+  coreCount: number;
+  cardioDurationSec: number;
+}
+
+const DURATION_PROFILES: Record<number, DurationProfile> = {
+  30: { maxStrength: 4, coreCount: 1, cardioDurationSec: 600 },
+  45: { maxStrength: 6, coreCount: 1, cardioDurationSec: 900 },
+  60: { maxStrength: 7, coreCount: 2, cardioDurationSec: 900 },
+  75: { maxStrength: 9, coreCount: 2, cardioDurationSec: 1200 },
+  90: { maxStrength: 10, coreCount: 2, cardioDurationSec: 1500 },
+  120: { maxStrength: 13, coreCount: 3, cardioDurationSec: 1800 },
+};
+
+function getDurationProfile(minutes?: number): DurationProfile {
+  if (!minutes) return DURATION_PROFILES[60];
+  return DURATION_PROFILES[minutes] ?? DURATION_PROFILES[60];
+}
+
+/**
+ * Scale muscle targets down to fit a max exercise count.
+ * Trims by removing 1 from highest-count groups first, preserving muscle diversity.
+ */
+function scaleMuscleTargets(targets: [string, number][], maxCount: number): [string, number][] {
+  const scaled = targets.map(([m, c]) => [m, c] as [string, number]);
+  let total = scaled.reduce((sum, [, c]) => sum + c, 0);
+
+  while (total > maxCount) {
+    // Find the group with the highest count
+    let maxIdx = 0;
+    for (let i = 1; i < scaled.length; i++) {
+      if (scaled[i][1] > scaled[maxIdx][1]) maxIdx = i;
+    }
+    if (scaled[maxIdx][1] <= 1) {
+      // All groups at 1 — remove from the end
+      scaled.pop();
+    } else {
+      scaled[maxIdx][1]--;
+    }
+    total--;
+  }
+
+  return scaled.filter(([, c]) => c > 0);
+}
 
 interface ExerciseRow {
   id: number;
@@ -58,6 +142,7 @@ export interface GeneratedExercise {
 export interface GeneratedWorkout {
   dayType: string;
   globalModifier: number;
+  isInCut: boolean;
   exercises: GeneratedExercise[];
 }
 
@@ -110,25 +195,35 @@ function scoreExercisesWithDates(candidates: ExerciseRow[], lastDates: Map<numbe
 function pickByMuscleTargets(
   scored: ScoredExercise[],
   targets: [string, number][],
+  trainerNames?: Set<string>,
 ): ScoredExercise[] {
   const selected: ScoredExercise[] = [];
   const usedIds = new Set<number>();
 
   for (const [muscle, count] of targets) {
     const muscleExercises = scored
-      .filter(e => !usedIds.has(e.id) && e.muscles.includes(muscle))
-      .sort((a, b) => b.score - a.score);
+      .filter(e => !usedIds.has(e.id) && e.muscles.includes(muscle));
 
-    for (let i = 0; i < count && i < muscleExercises.length; i++) {
-      selected.push(muscleExercises[i]);
-      usedIds.add(muscleExercises[i].id);
+    // Trainer exercises first, then general pool — both sorted by recency score
+    let ordered: ScoredExercise[];
+    if (trainerNames && trainerNames.size > 0) {
+      const trainer = muscleExercises.filter(e => trainerNames.has(e.name)).sort((a, b) => b.score - a.score);
+      const others = muscleExercises.filter(e => !trainerNames.has(e.name)).sort((a, b) => b.score - a.score);
+      ordered = [...trainer, ...others];
+    } else {
+      ordered = muscleExercises.sort((a, b) => b.score - a.score);
+    }
+
+    for (let i = 0; i < count && i < ordered.length; i++) {
+      selected.push(ordered[i]);
+      usedIds.add(ordered[i].id);
     }
   }
 
   return selected;
 }
 
-export function generateWorkout(dayType: string, equipment: string, db: DB, options?: { supersets?: boolean }): GeneratedWorkout {
+export function generateWorkout(dayType: string, equipment: string, db: DB, options?: { supersets?: boolean; durationMinutes?: number; isInCut?: boolean }): GeneratedWorkout {
   const targetMuscles = DAY_TYPE_MUSCLES[dayType];
   if (!targetMuscles) {
     throw new Error(`Unknown day type: ${dayType}. Use upper, lower, or fullbody.`);
@@ -166,12 +261,22 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
   const scoredCore = scoreExercisesWithDates(coreCandidates, lastDates).sort((a, b) => b.score - a.score);
   const scoredCardio = scoreExercisesWithDates(cardioCandidates, lastDates).sort((a, b) => b.score - a.score);
 
-  // Pick exercises by muscle group targets
+  // Pick exercises by muscle group targets, scaled by duration
+  const profile = getDurationProfile(options?.durationMinutes);
+  const isInCut = options?.isInCut ?? false;
+  // In cut mode: add a second cardio, reduce one strength slot
+  const cutCardioCount = isInCut ? 2 : 1;
+  const maxStrength = Math.max(2, profile.maxStrength - (isInCut ? 1 : 0));
+
   let targets: [string, number][];
   if (dayType === 'upper') {
-    targets = UPPER_TARGETS;
-  } else if (dayType === 'lower') {
-    targets = LOWER_TARGETS;
+    targets = UPPER_TARGETS.map(([m, c]) => [m, c] as [string, number]);
+  } else if (dayType === 'lower' || dayType === 'legs') {
+    targets = LEGS_TARGETS.map(([m, c]) => [m, c] as [string, number]);
+  } else if (dayType === 'push') {
+    targets = PUSH_TARGETS.map(([m, c]) => [m, c] as [string, number]);
+  } else if (dayType === 'pull') {
+    targets = PULL_TARGETS.map(([m, c]) => [m, c] as [string, number]);
   } else {
     targets = [
       ['back', 1], ['chest', 1], ['shoulders', 1],
@@ -179,10 +284,13 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
       ['biceps', 1], ['triceps', 1],
     ];
   }
+  targets = scaleMuscleTargets(targets, maxStrength);
 
-  const selected = pickByMuscleTargets(scored, targets);
-  const coreSelected = scoredCore.slice(0, 2);
-  const cardioSelected = scoredCardio.slice(0, 1);
+  const trainerList = TRAINER_EXERCISES[dayType];
+  const trainerNames = trainerList ? new Set(trainerList) : undefined;
+  const selected = pickByMuscleTargets(scored, targets, trainerNames);
+  const coreSelected = scoredCore.slice(0, profile.coreCount);
+  const cardioSelected = scoredCardio.slice(0, cutCardioCount);
 
   const globalModifier = getGlobalRecoveryModifier(db);
   const suppressProgression = globalModifier < 0.85;
@@ -209,6 +317,12 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
       suggestedSets = Math.max(2, suggestedSets - 1);
     }
 
+    // In cut mode: maintain current weights, don't progress
+    if (isInCut && directive === 'up') {
+      directive = 'hold';
+      suggestedWeightKg = Math.max(0, suggestedWeightKg - prog.repRange.jump);
+    }
+
     return {
       id: e.id,
       name: e.name,
@@ -221,7 +335,7 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
       restSeconds: e.rest_seconds ?? 60,
       progression: isCardio ? undefined : directive,
       repRange: isCardio ? undefined : { min: prog.repRange.min, max: prog.repRange.max },
-      ...(isCardio ? { suggestedDurationSec: 900 } : {}),
+      ...(isCardio ? { suggestedDurationSec: profile.cardioDurationSec } : {}),
     };
   };
 
@@ -265,7 +379,7 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
     assignSupersets(exercises);
   }
 
-  return { dayType, globalModifier, exercises };
+  return { dayType, globalModifier, isInCut, exercises };
 }
 
 function getAntagonist(muscle: string): string | null {

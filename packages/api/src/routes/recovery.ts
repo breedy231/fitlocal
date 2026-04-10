@@ -35,7 +35,8 @@ export async function recoveryRoutes(app: FastifyInstance) {
 
     // Weekly stats for last 4 weeks + current
     const weekRows = db.all<{ week_start: string; days_trained: number; working_sets: number }>(sql`
-      SELECT date(w.date, 'weekday 1', '-7 days') as week_start,
+      SELECT CASE WHEN strftime('%w', w.date) = '1' THEN w.date
+                  ELSE date(w.date, 'weekday 1', '-7 days') END as week_start,
         COUNT(DISTINCT w.date) as days_trained,
         COUNT(s.id) as working_sets
       FROM workouts w

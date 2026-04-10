@@ -213,6 +213,7 @@
         }
       );
       importStatus = `Imported ${result.workoutsCreated} workouts, ${result.setsCreated} sets`;
+      invalidateAfterMutation('/workouts');
     } catch (err: any) {
       importStatus = `Error: ${err.message}`;
     } finally {
@@ -354,6 +355,7 @@
       <label class="block w-full cursor-pointer">
         <div class="py-3 px-4 rounded-lg bg-neutral-800 text-center text-neutral-300 min-h-[48px] flex items-center justify-center">
           {#if importing}
+            <div class="w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full animate-spin mr-2"></div>
             Importing...
           {:else}
             Select Fitbod CSV File

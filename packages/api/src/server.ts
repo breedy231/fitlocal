@@ -16,6 +16,7 @@ import { programRoutes } from './routes/programs.js';
 import { challengeRoutes } from './routes/challenges.js';
 import { achievementRoutes } from './routes/achievements.js';
 import { goalRoutes } from './routes/goals.js';
+import { routineRoutes } from './routes/routines.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === 'production';
@@ -66,6 +67,7 @@ await app.register(programRoutes, { prefix: apiPrefix });
 await app.register(challengeRoutes, { prefix: apiPrefix });
 await app.register(achievementRoutes, { prefix: apiPrefix });
 await app.register(goalRoutes, { prefix: apiPrefix });
+await app.register(routineRoutes, { prefix: apiPrefix });
 
 app.get(`${apiPrefix}/health`, async () => ({ status: 'ok' }));
 
@@ -90,6 +92,8 @@ app.addHook('onSend', (_request, reply, _payload, done) => {
   } else if (url.startsWith('/workouts')) {
     reply.header('Cache-Control', 'private, max-age=10, stale-while-revalidate=60');
   } else if (url.startsWith('/goals')) {
+    reply.header('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
+  } else if (url.startsWith('/routines')) {
     reply.header('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
   } else if (url.startsWith('/generate-workout')) {
     reply.header('Cache-Control', 'no-cache');

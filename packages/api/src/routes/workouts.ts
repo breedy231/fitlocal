@@ -90,6 +90,7 @@ export async function workoutRoutes(app: FastifyInstance) {
       ex_primary_muscles: string | null; ex_secondary_muscles: string | null; ex_equipment: string | null;
       set_id: number | null; set_reps: number | null; set_weight_kg: number | null;
       set_is_warmup: number | null; set_rpe: number | null; set_multiplier: number | null;
+      set_duration_seconds: number | null;
     }>(sql`
       SELECT
         we.id as we_id, we.exercise_id, we.display_order, we.superset_group,
@@ -97,7 +98,8 @@ export async function workoutRoutes(app: FastifyInstance) {
         e.primary_muscles as ex_primary_muscles, e.secondary_muscles as ex_secondary_muscles,
         e.equipment as ex_equipment,
         s.id as set_id, s.reps as set_reps, s.weight_kg as set_weight_kg,
-        s.is_warmup as set_is_warmup, s.rpe as set_rpe, s.multiplier as set_multiplier
+        s.is_warmup as set_is_warmup, s.rpe as set_rpe, s.multiplier as set_multiplier,
+        s.duration_seconds as set_duration_seconds
       FROM workout_exercises we
       JOIN exercises e ON we.exercise_id = e.id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
@@ -137,6 +139,7 @@ export async function workoutRoutes(app: FastifyInstance) {
           isWarmup: r.set_is_warmup,
           rpe: r.set_rpe,
           multiplier: r.set_multiplier,
+          durationSeconds: r.set_duration_seconds,
         });
       }
     }

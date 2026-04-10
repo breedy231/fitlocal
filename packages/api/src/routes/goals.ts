@@ -87,9 +87,25 @@ export async function goalRoutes(app: FastifyInstance) {
     const isInCut = g.cut_start_date && g.cut_end_date &&
       today >= g.cut_start_date && today <= g.cut_end_date;
 
-    const snapshot = db.all<{ calories: number | null; protein_g: number | null }>(
-      sql`SELECT calories, protein_g FROM health_snapshots WHERE date = ${today} LIMIT 1`
+    let snapshot = db.all<{ date: string; calories: number | null; protein_g: number | null }>(
+      sql`SELECT date, calories, protein_g FROM health_snapshots WHERE date = ${today} LIMIT 1`
     );
+
+    // Fall back to most recent snapshot if today's hasn't synced yet
+    let snapshotDate = today;
+    let isStale = false;
+    if (snapshot.length === 0 || (snapshot[0].calories == null && snapshot[0].protein_g == null)) {
+      const fallback = db.all<{ date: string; calories: number | null; protein_g: number | null }>(
+        sql`SELECT date, calories, protein_g FROM health_snapshots
+            WHERE calories IS NOT NULL AND calories > 0
+            ORDER BY date DESC LIMIT 1`
+      );
+      if (fallback.length > 0) {
+        snapshot = fallback;
+        snapshotDate = fallback[0].date;
+        isStale = true;
+      }
+    }
 
     const maintenance = g.maintenance_calories || 2200;
     const currentCalories = snapshot.length > 0 && snapshot[0].calories
@@ -106,6 +122,8 @@ export async function goalRoutes(app: FastifyInstance) {
 
     return {
       date: today,
+      snapshotDate,
+      isStale,
       calories: {
         current: currentCalories,
         target: g.target_calories,

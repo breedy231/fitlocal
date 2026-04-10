@@ -52,6 +52,8 @@
 
   interface NutritionData {
     date: string;
+    snapshotDate?: string;
+    isStale?: boolean;
     calories: { current: number | null; target: number | null };
     protein: { current: number | null; target: number | null };
     isInCut: boolean;
@@ -100,7 +102,7 @@
 
   let muscles = $derived(recovery.data?.muscles ?? []);
   let workouts = $derived(
-    (Array.isArray(workoutCache.data) ? workoutCache.data : []).slice(-5).reverse()
+    (Array.isArray(workoutCache.data) ? workoutCache.data : []).slice(0, 5)
   );
   let activeProgram = $derived(programCache.data);
   let loading = $derived(recovery.loading && workoutCache.loading && programCache.loading);

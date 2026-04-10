@@ -19,6 +19,8 @@
     deficitMagnitude: number | null;
     deficitPct: number | null;
     date: string;
+    snapshotDate?: string;
+    isStale?: boolean;
   }
   const nutritionCache = cachedGet<NutritionData>('/goals/daily-nutrition');
   let nutritionData = $derived(nutritionCache.data);

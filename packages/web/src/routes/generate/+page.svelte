@@ -25,6 +25,7 @@
   interface GeneratedWorkout {
     dayType: string;
     globalModifier: number;
+    isInCut: boolean;
     exercises: GeneratedExercise[];
   }
 
@@ -64,9 +65,41 @@
   // Program state — cached so revisiting this page is instant
   const programCached = cachedGet<ActiveProgram>('/programs/active');
   let activeProgram: ActiveProgram | null = $derived(programCached.data);
-  let mode: 'program' | 'freestyle' = $derived(programCached.data ? 'program' : 'freestyle');
   let startingProgram = $state(false);
   let programLoading = $derived(programCached.loading);
+
+  // Routine state
+  interface RoutineSummary {
+    id: number;
+    name: string;
+    exercises: { exerciseName: string; exerciseId: number | null; targetSets: number; targetReps: string }[];
+  }
+  interface RoutineDetail {
+    id: number;
+    name: string;
+    exercises: {
+      exerciseName: string;
+      exerciseId: number | null;
+      targetSets: number;
+      targetReps: string;
+      suggestedWeightKg: number | null;
+      suggestedReps: number | null;
+      repRange: { min: number; max: number } | null;
+      progression: 'up' | 'deload' | 'hold' | null;
+      isEstimate: boolean;
+    }[];
+  }
+  const routinesCached = cachedGet<RoutineSummary[]>('/routines');
+  let routinesList: RoutineSummary[] = $derived(routinesCached.data ?? []);
+  let selectedRoutineId: number | null = $state(null);
+  let routineDetail: RoutineDetail | null = $state(null);
+  let routineLoading = $state(false);
+  let startingRoutine = $state(false);
+
+  // Mode: program > routine (if routines exist) > freestyle
+  let mode: 'program' | 'routine' | 'freestyle' = $derived(
+    programCached.data ? 'program' : (routinesList.length > 0 ? 'routine' : 'freestyle')
+  );
 
   let swapTargetId: number | null = $state(null);
   let swapAlternatives: GeneratedExercise[] = $state([]);
@@ -87,6 +120,11 @@
   );
 
   let dayType = $state('');
+  let duration = $state(
+    typeof localStorage !== 'undefined'
+      ? parseInt(localStorage.getItem('fitlocal-duration') || '60') || 60
+      : 60
+  );
   let equipment = $state(
     typeof localStorage !== 'undefined'
       ? localStorage.getItem('fitlocal-equipment') || 'full'
@@ -115,7 +153,7 @@
     loading = true;
     workout = null;
     try {
-      workout = await api<GeneratedWorkout>(`/generate-workout?dayType=${dayType}&equipment=${equipment}&supersets=${supersets}`);
+      workout = await api<GeneratedWorkout>(`/generate-workout?dayType=${dayType}&equipment=${equipment}&supersets=${supersets}&duration=${duration}`);
     } catch (e: any) {
       showToast(e.message || 'Failed to generate workout — is the server running?', 'error');
     } finally {
@@ -125,6 +163,10 @@
 
   async function startWorkout() {
     if (!workout) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      showToast('Connect to Wi-Fi to start workout', 'error');
+      return;
+    }
     starting = true;
     try {
       const d = new Date();
@@ -308,6 +350,77 @@
     if (dayType) generate();
   }
 
+  async function loadRoutineDetail(id: number) {
+    selectedRoutineId = id;
+    routineLoading = true;
+    routineDetail = null;
+    try {
+      routineDetail = await api<RoutineDetail>(`/routines/${id}`);
+    } catch (e: any) {
+      showToast(e.message || 'Failed to load routine', 'error');
+    } finally {
+      routineLoading = false;
+    }
+  }
+
+  async function startRoutineWorkout() {
+    if (!routineDetail) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      showToast('Connect to Wi-Fi to start workout', 'error');
+      return;
+    }
+    startingRoutine = true;
+    try {
+      const d = new Date();
+      const now = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      // Create exercises for any that don't have IDs
+      const resolvedExercises = await Promise.all(
+        routineDetail.exercises.map(async (ex) => {
+          let exerciseId = ex.exerciseId;
+          if (!exerciseId) {
+            const created = await api<{ id: number }>('/exercises', {
+              method: 'POST',
+              body: JSON.stringify({ name: ex.exerciseName }),
+            });
+            exerciseId = created.id;
+          }
+          return { ...ex, exerciseId };
+        })
+      );
+
+      const created = await api<{ id: number }>('/workouts/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          date: now,
+          notes: `Routine: ${routineDetail.name}`,
+          exercises: resolvedExercises.map((ex, i) => ({
+            exerciseId: ex.exerciseId,
+            displayOrder: i,
+            sets: Array.from({ length: ex.targetSets || 3 }, () => ({
+              reps: ex.suggestedReps ?? (parseInt(ex.targetReps) || 10),
+              weightKg: ex.suggestedWeightKg ?? 0,
+            })),
+          })),
+        }),
+      });
+
+      goto(`/log/${created.id}`);
+    } catch (e: any) {
+      showToast(e.message || 'Failed to start workout', 'error');
+    } finally {
+      startingRoutine = false;
+    }
+  }
+
+  function selectDuration(min: number) {
+    duration = min;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('fitlocal-duration', String(min));
+    }
+    if (dayType) generate();
+  }
+
   function parseTargetReps(reps: string | null): number {
     if (!reps) return 10;
     if (/amrap/i.test(reps)) return 1;
@@ -317,6 +430,10 @@
 
   async function startProgramWorkout() {
     if (!activeProgram) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      showToast('Connect to Wi-Fi to start workout', 'error');
+      return;
+    }
     startingProgram = true;
     try {
       const d = new Date();
@@ -420,13 +537,21 @@
     <div class="flex justify-center py-4 mb-4">
       <div class="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
     </div>
-  {:else if activeProgram}
+  {:else if activeProgram || routinesList.length > 0}
     <!-- Mode Toggle -->
     <div class="flex rounded-xl overflow-hidden mb-4" style="background-color: #1a1a1a;">
-      <button
-        onclick={() => mode = 'program'}
-        class="flex-1 py-2.5 text-sm font-medium text-center transition-colors {mode === 'program' ? 'bg-green-500/20 text-green-400' : 'text-neutral-400 hover:text-neutral-200'}"
-      >Program</button>
+      {#if activeProgram}
+        <button
+          onclick={() => mode = 'program'}
+          class="flex-1 py-2.5 text-sm font-medium text-center transition-colors {mode === 'program' ? 'bg-green-500/20 text-green-400' : 'text-neutral-400 hover:text-neutral-200'}"
+        >Program</button>
+      {/if}
+      {#if routinesList.length > 0}
+        <button
+          onclick={() => mode = 'routine'}
+          class="flex-1 py-2.5 text-sm font-medium text-center transition-colors {mode === 'routine' ? 'bg-green-500/20 text-green-400' : 'text-neutral-400 hover:text-neutral-200'}"
+        >Routine</button>
+      {/if}
       <button
         onclick={() => mode = 'freestyle'}
         class="flex-1 py-2.5 text-sm font-medium text-center transition-colors {mode === 'freestyle' ? 'bg-green-500/20 text-green-400' : 'text-neutral-400 hover:text-neutral-200'}"
@@ -521,6 +646,89 @@
     </button>
   {/if}
 
+  <!-- Routine Mode -->
+  {#if mode === 'routine' && !programLoading}
+    {#if !selectedRoutineId || !routineDetail}
+      <!-- Routine Picker -->
+      <div class="space-y-2 mb-6">
+        {#each routinesList as routine}
+          <button
+            onclick={() => loadRoutineDetail(routine.id)}
+            class="w-full text-left rounded-xl p-4 hover:bg-neutral-700 transition-colors"
+            style="background-color: #1a1a1a;"
+          >
+            <p class="font-medium">{routine.name}</p>
+            <p class="text-sm text-neutral-400 mt-0.5">{routine.exercises.length} exercises</p>
+          </button>
+        {/each}
+      </div>
+      <p class="text-center text-sm text-neutral-600">
+        <a href="/routines" class="hover:text-green-400">Manage routines &rarr;</a>
+      </p>
+    {:else if routineLoading}
+      <div class="flex justify-center py-12">
+        <div class="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    {:else}
+      <div class="rounded-xl p-4 mb-4" style="background-color: #1a1a1a;">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold">{routineDetail.name}</h2>
+            <p class="text-xs text-neutral-500 mt-0.5">{routineDetail.exercises.length} exercises</p>
+          </div>
+          <button
+            onclick={() => { selectedRoutineId = null; routineDetail = null; }}
+            class="text-xs text-neutral-500 hover:text-green-400"
+          >Change</button>
+        </div>
+      </div>
+
+      <div class="space-y-2 mb-6">
+        {#each routineDetail.exercises as ex}
+          <div class="rounded-xl p-4 relative" style="background-color: #1a1a1a;">
+            <div class="absolute top-3 right-3 flex items-center gap-2">
+              {#if ex.isEstimate}
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #8b5cf620; color: #8b5cf6;">
+                  ~ EST
+                </span>
+              {:else if ex.progression === 'up'}
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #22c55e20; color: #22c55e;">
+                  &#8593; PROGRESS
+                </span>
+              {:else if ex.progression === 'deload'}
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #ef444420; color: #ef4444;">
+                  &#8595; DELOAD
+                </span>
+              {/if}
+            </div>
+            <p class="font-medium mb-1 pr-24">{ex.exerciseName}</p>
+            <div class="text-sm text-neutral-400">
+              {ex.targetSets || 3} &times; {ex.targetReps || '10'}
+              {#if ex.suggestedWeightKg && ex.suggestedWeightKg > 0}
+                @ {kgToLbs(ex.suggestedWeightKg)} lbs
+              {/if}
+            </div>
+            {#if !ex.exerciseId}
+              <span class="text-xs text-amber-500/60 mt-1">Unmatched — will create new exercise</span>
+            {/if}
+            {#if ex.repRange}
+              <span class="text-xs text-neutral-600 mt-1">target: {ex.repRange.min}–{ex.repRange.max} reps</span>
+            {/if}
+          </div>
+        {/each}
+      </div>
+
+      <button
+        onclick={startRoutineWorkout}
+        disabled={startingRoutine}
+        class="w-full font-semibold text-lg py-4 rounded-xl disabled:opacity-50"
+        style="background-color: #22c55e; color: #0f0f0f;"
+      >
+        {startingRoutine ? 'Starting...' : 'Start Workout'}
+      </button>
+    {/if}
+  {/if}
+
   <!-- Freestyle Mode -->
   {#if mode === 'freestyle' && !programLoading}
   <!-- Equipment & Supersets Toggles -->
@@ -543,7 +751,35 @@
     </button>
   </div>
 
+  <!-- Duration Selector -->
+  <div class="grid grid-cols-3 gap-2 mb-4">
+    {#each [30, 45, 60, 75, 90, 120] as min}
+      <button
+        onclick={() => selectDuration(min)}
+        class="py-2.5 rounded-xl text-center text-sm font-medium transition-all
+          {duration === min ? 'ring-2 ring-green-500 text-green-400' : 'text-neutral-400 hover:text-white'}"
+        style="background-color: {duration === min ? '#22c55e15' : '#1a1a1a'};"
+      >
+        {min} min
+      </button>
+    {/each}
+  </div>
+
   <!-- Day Type Buttons -->
+  <p class="text-xs text-neutral-500 uppercase tracking-wider mb-1.5">PPL Split</p>
+  <div class="grid grid-cols-3 gap-3 mb-3">
+    {#each [['push', 'Push'], ['pull', 'Pull'], ['legs', 'Legs']] as [type, label]}
+      <button
+        onclick={() => selectDay(type)}
+        class="py-4 rounded-xl text-center font-semibold transition-all min-h-[48px]
+          {dayType === type ? 'ring-2 ring-green-500 text-green-400' : 'text-neutral-300 hover:text-white'}"
+        style="background-color: {dayType === type ? '#22c55e15' : '#1a1a1a'};"
+      >
+        {label}
+      </button>
+    {/each}
+  </div>
+  <p class="text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Classic</p>
   <div class="grid grid-cols-3 gap-3 mb-6">
     {#each [['upper', 'Upper'], ['lower', 'Lower'], ['fullbody', 'Full Body']] as [type, label]}
       <button
@@ -566,6 +802,12 @@
 
   <!-- Workout Result -->
   {#if workout && !loading}
+    {#if workout.isInCut}
+      <div class="mb-3 rounded-xl px-4 py-2.5 border border-amber-500/30" style="background-color: #78350f20;">
+        <span class="text-sm font-medium text-amber-400">Cut mode — maintaining weights, extra cardio</span>
+      </div>
+    {/if}
+
     <div class="mb-4 flex items-center justify-between">
       <span class="text-sm text-neutral-400">
         Recovery modifier: <span class="text-green-400 font-medium">{Math.round(workout.globalModifier * 100)}%</span>
@@ -728,7 +970,9 @@
 
   {#if !activeProgram}
     <p class="text-center text-sm text-neutral-600 mt-6">
-      <a href="/programs" class="hover:text-green-400">Have a program? Manage programs &rarr;</a>
+      <a href="/programs" class="hover:text-green-400">Programs</a>
+      <span class="mx-2">&middot;</span>
+      <a href="/routines" class="hover:text-green-400">Routines</a>
     </p>
   {/if}
   {/if}

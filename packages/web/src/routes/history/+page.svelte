@@ -300,7 +300,11 @@
                           {#each we.sets as set, idx}
                             <div class="text-xs {set.isWarmup ? 'text-neutral-600' : 'text-neutral-400'} font-mono">
                               {#if set.isWarmup}<span class="text-neutral-600 mr-1">W</span>{:else}<span class="text-neutral-600 mr-1">{idx + 1}</span>{/if}
-                              {set.reps ?? 0} reps
+                              {#if set.durationSeconds && (!set.reps || set.reps === 0)}
+                                {Math.round(set.durationSeconds / 60)} min
+                              {:else}
+                                {set.reps ?? 0} reps
+                              {/if}
                               {#if set.weightKg && set.weightKg > 0}
                                 @ {kgToLbs(set.weightKg)} lbs
                               {/if}
