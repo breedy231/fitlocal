@@ -231,6 +231,15 @@
     muscleCache.loading && prCache.loading && exCache.loading && healthCache.loading
   );
 
+  // Exercise progression search
+  let exerciseSearchOpen = $state(false);
+  let exerciseSearchQuery = $state('');
+  let filteredExerciseOptions = $derived(
+    exerciseSearchQuery.trim()
+      ? exerciseOptions.filter((ex: any) => ex.name.toLowerCase().includes(exerciseSearchQuery.toLowerCase()))
+      : exerciseOptions
+  );
+
   // Auto-load progression for first exercise once options are available
   let autoLoadedProgression = $state(false);
   $effect(() => {
@@ -431,17 +440,44 @@
       <section class="mt-5 mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
         <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Exercise Progression</h2>
         {#if exerciseOptions.length > 0}
-          <select
-            class="w-full bg-neutral-800 text-neutral-200 rounded-lg px-3 py-2 mb-3 text-sm border border-neutral-700"
-            onchange={(e) => {
-              const target = e.target as HTMLSelectElement;
-              loadExerciseProgression(parseInt(target.value));
-            }}
-          >
-            {#each exerciseOptions as ex}
-              <option value={ex.id} selected={ex.id === selectedExerciseId}>{ex.name} ({ex.workoutCount})</option>
-            {/each}
-          </select>
+          <!-- Searchable exercise picker -->
+          <div class="relative mb-3">
+            <button
+              onclick={() => { exerciseSearchOpen = !exerciseSearchOpen; exerciseSearchQuery = ''; }}
+              class="w-full bg-neutral-800 text-neutral-200 rounded-lg px-3 py-2 text-sm border border-neutral-700 text-left flex items-center justify-between"
+            >
+              <span class="truncate">{exerciseProgressionName || 'Select exercise'}</span>
+              <svg class="w-4 h-4 shrink-0 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </button>
+            {#if exerciseSearchOpen}
+              <div class="absolute z-20 left-0 right-0 top-full mt-1 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl max-h-64 flex flex-col">
+                <div class="p-2 border-b border-neutral-700">
+                  <input
+                    type="text"
+                    placeholder="Search exercises..."
+                    bind:value={exerciseSearchQuery}
+                    class="w-full px-2.5 py-1.5 rounded bg-neutral-900 text-white text-sm placeholder-neutral-500 border border-neutral-600 focus:outline-none focus:border-green-500"
+                    autofocus
+                  />
+                </div>
+                <div class="overflow-y-auto">
+                  {#each filteredExerciseOptions as ex}
+                    <button
+                      onclick={() => { loadExerciseProgression(ex.id); exerciseSearchOpen = false; exerciseSearchQuery = ''; }}
+                      class="w-full text-left px-3 py-2 text-sm hover:bg-neutral-700 transition-colors {ex.id === selectedExerciseId ? 'text-green-400' : 'text-neutral-200'}"
+                    >
+                      {ex.name} <span class="text-neutral-500">({ex.workoutCount})</span>
+                    </button>
+                  {/each}
+                  {#if filteredExerciseOptions.length === 0}
+                    <p class="px-3 py-2 text-sm text-neutral-500">No matches</p>
+                  {/if}
+                </div>
+              </div>
+            {/if}
+          </div>
 
           {#if exerciseProgression.length > 0}
             <div class="flex items-center justify-between mb-2">

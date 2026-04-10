@@ -197,6 +197,19 @@ sqlite.exec(`
   );
 `);
 
+// Add duration_seconds column to sets (cardio tracking)
+try { sqlite.exec('ALTER TABLE sets ADD COLUMN duration_seconds INTEGER'); } catch { /* exists */ }
+
+// Routines table (lightweight trainer-provided exercise lists)
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS routines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    exercises TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
 // Performance indexes for JOIN-heavy queries
 sqlite.exec(`
   CREATE INDEX IF NOT EXISTS idx_we_workout_id ON workout_exercises(workout_id);

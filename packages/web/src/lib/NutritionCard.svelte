@@ -1,6 +1,8 @@
 <script lang="ts">
   interface NutritionData {
     date: string;
+    snapshotDate?: string;
+    isStale?: boolean;
     calories: { current: number | null; target: number | null };
     protein: { current: number | null; target: number | null };
     isInCut: boolean;
@@ -30,7 +32,12 @@
 
 <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
   <div class="flex items-center justify-between mb-3">
-    <h3 class="text-sm font-medium text-neutral-400 uppercase tracking-wide">Daily Nutrition</h3>
+    <div>
+      <h3 class="text-sm font-medium text-neutral-400 uppercase tracking-wide">Daily Nutrition</h3>
+      {#if data.isStale && data.snapshotDate}
+        <p class="text-xs text-neutral-500 mt-0.5">as of {new Date(data.snapshotDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+      {/if}
+    </div>
     {#if data.deficitMagnitude != null && data.deficitMagnitude > 0}
       <span class="text-xs px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">
         -{data.deficitMagnitude} cal deficit

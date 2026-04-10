@@ -1,35 +1,34 @@
 import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
-import { generateWorkout } from '../lib/generator.js';
+import { generateWorkout, DAY_TYPE_MUSCLES } from '../lib/generator.js';
 import { computeProgressionBatch } from '../lib/progression.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
 
-const DAY_TYPE_MUSCLES: Record<string, string[]> = {
-  upper: ['chest', 'shoulders', 'triceps', 'back', 'biceps'],
-  lower: ['quads', 'hamstrings', 'glutes', 'calves'],
-  fullbody: ['chest', 'shoulders', 'triceps', 'back', 'biceps', 'quads', 'hamstrings', 'glutes', 'calves'],
-};
-
-const DAY_TYPE_ALIASES: Record<string, string> = {
-  push: 'upper',
-  pull: 'upper',
-  legs: 'lower',
-};
-
 export async function generateRoutes(app: FastifyInstance) {
-  app.get<{ Querystring: { dayType: string; equipment?: string; supersets?: string } }>(
+  app.get<{ Querystring: { dayType: string; equipment?: string; supersets?: string; duration?: string } }>(
     '/generate-workout',
     async (req, reply) => {
-      let { dayType, equipment = 'full', supersets: supersetsParam } = req.query;
+      let { dayType, equipment = 'full', supersets: supersetsParam, duration: durationParam } = req.query;
       if (!dayType) {
-        return reply.status(400).send({ error: 'dayType query param required (upper, lower, or fullbody)' });
+        return reply.status(400).send({ error: 'dayType query param required (push, pull, legs, upper, lower, or fullbody)' });
       }
-      // Map legacy day types
-      dayType = DAY_TYPE_ALIASES[dayType] ?? dayType;
       const supersets = supersetsParam !== 'false';
+      const durationMinutes = durationParam ? parseInt(durationParam) : undefined;
+
+      // Detect cut phase from user_goals dates
+      const today = new Date().toISOString().slice(0, 10);
+      const cutGoals = db.all<{ cut_start_date: string | null; cut_end_date: string | null }>(
+        sql`SELECT cut_start_date, cut_end_date FROM user_goals LIMIT 1`
+      );
+      const isInCut = cutGoals.length > 0
+        && cutGoals[0].cut_start_date != null
+        && cutGoals[0].cut_end_date != null
+        && today >= cutGoals[0].cut_start_date
+        && today <= cutGoals[0].cut_end_date;
+
       try {
-        const workout = generateWorkout(dayType, equipment, db, { supersets });
+        const workout = generateWorkout(dayType, equipment, db, { supersets, durationMinutes, isInCut });
 
         // Nutrition integration: graduated volume reduction based on deficit magnitude
         const goals = db.all<{ maintenance_calories: number | null }>(
@@ -38,7 +37,6 @@ export async function generateRoutes(app: FastifyInstance) {
         const maintenance = goals.length > 0 && goals[0].maintenance_calories
           ? goals[0].maintenance_calories
           : (Number(process.env.MAINTENANCE_CALORIES) || 2200);
-        const today = new Date().toISOString().slice(0, 10);
         const snapshot = db.all<{ calories: number | null }>(
           sql`SELECT calories FROM health_snapshots WHERE date = ${today} LIMIT 1`
         );

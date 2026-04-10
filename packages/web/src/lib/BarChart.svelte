@@ -24,7 +24,7 @@
   }
 
   let maxVal = $derived(Math.max(...data.map((d) => d.value), 1));
-  let niceMax = $derived(niceNumber(maxVal * 1.1));
+  let niceMax = $derived(Math.max(niceNumber(maxVal * 1.1), maxVal + 1));
   let tickStep = $derived(niceNumber(niceMax / 4));
   let ticks = $derived(() => {
     const t: number[] = [];
@@ -73,19 +73,20 @@
 
 {#if data.length > 0}
   {@const tickArr = ticks()}
-  <div bind:clientWidth={containerWidth} style="overflow-x: hidden; position: relative;">
+  {@const topPad = 20}
+  <div bind:clientWidth={containerWidth} style="overflow: visible; position: relative;">
     <svg
       bind:this={svgEl}
       width="100%"
-      viewBox="0 0 {chartWidth} {height + 30}"
+      viewBox="0 0 {chartWidth} {height + topPad + 30}"
       preserveAspectRatio="xMidYMid meet"
-      style="max-height: {height + 40}px; touch-action: pan-y;"
+      style="max-height: {height + topPad + 40}px; touch-action: pan-y;"
       onpointermove={handlePointerMove}
       onpointerleave={handlePointerLeave}
     >
       <!-- Y-axis grid lines and labels -->
       {#each tickArr as tick}
-        {@const ty = height - (tick / niceMax) * height}
+        {@const ty = topPad + height - (tick / niceMax) * height}
         <line
           x1={yAxisWidth}
           y1={ty}
@@ -111,7 +112,7 @@
         {@const barHeight = (bar.value / niceMax) * height}
         <rect
           x={barX}
-          y={height - barHeight}
+          y={topPad + height - barHeight}
           width={barWidth}
           rx="4"
           height={barHeight}
@@ -122,7 +123,7 @@
         {#if hoveredIndex === i || data.length <= 14}
           <text
             x={barCenter}
-            y={height - barHeight - 4}
+            y={topPad + height - barHeight - 4}
             text-anchor="middle"
             fill={hoveredIndex === i ? '#e5e5e5' : '#a3a3a3'}
             font-size={hoveredIndex === i ? '11' : '10'}
@@ -134,7 +135,7 @@
         {#if i % labelStep === 0 || i === data.length - 1}
           <text
             x={barCenter}
-            y={height + 14}
+            y={topPad + height + 14}
             text-anchor="middle"
             fill="#525252"
             font-size="9"
