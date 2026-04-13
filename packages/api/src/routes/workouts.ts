@@ -198,32 +198,6 @@ export async function workoutRoutes(app: FastifyInstance) {
     return { ...workout, exercises: Array.from(exerciseMap.values()) };
   });
 
-  // Last performance for a single exercise (used when swapping exercises mid-workout)
-  app.get<{ Params: { exerciseId: string }; Querystring: { excludeWorkoutId?: string } }>(
-    '/exercises/:exerciseId/last-performance',
-    async (req) => {
-      const exerciseId = parseInt(req.params.exerciseId);
-      const excludeId = req.query.excludeWorkoutId ? parseInt(req.query.excludeWorkoutId) : 0;
-      const rows = db.all<{ reps: number; weight_kg: number; workout_date: string }>(sql`
-        SELECT s.reps, s.weight_kg, w.date as workout_date
-        FROM sets s
-        JOIN workout_exercises we ON s.workout_exercise_id = we.id
-        JOIN workouts w ON we.workout_id = w.id
-        WHERE we.exercise_id = ${exerciseId}
-          AND w.id != ${excludeId}
-          AND s.is_warmup = 0
-          AND s.reps > 0
-        ORDER BY w.date DESC, s.id ASC
-      `);
-      if (rows.length === 0) return { sets: [] };
-      const date = rows[0].workout_date;
-      return {
-        date,
-        sets: rows.filter(r => r.workout_date === date).map(r => ({ reps: r.reps, weightKg: r.weight_kg })),
-      };
-    }
-  );
-
   // Create workout
   app.post<{ Body: { date: string; locationProfile?: string; notes?: string } }>('/workouts', async (req, reply) => {
     const { date, locationProfile, notes } = req.body;
