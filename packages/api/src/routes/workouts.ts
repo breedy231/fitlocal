@@ -198,6 +198,32 @@ export async function workoutRoutes(app: FastifyInstance) {
     return { ...workout, exercises: Array.from(exerciseMap.values()) };
   });
 
+  // Last performance for a single exercise (used when swapping exercises mid-workout)
+  app.get<{ Params: { exerciseId: string }; Querystring: { excludeWorkoutId?: string } }>(
+    '/exercises/:exerciseId/last-performance',
+    async (req) => {
+      const exerciseId = parseInt(req.params.exerciseId);
+      const excludeId = req.query.excludeWorkoutId ? parseInt(req.query.excludeWorkoutId) : 0;
+      const rows = db.all<{ reps: number; weight_kg: number; workout_date: string }>(sql`
+        SELECT s.reps, s.weight_kg, w.date as workout_date
+        FROM sets s
+        JOIN workout_exercises we ON s.workout_exercise_id = we.id
+        JOIN workouts w ON we.workout_id = w.id
+        WHERE we.exercise_id = ${exerciseId}
+          AND w.id != ${excludeId}
+          AND s.is_warmup = 0
+          AND s.reps > 0
+        ORDER BY w.date DESC, s.id ASC
+      `);
+      if (rows.length === 0) return { sets: [] };
+      const date = rows[0].workout_date;
+      return {
+        date,
+        sets: rows.filter(r => r.workout_date === date).map(r => ({ reps: r.reps, weightKg: r.weight_kg })),
+      };
+    }
+  );
+
   // Create workout
   app.post<{ Body: { date: string; locationProfile?: string; notes?: string } }>('/workouts', async (req, reply) => {
     const { date, locationProfile, notes } = req.body;
@@ -331,37 +357,60 @@ export async function workoutRoutes(app: FastifyInstance) {
     return reply.status(201).send(result);
   });
 
-  // Export workouts for HealthKit writeback
-  app.get<{ Querystring: { since?: string } }>('/workouts/export', async (req) => {
-    const since = req.query.since || '1970-01-01';
+  // Export workouts for HealthKit writeback (used by iOS Shortcut)
+  app.get<{ Querystring: { since?: string; date?: string } }>('/workouts/export', async (req) => {
+    const dateFilter = req.query.date
+      ? sql`w.date = ${req.query.date}`
+      : sql`w.date >= ${req.query.since || '1970-01-01'}`;
+
+    // Get latest body weight for MET-based calorie estimation
+    const weightRow = db.get<{ body_weight_kg: number | null }>(sql`
+      SELECT body_weight_kg FROM health_snapshots
+      WHERE body_weight_kg IS NOT NULL ORDER BY date DESC LIMIT 1
+    `);
+    const bodyWeightKg = weightRow?.body_weight_kg || 80; // fallback 80kg
+
     const rows = db.all<{
       date: string;
-      set_count: number;
-      total_reps: number;
+      strength_sets: number;
+      cardio_minutes: number;
       has_cardio: number;
     }>(sql`
       SELECT w.date,
-        COUNT(s.id) as set_count,
-        COALESCE(SUM(s.reps), 0) as total_reps,
-        MAX(CASE WHEN lower(e.name) GLOB '*treadmill*' OR lower(e.name) GLOB '*elliptical*'
-          OR lower(e.name) GLOB '*cycling*' OR lower(e.name) GLOB '*rowing*'
-          OR lower(e.name) GLOB '*bike*' OR lower(e.name) GLOB '*run*'
-          OR lower(e.name) GLOB '*cardio*' THEN 1 ELSE 0 END) as has_cardio
+        SUM(CASE WHEN e.name NOT IN ('Walking','Walking - Treadmill','Cycling','Cycling - Stationary',
+          'Elliptical','Rowing','Running','Running - Treadmill')
+          THEN 1 ELSE 0 END) as strength_sets,
+        COALESCE(SUM(CASE WHEN e.name IN ('Walking','Walking - Treadmill','Cycling','Cycling - Stationary',
+          'Elliptical','Rowing','Running','Running - Treadmill')
+          THEN s.reps ELSE 0 END), 0) as cardio_minutes,
+        MAX(CASE WHEN e.name IN ('Walking','Walking - Treadmill','Cycling','Cycling - Stationary',
+          'Elliptical','Rowing','Running','Running - Treadmill')
+          THEN 1 ELSE 0 END) as has_cardio
       FROM workouts w
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON we.exercise_id = e.id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
-      WHERE w.date >= ${since}
+      WHERE ${dateFilter}
       GROUP BY w.id
       ORDER BY w.date
     `);
 
-    return rows.map(r => ({
-      date: r.date,
-      durationMinutes: Math.round(r.set_count * 2.5),  // ~2.5 min per set including rest
-      caloriesBurned: Math.round(r.total_reps * 0.5 + r.set_count * 8), // rough estimate
-      exerciseType: r.has_cardio ? 'mixed' : 'strength',
-    }));
+    return rows.map(r => {
+      // MET-based estimation: strength ~4 METs, cardio ~5 METs (walking/cycling mix)
+      // Formula: MET * bodyWeightKg * durationHours
+      const strengthMinutes = r.strength_sets * 2.5; // ~2.5 min per set including rest
+      const cardioMinutes = r.cardio_minutes; // reps = minutes for cardio exercises
+      const strengthCals = 4 * bodyWeightKg * (strengthMinutes / 60);
+      const cardioCals = 5 * bodyWeightKg * (cardioMinutes / 60);
+      const totalMinutes = Math.round(strengthMinutes + cardioMinutes);
+
+      return {
+        date: r.date,
+        durationMinutes: totalMinutes,
+        caloriesBurned: Math.round(strengthCals + cardioCals),
+        exerciseType: r.has_cardio ? 'mixed' : 'strength',
+      };
+    });
   });
 
   // Delete workout_exercise (cascades sets)
