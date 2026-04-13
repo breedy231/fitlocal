@@ -1,6 +1,10 @@
 import Database from 'better-sqlite3';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const sqlite = new Database('fitlocal.db');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const dbPath = path.join(__dirname, '../../../fitlocal.db');
+const sqlite = new Database(dbPath);
 sqlite.pragma('journal_mode = WAL');
 sqlite.pragma('foreign_keys = ON');
 
@@ -87,26 +91,40 @@ for (const col of [
   try { sqlite.exec(col); } catch { /* Column already exists */ }
 }
 
-// Set rest_seconds defaults by exercise type
+// Migration tracking table
 sqlite.exec(`
-  UPDATE exercises SET rest_seconds = 120
-  WHERE lower(name) GLOB '*squat*' OR lower(name) GLOB '*deadlift*' OR lower(name) GLOB '*bench*'
-    OR lower(name) GLOB '*row*' OR lower(name) GLOB '*pulldown*' OR lower(name) GLOB '*press*'
-    OR lower(name) GLOB '*pull*up*' OR lower(name) GLOB '*chin*up*';
-
-  UPDATE exercises SET rest_seconds = 45
-  WHERE lower(name) GLOB '*crunch*' OR lower(name) GLOB '*plank*' OR lower(name) GLOB '*dead*bug*'
-    OR lower(name) GLOB '*russian*twist*' OR lower(name) GLOB '*windshield*' OR lower(name) GLOB '*knee*raise*'
-    OR lower(name) GLOB '*toe*toucher*';
-
-  UPDATE exercises SET rest_seconds = 0
-  WHERE lower(name) GLOB '*treadmill*' OR lower(name) GLOB '*elliptical*'
-    OR lower(name) GLOB '*cycling*' OR lower(name) GLOB '*rowing*';
-
-  UPDATE exercises SET rest_seconds = 60
-  WHERE lower(name) GLOB '*curl*' OR lower(name) GLOB '*raise*' OR lower(name) GLOB '*extension*'
-    OR lower(name) GLOB '*kickback*' OR lower(name) GLOB '*fly*' OR lower(name) GLOB '*flye*';
+  CREATE TABLE IF NOT EXISTS migrations (
+    key TEXT PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
+
+// Set rest_seconds defaults by exercise classification (runs once)
+const restMigrationApplied = sqlite.prepare("SELECT 1 FROM migrations WHERE key = 'rest_defaults_v4'").get();
+if (!restMigrationApplied) {
+  function classifyForRest(name: string): number {
+    const n = name.toLowerCase();
+    if (/treadmill|elliptical|cycling|rowing\s*machine|stationary/i.test(n)) return 0;
+    if (/crunch|plank|dead.?bug|russian.?twist|windshield|knee.?raise|toe.?toucher|ab\s|v.?up/i.test(n)) return 45;
+    if (/barbell|squat\s*\(|bench\s*press|deadlift|pendlay|back\s*squat|front\s*squat|overhead\s*press/i.test(n)) return 120;
+    if (/dumbbell\s*(press|row|lunge|bench|squat|shoulder)|arnold\s*press/i.test(n)) return 90;
+    if (/pull.?up|chin.?up|dip(?!.*cable)/i.test(n)) return 90;
+    if (/pulldown|lat\s*pull|leg\s*press|hack\s*squat|smith/i.test(n)) return 90;
+    return 60; // accessories: TRX, cable, curls, raises, extensions, etc.
+  }
+
+  const exercises = sqlite.prepare('SELECT id, name, rest_seconds FROM exercises').all() as { id: number; name: string; rest_seconds: number | null }[];
+  const updateStmt = sqlite.prepare('UPDATE exercises SET rest_seconds = ? WHERE id = ?');
+
+  const txn = sqlite.transaction(() => {
+    for (const ex of exercises) {
+      const rest = classifyForRest(ex.name);
+      updateStmt.run(rest, ex.id);
+    }
+    sqlite.prepare("INSERT INTO migrations (key) VALUES ('rest_defaults_v4')").run();
+  });
+  txn();
+}
 
 // Add superset_group column to workout_exercises
 try { sqlite.exec('ALTER TABLE workout_exercises ADD COLUMN superset_group INTEGER'); } catch { /* exists */ }
@@ -228,6 +246,9 @@ sqlite.exec(`
 
   DELETE FROM exercises WHERE name IN ('10 - 12', '8 - 10')
     AND id NOT IN (SELECT exercise_id FROM workout_exercises);
+
+  UPDATE exercises SET description = 'The cable face pull targets the rear deltoids, rhomboids, and external rotators. Attach a rope to a cable machine at upper-chest height. Grip the rope with both hands, palms facing down, and step back to create tension. Pull the rope toward your face, separating the ends past your ears while squeezing your shoulder blades together. Hold briefly, then return with control. Keep your elbows high throughout the movement.'
+  WHERE id = 74 AND name = 'Cable Face Pull';
 `);
 
 console.log('Database migrated successfully');

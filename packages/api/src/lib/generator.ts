@@ -53,7 +53,7 @@ const LEGS_TARGETS: [string, number][] = [
 // Trainer-prescribed exercises (LVAC PT) — prioritized during PPL generation
 const TRAINER_EXERCISES: Record<string, string[]> = {
   push: [
-    'Barbell Bench Press', 'Dumbbell Shoulder Press', 'Incline Bench Press',
+    'Barbell Bench Press', 'Dumbbell Shoulder Press', 'Dumbbell Incline Bench Press',
     'Dumbbell Kickbacks', 'Machine Fly', 'Push Up',
   ],
   pull: [

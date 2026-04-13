@@ -99,8 +99,28 @@ sw.addEventListener('fetch', (event) => {
   }
 });
 
-// Listen for invalidation messages from the main thread
+// Rest timer notification scheduling — fires reliably even when tab is backgrounded
+let restTimerId: ReturnType<typeof setTimeout> | null = null;
+
 sw.addEventListener('message', (event) => {
+  if (event.data?.type === 'SCHEDULE_REST_NOTIFICATION') {
+    if (restTimerId) clearTimeout(restTimerId);
+    const { delayMs, title, body } = event.data;
+    restTimerId = setTimeout(() => {
+      sw.registration.showNotification(title ?? 'Rest Complete', {
+        body: body ?? 'Time for your next set',
+        tag: 'rest-timer',
+        renotify: true,
+      });
+      restTimerId = null;
+    }, delayMs);
+    return;
+  }
+  if (event.data?.type === 'CANCEL_REST_NOTIFICATION') {
+    if (restTimerId) { clearTimeout(restTimerId); restTimerId = null; }
+    sw.registration.getNotifications({ tag: 'rest-timer' }).then(ns => ns.forEach(n => n.close()));
+    return;
+  }
   if (event.data?.type === 'INVALIDATE_API_CACHE') {
     const prefix = event.data.pathPrefix as string;
     caches.open(API_CACHE).then(async (cache) => {
