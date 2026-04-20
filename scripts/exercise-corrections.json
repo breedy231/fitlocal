@@ -1,0 +1,2621 @@
+[
+  {
+    "id": 4,
+    "name": "Dead Bug",
+    "matchedTo": "Dead Bug",
+    "score": 1,
+    "newDescription": "Begin by lying flat on your back. Keep your back in its natural position without flattening it. This will help you do the dead bug in the most efficient and effective way.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1338.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1338.gif"
+  },
+  {
+    "id": 5,
+    "name": "Leg Press",
+    "matchedTo": "Machine Leg Press",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/132.gif"
+  },
+  {
+    "id": 6,
+    "name": "Seated Machine Calf Press",
+    "matchedTo": "Machine Calf Press",
+    "score": 0.85,
+    "newDescription": "Steps :\n\n1.) Start by sitting down on a leg press machine, placing the balls of your feet on the bottom of the platform in front of you with a narrow width spacing and selecting the weight you would like to perform.\n\n2.) Slowly, using your calves, push against the platform so that you move backwards, feeling a stretch in your legs and hold for a count.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1254.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1254.gif"
+  },
+  {
+    "id": 8,
+    "name": "Dumbbell Squat",
+    "matchedTo": "Dumbbell Squat",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/131.gif"
+  },
+  {
+    "id": 9,
+    "name": "Machine Hip Adductor",
+    "matchedTo": "Machine Hip Abduction",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/216.gif"
+  },
+  {
+    "id": 10,
+    "name": "Machine Hip Abductor",
+    "matchedTo": "Machine Hip Abduction",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/216.gif"
+  },
+  {
+    "id": 11,
+    "name": "Leg Extension",
+    "matchedTo": "Machine Leg Extension",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/130.gif"
+  },
+  {
+    "id": 12,
+    "name": "Dumbbell Romanian Deadlift",
+    "matchedTo": "Dumbbell Romanian Deadlift",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1433.gif"
+  },
+  {
+    "id": 13,
+    "name": "Barbell Hip Thrust",
+    "matchedTo": "Barbell Hip Thrust",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/386.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/386.gif"
+  },
+  {
+    "id": 15,
+    "name": "Foam Roll Upper Back",
+    "matchedTo": "Upper Back Stretch",
+    "score": 0.4,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/833.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/833.gif"
+  },
+  {
+    "id": 17,
+    "name": "Wall Slide Stretch",
+    "matchedTo": "Wall Calf Stretch ",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/960.gif"
+  },
+  {
+    "id": 18,
+    "name": "Dumbbell Incline Bench Press",
+    "matchedTo": "Dumbbell Incline Bench Press",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/31.gif"
+  },
+  {
+    "id": 19,
+    "name": "Barbell Curl",
+    "matchedTo": "Barbell Curl",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/112.gif"
+  },
+  {
+    "id": 20,
+    "name": "Dumbbell Rear Delt Raise",
+    "matchedTo": "Dumbbell Rear Delt Row",
+    "score": 0.6,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1330.gif"
+  },
+  {
+    "id": 22,
+    "name": "Dumbbell Front Raise",
+    "matchedTo": "Dumbbell Front Raise",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/413.gif"
+  },
+  {
+    "id": 23,
+    "name": "Lat Pulldown",
+    "matchedTo": "Cable Lat Pulldown Wide Grip",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/86.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/86.gif"
+  },
+  {
+    "id": 24,
+    "name": "Barbell Bench Press",
+    "matchedTo": "Barbell Bench Press",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/2.gif"
+  },
+  {
+    "id": 25,
+    "name": "Exercise Ball Crunch",
+    "matchedTo": "Crunch",
+    "score": 0.85,
+    "newDescription": "The crunch exercise is the most common abdominal exercise and often is improperly performed.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/77.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/77.gif"
+  },
+  {
+    "id": 26,
+    "name": "Foam Roll Hip Flexors",
+    "matchedTo": "Abdominal Hip Roll",
+    "score": 0.4,
+    "newDescription": "Steps :\n\n1.) Start by laying down on your back flat on the floor keeping your arms straight out and wide to your sides and feet extended out in front of you in a \"T\" position.\n\n2.) Slowly raise your knees up until they are at thigh level and create a 90-degree angle to the floor, then begin by twist at your hips and lowering your knees towards the floor in a pendulum motion.",
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/981.gif"
+  },
+  {
+    "id": 27,
+    "name": "Lateral Leg Swing",
+    "matchedTo": "Leg Swing",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/896.gif"
+  },
+  {
+    "id": 29,
+    "name": "Machine Leg Press",
+    "matchedTo": "Machine Leg Press",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/132.gif"
+  },
+  {
+    "id": 32,
+    "name": "Bird Dog",
+    "matchedTo": "Bird Dog ",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/666.gif"
+  },
+  {
+    "id": 33,
+    "name": "Dumbbell Row",
+    "matchedTo": "Dumbbell Upright Row",
+    "score": 0.6666666666666666,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/43.gif"
+  },
+  {
+    "id": 34,
+    "name": "Dumbbell Bicep Curl",
+    "matchedTo": "Dumbbell Bicep Curl Reverse Grip",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1098.gif"
+  },
+  {
+    "id": 35,
+    "name": "Cable Row",
+    "matchedTo": "Cable Seated Row",
+    "score": 0.6666666666666666,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/21.gif"
+  },
+  {
+    "id": 36,
+    "name": "Cable Lateral Raise",
+    "matchedTo": "Cable Lateral Raise",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/19.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/19.gif"
+  },
+  {
+    "id": 37,
+    "name": "Machine Shoulder Press",
+    "matchedTo": "Machine Shoulder Press",
+    "score": 1,
+    "newDescription": "The Machine Shoulder Press is a popular exercise targeting the upper back and shoulder muscles, particularly the deltoids, and can also engage the triceps and upper chest. Here’s a step-by-step guide on how to perform it correctly:",
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/46.gif"
+  },
+  {
+    "id": 38,
+    "name": "Machine Row",
+    "matchedTo": "Machine Seated Row",
+    "score": 0.6666666666666666,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/700.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/700.gif"
+  },
+  {
+    "id": 39,
+    "name": "Cable Crunch",
+    "matchedTo": "Cable Crunch",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/994.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/994.gif"
+  },
+  {
+    "id": 40,
+    "name": "Foam Roll Hip Abductors",
+    "matchedTo": "Abdominal Hip Roll",
+    "score": 0.4,
+    "newDescription": "Steps :\n\n1.) Start by laying down on your back flat on the floor keeping your arms straight out and wide to your sides and feet extended out in front of you in a \"T\" position.\n\n2.) Slowly raise your knees up until they are at thigh level and create a 90-degree angle to the floor, then begin by twist at your hips and lowering your knees towards the floor in a pendulum motion.",
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/981.gif"
+  },
+  {
+    "id": 41,
+    "name": "Foam Roll Hip Adductors",
+    "matchedTo": "Abdominal Hip Roll",
+    "score": 0.4,
+    "newDescription": "Steps :\n\n1.) Start by laying down on your back flat on the floor keeping your arms straight out and wide to your sides and feet extended out in front of you in a \"T\" position.\n\n2.) Slowly raise your knees up until they are at thigh level and create a 90-degree angle to the floor, then begin by twist at your hips and lowering your knees towards the floor in a pendulum motion.",
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/981.gif"
+  },
+  {
+    "id": 42,
+    "name": "Butt Kick",
+    "matchedTo": "Single Leg Butt Kick",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/935.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/935.gif"
+  },
+  {
+    "id": 43,
+    "name": "Step Up",
+    "matchedTo": "Dumbbell Step Up",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/134.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/134.gif"
+  },
+  {
+    "id": 44,
+    "name": "Deadlift",
+    "matchedTo": "Barbell Deadlift",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/93.gif"
+  },
+  {
+    "id": 48,
+    "name": "Standing Hip Flexor Stretch",
+    "matchedTo": "Hip Flexor Stretch",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/950.gif"
+  },
+  {
+    "id": 50,
+    "name": "Cable Hip Extension",
+    "matchedTo": "Cable Shoulder Extension",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/250.gif"
+  },
+  {
+    "id": 51,
+    "name": "Cable Pull Through",
+    "matchedTo": "Cable Pull Through",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/393.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/393.gif"
+  },
+  {
+    "id": 54,
+    "name": "Machine Fly",
+    "matchedTo": "Machine Fly",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/45.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/45.gif"
+  },
+  {
+    "id": 56,
+    "name": "Glute Kickback Machine",
+    "matchedTo": "Glute Kickback Kneeling",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/387.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/387.gif"
+  },
+  {
+    "id": 57,
+    "name": "Handle Band Forward Raise",
+    "matchedTo": "Band Lateral Raise",
+    "score": 0.4,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/422.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/422.gif"
+  },
+  {
+    "id": 58,
+    "name": "Dumbbell Shoulder Press",
+    "matchedTo": "Dumbbell Shoulder Press",
+    "score": 1,
+    "newDescription": "Steps :\n\n1.) Start off standing up straight with your feet shoulder width apart and your arms rested at your sides, holding dumbbells in each hand.\n\n2.) Raise the dumbbells to head level so that your arms are creating a 90 degree angle.\n\n3.) Slowly push the dumbbells up, by extending through the elbows, over your head, feeling a stretch in your shoulders.",
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/884.gif"
+  },
+  {
+    "id": 59,
+    "name": "Windshield Wiper",
+    "matchedTo": "Windshield Wipers",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/693.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/693.gif"
+  },
+  {
+    "id": 60,
+    "name": "Reverse Crunch",
+    "matchedTo": "Reverse Crunch",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/338.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/338.gif"
+  },
+  {
+    "id": 61,
+    "name": "Walking Lunge",
+    "matchedTo": "Walking",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/322.gif"
+  },
+  {
+    "id": 62,
+    "name": "Dumbbell Bulgarian Split Squat",
+    "matchedTo": "Dumbbell Bulgarian Split Squat",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1346.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1346.gif"
+  },
+  {
+    "id": 63,
+    "name": "Seated Leg Curl",
+    "matchedTo": "Machine Seated Leg Curl",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/161.gif"
+  },
+  {
+    "id": 65,
+    "name": "Handle Band Lateral Raise",
+    "matchedTo": "Band Lateral Raise",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/422.gif"
+  },
+  {
+    "id": 66,
+    "name": "Handle Band Bicep Curl",
+    "matchedTo": "Band Alternating Bicep Curl ",
+    "score": 0.6,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/283.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/283.gif"
+  },
+  {
+    "id": 67,
+    "name": "Cable Crossover Fly",
+    "matchedTo": "Cable Reverse Fly",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1106.gif"
+  },
+  {
+    "id": 68,
+    "name": "Machine Bench Press",
+    "matchedTo": "Machine Bench Press",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/163.gif"
+  },
+  {
+    "id": 69,
+    "name": "Dumbbell Fly",
+    "matchedTo": "Dumbbell Fly",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/41.gif"
+  },
+  {
+    "id": 70,
+    "name": "Cable Bicep Curl",
+    "matchedTo": "Cable Bicep Curl",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/102.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/102.gif"
+  },
+  {
+    "id": 71,
+    "name": "Leg Swing",
+    "matchedTo": "Leg Swing",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/896.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/896.gif"
+  },
+  {
+    "id": 72,
+    "name": "Dumbbell Lunge",
+    "matchedTo": "Dumbbell Lunge",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/136.gif"
+  },
+  {
+    "id": 73,
+    "name": "Single Arm Cable Press",
+    "matchedTo": "Cable One Arm Incline Press",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/729.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/729.gif"
+  },
+  {
+    "id": 74,
+    "name": "Cable Face Pull",
+    "matchedTo": "Cable Rope Face Pull",
+    "score": 0.75,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/874.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/874.gif"
+  },
+  {
+    "id": 75,
+    "name": "Bicycle Crunch",
+    "matchedTo": "Crunch",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/77.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/77.gif"
+  },
+  {
+    "id": 76,
+    "name": "Assisted Pull Up",
+    "matchedTo": "Pull Up",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/83.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/83.gif"
+  },
+  {
+    "id": 77,
+    "name": "Dumbbell Bent Over Row",
+    "matchedTo": "Dumbbell Bent Over Row",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/88.gif"
+  },
+  {
+    "id": 79,
+    "name": "Preacher Curl",
+    "matchedTo": "Preacher Curl Machine",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/271.gif"
+  },
+  {
+    "id": 80,
+    "name": "Single Leg Kickback",
+    "matchedTo": "Cable Leg Kickback",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1313.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1313.gif"
+  },
+  {
+    "id": 81,
+    "name": "Cable Rope Tricep Extension",
+    "matchedTo": "Cable Rope Tricep Extension Supine",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1177.gif"
+  },
+  {
+    "id": 82,
+    "name": "Hip Thrust",
+    "matchedTo": "Barbell Hip Thrust",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/386.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/386.gif"
+  },
+  {
+    "id": 83,
+    "name": "Reverse Leg Crossover",
+    "matchedTo": "Cable Reverse Crossover",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1292.gif"
+  },
+  {
+    "id": 85,
+    "name": "Side Lunge",
+    "matchedTo": "Bodyweight Side Lunge",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1220.gif"
+  },
+  {
+    "id": 87,
+    "name": "Cat Cow",
+    "matchedTo": "Cat Cow Stretch",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1423.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1423.gif"
+  },
+  {
+    "id": 89,
+    "name": "Vertical Knee Raise",
+    "matchedTo": "Hanging Knee Raise",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/690.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/690.gif"
+  },
+  {
+    "id": 90,
+    "name": "Plate Pinch",
+    "matchedTo": "Weight Plate Pinch",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/380.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/380.gif"
+  },
+  {
+    "id": 91,
+    "name": "Loop Band Overhead Shoulder Stretch",
+    "matchedTo": "Shoulder Stretch",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/882.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/882.gif"
+  },
+  {
+    "id": 92,
+    "name": "Russian Twist",
+    "matchedTo": "Weight Plate Russian Twist",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/339.gif"
+  },
+  {
+    "id": 93,
+    "name": "Handle Band Bent Over Row",
+    "matchedTo": "Barbell Bent Over Row",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/3.gif"
+  },
+  {
+    "id": 94,
+    "name": "Handle Band Upright Row",
+    "matchedTo": "Band Upright Row",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/185.gif"
+  },
+  {
+    "id": 95,
+    "name": "Ab Crunch Machine",
+    "matchedTo": "Machine Ab Crunch",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/56.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/56.gif"
+  },
+  {
+    "id": 97,
+    "name": "Mini Loop Band Standing Hip Extension",
+    "matchedTo": "Hip Extension Standing",
+    "score": 0.5,
+    "newDescription": "Steps :\n\n1.) Begin by standing and facing a wall. Position both hands on the wall for support.\n\n2.) Stand tall throughout. Engage the core and the swing the leg backward, keeping the leg straight.\n\n3.) Return back to the starting position.\n\n4.) Repeat for as many reps and sets as desired.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1101.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1101.gif"
+  },
+  {
+    "id": 98,
+    "name": "Dumbbell Hip Thrust",
+    "matchedTo": "Barbell Hip Thrust",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/386.gif"
+  },
+  {
+    "id": 99,
+    "name": "Seated Dumbbell Calf Raise",
+    "matchedTo": "Dumbbell Seated Calf Raise",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1241.gif"
+  },
+  {
+    "id": 101,
+    "name": "Kettlebell Sumo Squat",
+    "matchedTo": "Kettlebell Goblet Squat",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/479.gif"
+  },
+  {
+    "id": 102,
+    "name": "Dumbbell Shrug",
+    "matchedTo": "Dumbbell Shrug Stability Ball",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/773.gif"
+  },
+  {
+    "id": 103,
+    "name": "Front Squat",
+    "matchedTo": "Barbell Front Squat",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/137.gif"
+  },
+  {
+    "id": 104,
+    "name": "Lunge",
+    "matchedTo": "Dumbbell Lunge",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/136.gif"
+  },
+  {
+    "id": 105,
+    "name": "Handle Band Reverse Curl",
+    "matchedTo": "Barbell Reverse Curl",
+    "score": 0.4,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/111.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/111.gif"
+  },
+  {
+    "id": 106,
+    "name": "Superman with Scaption",
+    "matchedTo": "Superman",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/94.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/94.gif"
+  },
+  {
+    "id": 107,
+    "name": "Loop Band Seated Shoulder Press",
+    "matchedTo": "Band Shoulder Press",
+    "score": 0.6,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/445.gif"
+  },
+  {
+    "id": 108,
+    "name": "Barbell Decline Bench Press",
+    "matchedTo": "Barbell Decline Bench Press",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/5.gif"
+  },
+  {
+    "id": 109,
+    "name": "Handle Band Row",
+    "matchedTo": "Band Upright Row",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/185.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/185.gif"
+  },
+  {
+    "id": 110,
+    "name": "Stiff-Legged Barbell Good Morning",
+    "matchedTo": "Barbell Good Morning",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/7.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/7.gif"
+  },
+  {
+    "id": 111,
+    "name": "Handle Band Shoulder Press",
+    "matchedTo": "Band Shoulder Press",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/445.gif"
+  },
+  {
+    "id": 112,
+    "name": "Barbell Shoulder Press",
+    "matchedTo": "Barbell Shoulder Press",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/10.gif"
+  },
+  {
+    "id": 113,
+    "name": "Dumbbell Bench Press",
+    "matchedTo": "Dumbbell Bench Press",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/26.gif"
+  },
+  {
+    "id": 114,
+    "name": "Standing Hip Circle",
+    "matchedTo": "Hip Extension Standing",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1101.gif"
+  },
+  {
+    "id": 115,
+    "name": "Handle Band Squat",
+    "matchedTo": "Band Squat",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/215.gif"
+  },
+  {
+    "id": 117,
+    "name": "Cable Hip Adduction",
+    "matchedTo": "Hip Adduction",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/746.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/746.gif"
+  },
+  {
+    "id": 118,
+    "name": "Assisted Dip",
+    "matchedTo": "Dip",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/24.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/24.gif"
+  },
+  {
+    "id": 120,
+    "name": "Incline Back Extension",
+    "matchedTo": "Machine Back Extension",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1259.gif"
+  },
+  {
+    "id": 121,
+    "name": "Dumbbell Walking Lunge",
+    "matchedTo": "Dumbbell Walking Lunge",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/201.gif"
+  },
+  {
+    "id": 122,
+    "name": "Dumbbell Step Up",
+    "matchedTo": "Dumbbell Step Up",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/134.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/134.gif"
+  },
+  {
+    "id": 124,
+    "name": "Dumbbell Upright Row",
+    "matchedTo": "Dumbbell Upright Row",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/43.gif"
+  },
+  {
+    "id": 127,
+    "name": "Cobra Triceps Extension",
+    "matchedTo": "Cobra",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/625.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/625.gif"
+  },
+  {
+    "id": 128,
+    "name": "Barbell Incline Bench Press",
+    "matchedTo": "Barbell Incline Bench Press",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/8.gif"
+  },
+  {
+    "id": 130,
+    "name": "Superman",
+    "matchedTo": "Superman",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/94.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/94.gif"
+  },
+  {
+    "id": 131,
+    "name": "Cable Hip Abduction",
+    "matchedTo": "Cable Hip Abduction",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/206.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/206.gif"
+  },
+  {
+    "id": 132,
+    "name": "Push Up",
+    "matchedTo": "Push Up",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif"
+  },
+  {
+    "id": 133,
+    "name": "Single Arm Landmine Press",
+    "matchedTo": "Barbell Landmine Kneeling One Arm Press",
+    "score": 0.42857142857142855,
+    "newDescription": "The barbell landmine kneeling one-arm press is an excellent exercise for targeting the shoulders, triceps, and core stability.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1349.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1349.gif"
+  },
+  {
+    "id": 135,
+    "name": "Loop Band Hammer Curl",
+    "matchedTo": "Dumbbell Hammer Curl ",
+    "score": 0.4,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/108.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/108.gif"
+  },
+  {
+    "id": 136,
+    "name": "Close-Grip Bench Press",
+    "matchedTo": "Barbell Bench Press",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/2.gif"
+  },
+  {
+    "id": 138,
+    "name": "Kettlebell Alternating Row",
+    "matchedTo": "Kettlebell Alternating Row",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/348.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/348.gif"
+  },
+  {
+    "id": 140,
+    "name": "Crunches",
+    "matchedTo": "Crunch",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/77.gif"
+  },
+  {
+    "id": 141,
+    "name": "Mini Loop Band Kneeling Bicep Curl",
+    "matchedTo": "Band Alternating Bicep Curl ",
+    "score": 0.42857142857142855,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/283.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/283.gif"
+  },
+  {
+    "id": 143,
+    "name": "Mini Loop Band Reverse Fly",
+    "matchedTo": "Band Reverse Fly",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/53.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/53.gif"
+  },
+  {
+    "id": 144,
+    "name": "Dumbbell Bent Over Reverse Fly",
+    "matchedTo": "Dumbbell Bent Over Reverse Fly",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1108.gif"
+  },
+  {
+    "id": 145,
+    "name": "Side Leg Raises",
+    "matchedTo": "Leg Raise",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif"
+  },
+  {
+    "id": 146,
+    "name": "Mini Loop Band Alternating Lateral Shoulder Raise",
+    "matchedTo": "Band Lateral Raise",
+    "score": 0.42857142857142855,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/422.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/422.gif"
+  },
+  {
+    "id": 148,
+    "name": "Cross Body Hammer Curls",
+    "matchedTo": "Dumbbell Hammer Curl Cross Body",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/98.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/98.gif"
+  },
+  {
+    "id": 149,
+    "name": "Dumbbell Incline Fly",
+    "matchedTo": "Dumbbell Incline Fly",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/165.gif"
+  },
+  {
+    "id": 150,
+    "name": "Dumbbell Lateral Raise",
+    "matchedTo": "Dumbbell Lateral Raise",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/32.gif"
+  },
+  {
+    "id": 151,
+    "name": "Cable Shoulder External Rotation",
+    "matchedTo": "Cable External Rotation",
+    "score": 0.75,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/873.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/873.gif"
+  },
+  {
+    "id": 152,
+    "name": "Cable Shoulder Internal Rotation",
+    "matchedTo": "Cable Internal Rotation",
+    "score": 0.75,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/18.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/18.gif"
+  },
+  {
+    "id": 153,
+    "name": "Single-Leg Glute Bridge with External Rotation",
+    "matchedTo": "Bridge",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif"
+  },
+  {
+    "id": 154,
+    "name": "Bodyweight Bulgarian Split Squat",
+    "matchedTo": "Split Squat",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1341.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1341.gif"
+  },
+  {
+    "id": 155,
+    "name": "Push Up on Knees",
+    "matchedTo": "Push Up",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif"
+  },
+  {
+    "id": 156,
+    "name": "Cable Tricep Pushdown",
+    "matchedTo": "Cable Tricep Pushdown Rope",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/159.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/159.gif"
+  },
+  {
+    "id": 157,
+    "name": "Ankle Circles",
+    "matchedTo": "Ankle Circles",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/289.gif"
+  },
+  {
+    "id": 158,
+    "name": "Kneeling Squat",
+    "matchedTo": "Barbell Kneeling Squat",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/391.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/391.gif"
+  },
+  {
+    "id": 159,
+    "name": "Single Arm Lat Pulldown",
+    "matchedTo": "Cable One Arm Lat Pulldown",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/825.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/825.gif"
+  },
+  {
+    "id": 160,
+    "name": "Bent Over Barbell Row",
+    "matchedTo": "Barbell Bent Over Row",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/3.gif"
+  },
+  {
+    "id": 161,
+    "name": "Dumbbell Floor Press",
+    "matchedTo": "Dumbbell Bench Press",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/26.gif"
+  },
+  {
+    "id": 163,
+    "name": "Smith Machine Bench Press",
+    "matchedTo": "Smith Machine Bench Press",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/174.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/174.gif"
+  },
+  {
+    "id": 164,
+    "name": "Cable Wood Chop",
+    "matchedTo": "Cable Wood Chop",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/744.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/744.gif"
+  },
+  {
+    "id": 165,
+    "name": "Mountain Climber",
+    "matchedTo": "Mountain Climber",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/484.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/484.gif"
+  },
+  {
+    "id": 166,
+    "name": "Inchworm",
+    "matchedTo": "Inchworm",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1340.gif"
+  },
+  {
+    "id": 168,
+    "name": "Cable One Arm Tricep Side Extension",
+    "matchedTo": "Cable One Arm Tricep Extension",
+    "score": 0.8333333333333334,
+    "newDescription": "The standing one arm low-pulley triceps extension exercise uses a cable machine to target and isolate the tricep muscles.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/246.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/246.gif"
+  },
+  {
+    "id": 169,
+    "name": "Machine Tricep Dip",
+    "matchedTo": "Dip",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/24.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/24.gif"
+  },
+  {
+    "id": 172,
+    "name": "Kettlebell Swing American",
+    "matchedTo": "Kettlebell Swing",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1385.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1385.gif"
+  },
+  {
+    "id": 173,
+    "name": "Cable Rope Overhead Triceps Extension",
+    "matchedTo": "Cable Rope Overhead Tricep Extension",
+    "score": 0.6666666666666666,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/155.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/155.gif"
+  },
+  {
+    "id": 174,
+    "name": "Loop Band Shoulder Squeeze",
+    "matchedTo": "Band Shoulder Press",
+    "score": 0.4,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/445.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/445.gif"
+  },
+  {
+    "id": 175,
+    "name": "Overhead Cable Bicep Curl",
+    "matchedTo": "Cable Bicep Curl",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/102.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/102.gif"
+  },
+  {
+    "id": 176,
+    "name": "Seated Dumbbell Curl",
+    "matchedTo": "Dumbbell Seated Bicep Curl",
+    "score": 0.75,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/100.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/100.gif"
+  },
+  {
+    "id": 177,
+    "name": "Machine Lateral Raise",
+    "matchedTo": "Machine Lateral Shoulder Raise ",
+    "score": 0.75,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/770.gif"
+  },
+  {
+    "id": 178,
+    "name": "Cable One Arm Underhand Tricep Extension",
+    "matchedTo": "Cable One Arm Tricep Extension",
+    "score": 0.8333333333333334,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/246.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/246.gif"
+  },
+  {
+    "id": 179,
+    "name": "Kettlebell Swing",
+    "matchedTo": "Kettlebell Swing",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1385.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1385.gif"
+  },
+  {
+    "id": 180,
+    "name": "Loop Band Bent Over Row",
+    "matchedTo": "Barbell Bent Over Row",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/3.gif"
+  },
+  {
+    "id": 182,
+    "name": "Front Plate Raise",
+    "matchedTo": "Weight Plate Front Raise",
+    "score": 0.75,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/412.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/412.gif"
+  },
+  {
+    "id": 184,
+    "name": "Machine Bicep Curl",
+    "matchedTo": "Machine Bicep Curl Reverse Grip",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1249.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1249.gif"
+  },
+  {
+    "id": 185,
+    "name": "Scissor Kick",
+    "matchedTo": "Scissor Kick",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/340.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/340.gif"
+  },
+  {
+    "id": 186,
+    "name": "Cable Underhand Tricep Pushdown",
+    "matchedTo": "Cable Tricep Pushdown Rope",
+    "score": 0.6,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/159.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/159.gif"
+  },
+  {
+    "id": 188,
+    "name": "Kettlebell Row",
+    "matchedTo": "Kettlebell Row",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/362.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/362.gif"
+  },
+  {
+    "id": 189,
+    "name": "Standing Dumbbell Shoulder Press",
+    "matchedTo": "Dumbbell Shoulder Press",
+    "score": 0.85,
+    "newDescription": "Steps :\n\n1.) Start off standing up straight with your feet shoulder width apart and your arms rested at your sides, holding dumbbells in each hand.\n\n2.) Raise the dumbbells to head level so that your arms are creating a 90 degree angle.\n\n3.) Slowly push the dumbbells up, by extending through the elbows, over your head, feeling a stretch in your shoulders.",
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/884.gif"
+  },
+  {
+    "id": 190,
+    "name": "EZ-Bar Overhead Tricep Extension",
+    "matchedTo": "Barbell Overhead Tricep Extension",
+    "score": 0.6,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/244.gif"
+  },
+  {
+    "id": 192,
+    "name": "Iron Cross",
+    "matchedTo": "Iron Cross Stretch",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/748.gif"
+  },
+  {
+    "id": 193,
+    "name": "Dumbbell Glute Bridge",
+    "matchedTo": "Bridge",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif"
+  },
+  {
+    "id": 194,
+    "name": "Alternating Heel Touch",
+    "matchedTo": "Alternating Heel Touch",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/58.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/58.gif"
+  },
+  {
+    "id": 195,
+    "name": "Reverse Barbell Curl",
+    "matchedTo": "Barbell Reverse Curl",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/111.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/111.gif"
+  },
+  {
+    "id": 196,
+    "name": "Goblet Squat",
+    "matchedTo": "Kettlebell Goblet Squat",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/479.gif"
+  },
+  {
+    "id": 197,
+    "name": "Landmine Romanian Deadlift",
+    "matchedTo": "Barbell Romanian Deadlift",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/199.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/199.gif"
+  },
+  {
+    "id": 198,
+    "name": "Scissor Crossover Kick",
+    "matchedTo": "Scissor Kick",
+    "score": 0.6666666666666666,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/340.gif"
+  },
+  {
+    "id": 199,
+    "name": "Smith Machine Bent Over Row",
+    "matchedTo": "Smith Machine Bent Over Row",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/91.gif"
+  },
+  {
+    "id": 200,
+    "name": "Cable Knee Drive",
+    "matchedTo": "Cable Knee Raise Supine",
+    "score": 0.4,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/985.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/985.gif"
+  },
+  {
+    "id": 201,
+    "name": "Incline EZ-Bar Curl",
+    "matchedTo": "Dumbbell Incline Curl",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/106.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/106.gif"
+  },
+  {
+    "id": 202,
+    "name": "Barbell Bicep Drag Curl",
+    "matchedTo": "Barbell Bicep Drag Curl",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/364.gif"
+  },
+  {
+    "id": 204,
+    "name": "Floor Press",
+    "matchedTo": "Kettlebell Alternating Floor Press",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/367.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/367.gif"
+  },
+  {
+    "id": 206,
+    "name": "Vertical Leg Raise",
+    "matchedTo": "Leg Raise",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif"
+  },
+  {
+    "id": 207,
+    "name": "Push Press",
+    "matchedTo": "Barbell Push Press",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/438.gif"
+  },
+  {
+    "id": 208,
+    "name": "Dumbbell Back Fly",
+    "matchedTo": "Dumbbell Fly",
+    "score": 0.6666666666666666,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/41.gif"
+  },
+  {
+    "id": 209,
+    "name": "Good Morning",
+    "matchedTo": "Barbell Good Morning",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/7.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/7.gif"
+  },
+  {
+    "id": 211,
+    "name": "Concentration Curl",
+    "matchedTo": "Dumbbell Concentration Curl",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/107.gif"
+  },
+  {
+    "id": 212,
+    "name": "Assisted Chin Up",
+    "matchedTo": "Machine Assisted Chin Up",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1263.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1263.gif"
+  },
+  {
+    "id": 213,
+    "name": "Lateral Cable Tricep Extension",
+    "matchedTo": "Cable Incline Tricep Extension",
+    "score": 0.6,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/227.gif"
+  },
+  {
+    "id": 214,
+    "name": "Single Arm Bottoms-up Kettlebell Press",
+    "matchedTo": "Kettlebell One Arm Push Press",
+    "score": 0.42857142857142855,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/433.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/433.gif"
+  },
+  {
+    "id": 215,
+    "name": "Weighted Wall Sit",
+    "matchedTo": "Weight Plate Wall Sit",
+    "score": 0.4,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1384.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1384.gif"
+  },
+  {
+    "id": 216,
+    "name": "Sit Up",
+    "matchedTo": "Sit Up",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/345.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/345.gif"
+  },
+  {
+    "id": 217,
+    "name": "Romanian Deadlift",
+    "matchedTo": "Barbell Romanian Deadlift",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/199.gif"
+  },
+  {
+    "id": 218,
+    "name": "Dumbbell Tricep Extension",
+    "matchedTo": "Dumbbell Tricep Extension",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/247.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/247.gif"
+  },
+  {
+    "id": 219,
+    "name": "Tuck Crunch",
+    "matchedTo": "Tuck Crunch",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/71.gif"
+  },
+  {
+    "id": 220,
+    "name": "Wide Grip Barbell Curl",
+    "matchedTo": "Barbell Curl",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/112.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/112.gif"
+  },
+  {
+    "id": 221,
+    "name": "Dumbbell Drag Curl",
+    "matchedTo": "Dumbbell Incline Curl",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/106.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/106.gif"
+  },
+  {
+    "id": 222,
+    "name": "Leg Raise",
+    "matchedTo": "Leg Raise",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif"
+  },
+  {
+    "id": 224,
+    "name": "Balance Trainer Crunch",
+    "matchedTo": "Crunch",
+    "score": 0.85,
+    "newDescription": "The crunch exercise is the most common abdominal exercise and often is improperly performed.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/77.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/77.gif"
+  },
+  {
+    "id": 225,
+    "name": "Arnold Dumbbell Press",
+    "matchedTo": "Dumbbell Arnold Press",
+    "score": 1,
+    "newDescription": "Steps :\n\n1.) Begin by standing up straight with feet shoulder width apart and holding a dumbbell in each hand.\n\n2.) Slowly, while using your thighs, raise the dumbbells to shoulder height and rotate your palms so that they are facing in towards your body.",
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1122.gif"
+  },
+  {
+    "id": 226,
+    "name": "Decline Crunch",
+    "matchedTo": "Decline Crunch",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/78.gif"
+  },
+  {
+    "id": 227,
+    "name": "Alternating Superman",
+    "matchedTo": "Superman",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/94.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/94.gif"
+  },
+  {
+    "id": 228,
+    "name": "Smith Machine Squat",
+    "matchedTo": "Smith Machine Squat",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/135.gif"
+  },
+  {
+    "id": 229,
+    "name": "Seated Dumbbell Rear Delt Raise",
+    "matchedTo": "Dumbbell Rear Delt Row",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1330.gif"
+  },
+  {
+    "id": 230,
+    "name": "Incline Hammer Curl",
+    "matchedTo": "Dumbbell Incline Hammer Curl",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/804.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/804.gif"
+  },
+  {
+    "id": 231,
+    "name": "Decline Sit Up",
+    "matchedTo": "Sit Up",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/345.gif"
+  },
+  {
+    "id": 233,
+    "name": "Single Arm Kettlebell Swing",
+    "matchedTo": "Kettlebell Swing",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1385.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1385.gif"
+  },
+  {
+    "id": 234,
+    "name": "Incline Dumbbell Curl",
+    "matchedTo": "Dumbbell Incline Curl",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/106.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/106.gif"
+  },
+  {
+    "id": 235,
+    "name": "Balance Trainer Push Up",
+    "matchedTo": "Push Up",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif"
+  },
+  {
+    "id": 236,
+    "name": "Biceps Curl To Shoulder Press",
+    "matchedTo": "Dumbbell Squat Curl To Shoulder Press",
+    "score": 0.5714285714285714,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1368.gif"
+  },
+  {
+    "id": 237,
+    "name": "Oblique Crunch",
+    "matchedTo": "Oblique Crunch",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/64.gif"
+  },
+  {
+    "id": 238,
+    "name": "Single Arm High Cable Tricep Extension",
+    "matchedTo": "Cable High Pulley Tricep Extension",
+    "score": 0.5714285714285714,
+    "newDescription": "Steps :\n\n1.) Start by setting up a high cable pulley machine with a straight bar and stand with your back facing the machine, grabbing the bar with an overhand grip.\n\n2.) Bend down at the waist so that your body is almost parallel with the floor and keep a staggered position so that one leg is in front of the other.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1170.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1170.gif"
+  },
+  {
+    "id": 240,
+    "name": "Decline Reverse Crunch",
+    "matchedTo": "Decline Reverse Crunch",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/65.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/65.gif"
+  },
+  {
+    "id": 241,
+    "name": "Stability Ball Hip Thrust",
+    "matchedTo": "Stability Ball Hip Thrust ",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/614.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/614.gif"
+  },
+  {
+    "id": 243,
+    "name": "Forward Lunge with Twist",
+    "matchedTo": "Forward Lunge With Rotation",
+    "score": 0.6,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1429.gif"
+  },
+  {
+    "id": 244,
+    "name": "Dumbbell Standing Hammer Curl To Front Press",
+    "matchedTo": "Dumbbell Hammer Curl To Press",
+    "score": 0.7142857142857143,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1379.gif"
+  },
+  {
+    "id": 247,
+    "name": "Dumbbell Squat To Shoulder Press",
+    "matchedTo": "Dumbbell Squat To Shoulder Press",
+    "score": 1,
+    "newDescription": "Performing a dumbbell squat to shoulder press is a compound exercise that targets multiple muscle groups, including the quadriceps, glutes, shoulders, and triceps.",
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1366.gif"
+  },
+  {
+    "id": 248,
+    "name": "Dumbbell Sumo Squat",
+    "matchedTo": "Dumbbell Squat",
+    "score": 0.6666666666666666,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/131.gif"
+  },
+  {
+    "id": 249,
+    "name": "Barbell Front Raise",
+    "matchedTo": "Barbell Front Raise",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/6.gif"
+  },
+  {
+    "id": 250,
+    "name": "Standing Single Arm Dumbbell Shoulder Press",
+    "matchedTo": "Dumbbell Shoulder Press",
+    "score": 0.85,
+    "newDescription": "Steps :\n\n1.) Start off standing up straight with your feet shoulder width apart and your arms rested at your sides, holding dumbbells in each hand.\n\n2.) Raise the dumbbells to head level so that your arms are creating a 90 degree angle.\n\n3.) Slowly push the dumbbells up, by extending through the elbows, over your head, feeling a stretch in your shoulders.",
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/884.gif"
+  },
+  {
+    "id": 252,
+    "name": "Ab Rollout",
+    "matchedTo": "Barbell Ab Rollout Kneeling",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/294.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/294.gif"
+  },
+  {
+    "id": 254,
+    "name": "Kettlebell Upright Row",
+    "matchedTo": "Kettlebell Row",
+    "score": 0.6666666666666666,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/362.gif"
+  },
+  {
+    "id": 255,
+    "name": "Loop Band Bicep Curl",
+    "matchedTo": "Band Alternating Bicep Curl ",
+    "score": 0.6,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/283.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/283.gif"
+  },
+  {
+    "id": 256,
+    "name": "Dumbbell Squeeze Press",
+    "matchedTo": "Dumbbell Bench Press",
+    "score": 0.5,
+    "newDescription": "The Dumbbell Bench Press is an effective exercise for targeting the chest, shoulders, and triceps. Here’s a step-by-step guide to performing the Dumbbell Bench Press correctly:",
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/26.gif"
+  },
+  {
+    "id": 257,
+    "name": "Bird Dog Rows",
+    "matchedTo": "Bird Dog ",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/666.gif"
+  },
+  {
+    "id": 258,
+    "name": "Single Arm Dumbbell Tricep Extension",
+    "matchedTo": "Dumbbell Tricep Extension",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/247.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/247.gif"
+  },
+  {
+    "id": 260,
+    "name": "Dumbbell Standing Front Press",
+    "matchedTo": "Dumbbell Bench Press",
+    "score": 0.4,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/26.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/26.gif"
+  },
+  {
+    "id": 261,
+    "name": "Dumbbell Preacher Curls",
+    "matchedTo": "Dumbbell Preacher Curl",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/274.gif"
+  },
+  {
+    "id": 262,
+    "name": "Bench Dip",
+    "matchedTo": "Bench Dip",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/229.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/229.gif"
+  },
+  {
+    "id": 263,
+    "name": "Single Leg Hip Thrust",
+    "matchedTo": "Leg Raise With Hip Thrust",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/988.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/988.gif"
+  },
+  {
+    "id": 265,
+    "name": "TRX Chest Fly",
+    "matchedTo": "Cable Decline Chest Fly",
+    "score": 0.4,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1279.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1279.gif"
+  },
+  {
+    "id": 266,
+    "name": "Barbell Ab Rollout",
+    "matchedTo": "Barbell Ab Rollout",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/66.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/66.gif"
+  },
+  {
+    "id": 267,
+    "name": "Walkout to Push Up",
+    "matchedTo": "Push Up",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif"
+  },
+  {
+    "id": 268,
+    "name": "TRX Bridge",
+    "matchedTo": "Bridge",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif"
+  },
+  {
+    "id": 271,
+    "name": "Flutter Kicks",
+    "matchedTo": "Flutter Kick",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/198.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/198.gif"
+  },
+  {
+    "id": 272,
+    "name": "Balance Trainer Mountain Climber",
+    "matchedTo": "Mountain Climber",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/484.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/484.gif"
+  },
+  {
+    "id": 276,
+    "name": "Alternating Dumbbell Bench Press",
+    "matchedTo": "Dumbbell Bench Press",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/26.gif"
+  },
+  {
+    "id": 277,
+    "name": "Seated Back Extension",
+    "matchedTo": "Machine Back Extension",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1259.gif"
+  },
+  {
+    "id": 279,
+    "name": "Machine Tricep Extension",
+    "matchedTo": "Machine Tricep Extension",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/253.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/253.gif"
+  },
+  {
+    "id": 280,
+    "name": "Dual Kettlebell Front Squat",
+    "matchedTo": "Kettlebell Front Squat",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/478.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/478.gif"
+  },
+  {
+    "id": 281,
+    "name": "Single Arm Floor Press",
+    "matchedTo": "Kettlebell One Arm Floor Press",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/373.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/373.gif"
+  },
+  {
+    "id": 283,
+    "name": "Standing Hip Adduction",
+    "matchedTo": "Hip Adduction",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/746.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/746.gif"
+  },
+  {
+    "id": 284,
+    "name": "Smith Machine Stiff-Legged Deadlift",
+    "matchedTo": "Smith Machine Deadlift",
+    "score": 0.75,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/189.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/189.gif"
+  },
+  {
+    "id": 285,
+    "name": "Mini Loop Band Alternating Leg Raises",
+    "matchedTo": "Leg Raise",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif"
+  },
+  {
+    "id": 287,
+    "name": "Single Leg Glute Bridge",
+    "matchedTo": "Single Leg Glute Bridge",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/865.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/865.gif"
+  },
+  {
+    "id": 288,
+    "name": "Hammerstrength Chest Press",
+    "matchedTo": "Leverage Chest Press",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/851.gif"
+  },
+  {
+    "id": 289,
+    "name": "Mini Loop Band Squat",
+    "matchedTo": "Band Squat",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/215.gif"
+  },
+  {
+    "id": 290,
+    "name": "Banded Glute Bridge with Alternating Leg Raise",
+    "matchedTo": "Leg Raise",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif"
+  },
+  {
+    "id": 291,
+    "name": "Leg Raise With Dumbbell Pull Over",
+    "matchedTo": "Leg Raise",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/44.gif"
+  },
+  {
+    "id": 292,
+    "name": "Mini Loop Band Lateral Shoulder Raise",
+    "matchedTo": "Band Lateral Raise",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/422.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/422.gif"
+  },
+  {
+    "id": 294,
+    "name": "Elevated Hip Bridge",
+    "matchedTo": "Bridge",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif"
+  },
+  {
+    "id": 296,
+    "name": "Tricep Push Up",
+    "matchedTo": "Tricep Push Up",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/240.gif"
+  },
+  {
+    "id": 297,
+    "name": "Dumbbell Hang Snatch",
+    "matchedTo": "Barbell Hang Snatch",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/902.gif"
+  },
+  {
+    "id": 298,
+    "name": "Straight Leg Kickback",
+    "matchedTo": "Cable Leg Kickback",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1313.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1313.gif"
+  },
+  {
+    "id": 299,
+    "name": "Reverse Dumbbell Curl",
+    "matchedTo": "Dumbbell Reverse Bicep Curl ",
+    "score": 0.75,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/285.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/285.gif"
+  },
+  {
+    "id": 300,
+    "name": "Dumbbell Pullover",
+    "matchedTo": "Dumbbell Pullover",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/375.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/375.gif"
+  },
+  {
+    "id": 301,
+    "name": "Elbows Out Bent Over Dumbbell Row",
+    "matchedTo": "Dumbbell Bent Over Row",
+    "score": 0.6666666666666666,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/88.gif"
+  },
+  {
+    "id": 303,
+    "name": "Kettlebell Overhead Press",
+    "matchedTo": "Kettlebell Military Press",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/458.gif"
+  },
+  {
+    "id": 305,
+    "name": "Bear Crawl",
+    "matchedTo": "Bear Crawl",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1426.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1426.gif"
+  },
+  {
+    "id": 306,
+    "name": "Standing Arnold Press",
+    "matchedTo": "Dumbbell Arnold Press",
+    "score": 0.5,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1122.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1122.gif"
+  },
+  {
+    "id": 307,
+    "name": "Hand Release Push Up",
+    "matchedTo": "Push Up",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif"
+  },
+  {
+    "id": 310,
+    "name": "Around the Worlds",
+    "matchedTo": "Dumbbell Around The World",
+    "score": 0.4,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/368.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/368.gif"
+  },
+  {
+    "id": 312,
+    "name": "Kettlebell Single Arm Overhead Lunge",
+    "matchedTo": "Kettlebell One Arm Overhead Squat",
+    "score": 0.42857142857142855,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/491.gif"
+  },
+  {
+    "id": 313,
+    "name": "Zottman Curl",
+    "matchedTo": "Dumbbell Zottman Curl",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/276.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/276.gif"
+  },
+  {
+    "id": 314,
+    "name": "Incline Tricep Push Up",
+    "matchedTo": "Push Up",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif"
+  },
+  {
+    "id": 316,
+    "name": "Decline Push Up",
+    "matchedTo": "Push Up",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif"
+  },
+  {
+    "id": 317,
+    "name": "Calf Raise",
+    "matchedTo": "Machine Seated Calf Raise",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/144.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/144.gif"
+  },
+  {
+    "id": 318,
+    "name": "Incline Push Up",
+    "matchedTo": "Push Up",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/47.gif"
+  },
+  {
+    "id": 319,
+    "name": "Burpee",
+    "matchedTo": "Burpee",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1339.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1339.gif"
+  },
+  {
+    "id": 322,
+    "name": "Dumbbell Underhand Front Raise",
+    "matchedTo": "Dumbbell Front Raise",
+    "score": 0.75,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/413.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/413.gif"
+  },
+  {
+    "id": 324,
+    "name": "Dumbbell Side Bend",
+    "matchedTo": "Dumbbell Side Bend",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/80.gif"
+  },
+  {
+    "id": 325,
+    "name": "Burpee High Jump",
+    "matchedTo": "Burpee",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1339.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1339.gif"
+  },
+  {
+    "id": 327,
+    "name": "Mini Loop Band Plank with Straight Leg Kickback",
+    "matchedTo": "Plank",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/631.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/631.gif"
+  },
+  {
+    "id": 329,
+    "name": "Mini Loop Band Around the World Plank",
+    "matchedTo": "Plank",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/631.gif"
+  },
+  {
+    "id": 330,
+    "name": "Mini Loop Band Mountain Climber",
+    "matchedTo": "Mountain Climber",
+    "score": 0.85,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/484.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/484.gif"
+  },
+  {
+    "id": 331,
+    "name": "Star Jump",
+    "matchedTo": "Star Jump",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/953.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/953.gif"
+  },
+  {
+    "id": 333,
+    "name": "Jump Squat",
+    "matchedTo": "Jump Squat",
+    "score": 1,
+    "newDescription": null,
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/476.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/476.gif"
+  },
+  {
+    "id": 334,
+    "name": "Hammerstrength Incline Chest Press",
+    "matchedTo": "Machine Incline Chest Press",
+    "score": 0.6,
+    "newDescription": null,
+    "newImageUrl": null,
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/178.gif"
+  },
+  {
+    "id": 335,
+    "name": "Walking - Treadmill",
+    "matchedTo": "Walking",
+    "score": 0.85,
+    "newDescription": "Walking, a form of cardio exercise, can be performed outside or on a treadmill and focuses upon burning calories, strengthening the core and leg muscles and increasing overall endurance and stamina",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/322.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/322.gif"
+  },
+  {
+    "id": 336,
+    "name": "Elliptical",
+    "matchedTo": "Elliptical Training",
+    "score": 0.85,
+    "newDescription": "The elliptical is a stationary exercise machine used to simulate walking, running or stair climbing.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/310.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/310.gif"
+  },
+  {
+    "id": 338,
+    "name": "Walking",
+    "matchedTo": "Walking",
+    "score": 1,
+    "newDescription": "Walking, a form of cardio exercise, can be performed outside or on a treadmill and focuses upon burning calories, strengthening the core and leg muscles and increasing overall endurance and stamina",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/322.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/322.gif"
+  },
+  {
+    "id": 339,
+    "name": "Cycling",
+    "matchedTo": "Road Cycling",
+    "score": 0.85,
+    "newDescription": "Road cycling is an exercise based upon racing bicycles that focuses on endurance, stamina, balance, coordination and bursts of speed.",
+    "newImageUrl": null,
+    "availableGif": null
+  },
+  {
+    "id": 340,
+    "name": "Rowing",
+    "matchedTo": "Rowing",
+    "score": 1,
+    "newDescription": "Rowing is a sport that involves racing across rivers, lakes or oceans.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/316.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/316.gif"
+  },
+  {
+    "id": 341,
+    "name": "Running - Treadmill",
+    "matchedTo": "Treadmill Running",
+    "score": 1,
+    "newDescription": "Treadmill running, just like regular running, uses the treadmill exercise equipment to burn calories, tone the body, increase stamina and endurance and is one of the most common forms of cardio exercises",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/321.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/321.gif"
+  },
+  {
+    "id": 342,
+    "name": "Plank",
+    "matchedTo": "Plank",
+    "score": 1,
+    "newDescription": "Steps : \n\n1.) Start by kneeling on all fours and aligning both hands right below your shoulders keep your knees beneath your hips.\n\n2.) Extend both of your feet out behind you and squeeze on your core muscles, making sure that your body is aligned straight \n\n3.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/631.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/631.gif"
+  },
+  {
+    "id": 345,
+    "name": "Seated Forward Bend",
+    "matchedTo": "Dumbbell Seated Side Bend",
+    "score": 0.4,
+    "newDescription": "Steps :\n\n1.) Start by sitting up straight on a bench with a dumbbell in each hand and arms at your sides.\n\n2.) While keeping your back straight and facing forward, slowly bend down to one side until you feel a stretch in your abs then return back to the starting position.\n\n3.) Continue on to the opposite side and repeat.\n\n4.) Repeat for as many reps and sets as desired.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/993.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/993.gif"
+  },
+  {
+    "id": 348,
+    "name": "Shin Box Hip Flexor",
+    "matchedTo": "Kneeling Hip Flexor",
+    "score": 0.4,
+    "newDescription": "Steps : \n\n1.) Begin by kneeling on the ground or mat keeping one knee on the floor and the opposite knee bent and foot flat on the floor.\n\n2.) Tighten up on your glutes and then do a pelvic tilt rocking on your back leg and hold for 15 to 30 seconds.\n\n3.) Switch legs and repeat.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/556.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/556.gif"
+  },
+  {
+    "id": 349,
+    "name": "Head Tilt",
+    "matchedTo": "Stability Ball Head Tilt",
+    "score": 0.85,
+    "newDescription": "Steps : \n\n1.) Start by sitting on either an exercise ball or bench, keeping your spine straight and knees bent.\n\n2.) Tilt your head in one direction and squeeze back with your shoulders feeling a stretch from your blade down to your lower back.\n\n3.) Hold for a few seconds and repeat in the opposite direction",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/555.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/555.gif"
+  },
+  {
+    "id": 351,
+    "name": "Reach Behind and Open",
+    "matchedTo": "Reach And Catch",
+    "score": 0.4,
+    "newDescription": "Steps :\n\n1.) Start by laying with your back flat on the floor, keeping your knees bent, feet together and arms extended in front of you with fingers interlaced.\n\n2.) Place your hands on your right thigh then slowly flex your abs and pull your hands up towards your knee until you feel a stretch in your abs.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/991.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/991.gif"
+  },
+  {
+    "id": 358,
+    "name": "Squat with Rotation",
+    "matchedTo": "Forward Lunge With Rotation",
+    "score": 0.4,
+    "newDescription": "Performing a forward lunge with rotation is a dynamic exercise that engages multiple muscle groups, including the legs, core, and obliques.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1429.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1429.gif"
+  },
+  {
+    "id": 359,
+    "name": "Downward Dog",
+    "matchedTo": "Downward Facing Dog",
+    "score": 0.6666666666666666,
+    "newDescription": "Steps : \n\n1.) Begin this position on all fours with your hands directly underneath your shoulders.\n\n2.) Push up with your hips towards the ceiling whilst extending your legs back.\n\n3.) Keep a straight line from your arms to through your spine and your tailbone down through your legs.\n\n4.) Hold this position for around 5 to 10 breaths, return to the starting position and repeat.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/510.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/510.gif"
+  },
+  {
+    "id": 361,
+    "name": "Superman Hold",
+    "matchedTo": "Superman",
+    "score": 0.85,
+    "newDescription": "The superman exercise is great for the lower stretching and strengthening back and core muscles.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/94.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/94.gif"
+  },
+  {
+    "id": 362,
+    "name": "Seated Twist",
+    "matchedTo": "Seated Twist",
+    "score": 1,
+    "newDescription": "Steps : \n\n1.) Start by sitting cross legged and keep your ankles positioned underneath the knees.\n\n2.) Take your fingertips on your right hand and place them on the floor in front of you whilst your left fingertips are placed behind your body.\n\n3.) With fingers in place put pressure down on the ground, twisting to your left or right, using more of your spine in the motion, and exhale to keep twisting deeper.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/507.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/507.gif"
+  },
+  {
+    "id": 364,
+    "name": "Child's Pose",
+    "matchedTo": "Childs Pose",
+    "score": 1,
+    "newDescription": "Steps : \n\n1.) Begin this workout by sitting on your knees, keeping them tightly together and fold your body over your thighs. \n\n2.) Take your forehead and rest it to the floor and let your hands stretch back towards your feet, staying relaxed in through the motion.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/504.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/504.gif"
+  },
+  {
+    "id": 369,
+    "name": "Swimming",
+    "matchedTo": "Swimming",
+    "score": 1,
+    "newDescription": "Swimming is a great way to tone your body and improve overall fitness.",
+    "newImageUrl": null,
+    "availableGif": null
+  },
+  {
+    "id": 372,
+    "name": "Side Bridge",
+    "matchedTo": "Side Bridge",
+    "score": 1,
+    "newDescription": "The side bridge exercise is a great core workout to improve strength and conditioning.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/75.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/75.gif"
+  },
+  {
+    "id": 373,
+    "name": "Stability Ball Hip Bridge",
+    "matchedTo": "Bridge",
+    "score": 0.85,
+    "newDescription": "The bridge exercise is a great exercise to help build and maintain core strength",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif"
+  },
+  {
+    "id": 376,
+    "name": "Hiking",
+    "matchedTo": "Outdoor Hiking",
+    "score": 0.85,
+    "newDescription": "Outdoor hiking is a physical activity that involves walking or trekking on trails, often through natural environments like forests, mountains, or parks. It can vary in intensity, from easy flat trails to steep, challenging climbs.",
+    "newImageUrl": null,
+    "availableGif": null
+  },
+  {
+    "id": 377,
+    "name": "Prone Flutter Kicks",
+    "matchedTo": "Flutter Kick",
+    "score": 0.85,
+    "newDescription": "The flutter kick exercise works and strengthens the hamstrings and the muscles on the back of the thigh.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/198.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/198.gif"
+  },
+  {
+    "id": 378,
+    "name": "Reverse Plank",
+    "matchedTo": "Plank",
+    "score": 0.85,
+    "newDescription": "Steps : \n\n1.) Start by kneeling on all fours and aligning both hands right below your shoulders keep your knees beneath your hips.\n\n2.) Extend both of your feet out behind you and squeeze on your core muscles, making sure that your body is aligned straight \n\n3.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/631.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/631.gif"
+  },
+  {
+    "id": 379,
+    "name": "Mini Loop Band Glute Bridge",
+    "matchedTo": "Bridge",
+    "score": 0.85,
+    "newDescription": "The bridge exercise is a great exercise to help build and maintain core strength",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/194.gif"
+  },
+  {
+    "id": 381,
+    "name": "Jumping Jack",
+    "matchedTo": "Jumping Jacks",
+    "score": 0.85,
+    "newDescription": "This is a classic bodyweight exercise that can be used in a circuit as well as part of a dynamic warm-up.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1347.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1347.gif"
+  },
+  {
+    "id": 382,
+    "name": "Running",
+    "matchedTo": "Running",
+    "score": 1,
+    "newDescription": "Running is one of the most common and effect forms of exercise for muscle toning, weight loss and keeping your lungs and body in shape.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/317.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/317.gif"
+  },
+  {
+    "id": 383,
+    "name": "Incline Bench Press",
+    "matchedTo": "Dumbbell Incline Bench Press",
+    "score": 0.85,
+    "newDescription": "The dumbbell incline bench press is an effective exercise for targeting the upper portion of the pectoral muscles, as well as the shoulders and triceps. Here are the steps to perform the exercise correctly:",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/31.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/31.gif"
+  },
+  {
+    "id": 384,
+    "name": "One Arm Dumbbell Row",
+    "matchedTo": "Dumbbell One Arm Row",
+    "score": 1,
+    "newDescription": "Steps : \n\n1.) Start by kneeling over the side of a bench placing the knee and hand of the supporting arm on the bench and then position the opposite foot on the floor.\n\n2.) Grab a dumbbell from the floor opposite of the side supporting the body and pull the dumbbell up slowly to your chest, feeling a stretch in your back until it almost makes contact with your chest.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/90.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/90.gif"
+  },
+  {
+    "id": 385,
+    "name": "Seated Barbell Press",
+    "matchedTo": "Barbell Seated Press",
+    "score": 1,
+    "newDescription": "Steps :\n\n1.) Start seated at either the end of a flat bench or bench press set-up with your feet on the floor in front of you, holding a weighted dumbbell in front of your chest at shoulder level.\n\n2.) Slowly elevate the barbell up and above your head, squeezing your shoulders on the push up, and hold for a count.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1143.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1143.gif"
+  },
+  {
+    "id": 389,
+    "name": "Leg Press Calf Raise",
+    "matchedTo": "Calf Press On Leg Press",
+    "score": 0.6,
+    "newDescription": "The calf press on a leg press exercise uses a leg press machine to help work and strengthen your calf muscles.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/140.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/140.gif"
+  },
+  {
+    "id": 390,
+    "name": "Twisting Hanging Knee Raise",
+    "matchedTo": "Hanging Knee Raise",
+    "score": 0.85,
+    "newDescription": "Steps :\n\n1.) Start off by grabbing onto a hanging grip or pull up bar, with a comfortable distance between your hands and a strong grip.\n\n2.) Then slowly lift your knees in towards your chest until you feel tension on your lower abs.\n\n3.) Hold this position for a few seconds then return back to the starting position and repeat for the desired reps and sets.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/690.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/690.gif"
+  },
+  {
+    "id": 391,
+    "name": "Cable Tricep Extensions",
+    "matchedTo": "Cable Tricep Kickback",
+    "score": 0.5,
+    "newDescription": "Steps :\n\n1.) Start by setting up a handle on a low pulley cable machine, facing the machine with your back bent keeping it parallel with the ground.\n\n2.) Grab the handle, bring it to your side and tuck your elbow in towards your body.\n\n3.) Slowly extend your arm back as far as possible, squeezing your tricep and hold for a count.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1164.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1164.gif"
+  },
+  {
+    "id": 392,
+    "name": "EZ Bar Preacher Curl",
+    "matchedTo": "Ez Bar Preacher Curl Close Grip",
+    "score": 0.85,
+    "newDescription": "Steps :\n\n1.) Start by setting up either weighted EZ bar with the weight that you would like to use to perform this exercise.\n\n2.) Then sit down on the bench with your feet flat on the floor and arms extended out grabbing onto the bar with a close underhand grip.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/1299.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/1299.gif"
+  },
+  {
+    "id": 393,
+    "name": "Stiff Leg Deadlift",
+    "matchedTo": "Barbell Stiff Leg Deadlift",
+    "score": 0.85,
+    "newDescription": "Steps :\n\n1.) Start by standing up straight with your feet shoulder width apart and your arms at your sides with a weighted barbell held at thigh level.\n\n2.) While keeping your knees still, slowly lower your upper body and the barbell towards the floor over your feet.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/954.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/954.gif"
+  },
+  {
+    "id": 394,
+    "name": "Walking Dumbbell Lunge",
+    "matchedTo": "Dumbbell Walking Lunge",
+    "score": 1,
+    "newDescription": "The dumbbell walking lunge exercise helps strengthen the leg and core muscles through constant motion.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/201.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/201.gif"
+  },
+  {
+    "id": 395,
+    "name": "Seated Calf Raise",
+    "matchedTo": "Machine Seated Calf Raise",
+    "score": 0.85,
+    "newDescription": "The seated calf raise exercise is one of the simplest and most effective calf workouts.",
+    "newImageUrl": "https://cdn.jefit.com/assets/img/exercises/gifs/144.gif",
+    "availableGif": "https://cdn.jefit.com/assets/img/exercises/gifs/144.gif"
+  }
+]

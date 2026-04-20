@@ -2,6 +2,7 @@
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
   import ExerciseSearch from '$lib/ExerciseSearch.svelte';
+  import { showToast } from '$lib/toast';
 
   interface LocalSet {
     tempId: number;
@@ -17,7 +18,7 @@
 
   const KG_TO_LBS = 2.20462;
 
-  let date = $state(new Date().toISOString().split('T')[0]);
+  let date = $state((() => { const _d = new Date(); return `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`; })());
   let exercises: LocalExercise[] = $state([]);
   let showSearch = $state(false);
   let saving = $state(false);
@@ -52,7 +53,7 @@
 
   async function saveWorkout() {
     if (exercises.length === 0) {
-      alert('Add at least one exercise');
+      showToast('Add at least one exercise', 'info');
       return;
     }
     saving = true;
@@ -84,14 +85,14 @@
 
       goto('/history');
     } catch {
-      alert('Failed to save workout');
+      showToast('Failed to save workout', 'error');
     } finally {
       saving = false;
     }
   }
 </script>
 
-<div class="p-4 max-w-lg mx-auto">
+<div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   <div class="flex items-center justify-between mb-6">
     <a href="/history" class="text-neutral-400 hover:text-white text-sm">← Back</a>
     <h1 class="text-xl font-bold">Log Workout</h1>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0f172a"/>
+  <!-- Dumbbell icon -->
+  <g transform="translate(256,256) rotate(-45)">
+    <!-- Bar -->
+    <rect x="-120" y="-10" width="240" height="20" rx="10" fill="#4ade80"/>
+    <!-- Left weight plates -->
+    <rect x="-160" y="-48" width="40" height="96" rx="8" fill="#4ade80"/>
+    <rect x="-184" y="-36" width="24" height="72" rx="6" fill="#22c55e"/>
+    <!-- Right weight plates -->
+    <rect x="120" y="-48" width="40" height="96" rx="8" fill="#4ade80"/>
+    <rect x="160" y="-36" width="24" height="72" rx="6" fill="#22c55e"/>
+    <!-- End caps -->
+    <rect x="-200" y="-20" width="16" height="40" rx="4" fill="#16a34a"/>
+    <rect x="184" y="-20" width="16" height="40" rx="4" fill="#16a34a"/>
+  </g>
+</svg>

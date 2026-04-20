@@ -1,22 +1,14 @@
 <script lang="ts">
-  import { api } from '$lib/api';
-  import { goto } from '$app/navigation';
+  import { cachedGet } from '$lib/api-cache.svelte';
 
-  let workouts: any[] = $state([]);
-  let loading = $state(true);
-
-  import { onMount } from 'svelte';
-  onMount(async () => {
-    try {
-      const data = await api<any[]>('/workouts');
-      // Show recent incomplete workouts or prompt to generate
-      workouts = [...data].reverse().slice(0, 5);
-    } catch {}
-    loading = false;
-  });
+  const workoutCache = cachedGet<any[]>('/workouts');
+  let workouts = $derived(
+    [...(workoutCache.data ?? [])].reverse().slice(0, 5)
+  );
+  let loading = $derived(workoutCache.loading);
 </script>
 
-<div class="p-4 max-w-lg mx-auto">
+<div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   <h1 class="text-2xl font-bold mb-6">Log Workout</h1>
 
   {#if loading}
@@ -41,7 +33,7 @@
             class="block rounded-xl p-4 hover:ring-1 hover:ring-green-500/30 transition-all"
             style="background-color: #1a1a1a;"
           >
-            <span class="font-medium">{new Date(w.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+            <span class="font-medium">{new Date(w.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
             {#if w.notes}
               <span class="ml-2 text-sm text-neutral-500">{w.notes}</span>
             {/if}
