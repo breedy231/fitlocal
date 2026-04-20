@@ -39,6 +39,7 @@ export const sets = sqliteTable('sets', {
   rpe: real('rpe'),
   multiplier: real('multiplier').default(1.0),
   durationSeconds: integer('duration_seconds'),
+  completed: integer('completed', { mode: 'boolean' }).default(false),
 });
 
 export const muscleGroups = sqliteTable('muscle_groups', {

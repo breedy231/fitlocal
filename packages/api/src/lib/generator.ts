@@ -32,28 +32,28 @@ const LOWER_TARGETS: [string, number][] = [
 ];
 
 const PUSH_TARGETS: [string, number][] = [
-  ['chest', 4],
-  ['shoulders', 3],
-  ['triceps', 3],
+  ['chest', 3],
+  ['shoulders', 2],
+  ['triceps', 2],
 ];
 
 const PULL_TARGETS: [string, number][] = [
-  ['back', 4],
-  ['biceps', 3],
+  ['back', 3],
+  ['biceps', 2],
   ['shoulders', 2],
 ];
 
 const LEGS_TARGETS: [string, number][] = [
-  ['quads', 3],
-  ['hamstrings', 3],
-  ['glutes', 3],
-  ['calves', 2],
+  ['quads', 2],
+  ['hamstrings', 2],
+  ['glutes', 2],
+  ['calves', 1],
 ];
 
 // Trainer-prescribed exercises (LVAC PT) — prioritized during PPL generation
 const TRAINER_EXERCISES: Record<string, string[]> = {
   push: [
-    'Barbell Bench Press', 'Dumbbell Shoulder Press', 'Incline Bench Press',
+    'Barbell Bench Press', 'Dumbbell Shoulder Press', 'Dumbbell Incline Bench Press',
     'Dumbbell Kickbacks', 'Machine Fly', 'Push Up',
   ],
   pull: [
@@ -65,6 +65,36 @@ const TRAINER_EXERCISES: Record<string, string[]> = {
     'Dumbbell Bulgarian Split Squat', 'Walking Lunge', 'Calf Raise',
   ],
 };
+
+// Exercise families — prevent multiple variants of the same movement in one workout
+const EXERCISE_FAMILIES: [string, RegExp][] = [
+  ['curl', /(?<!leg\s)curl(?!.*hammer)(?!.*preacher)/i],
+  ['hammer', /hammer/i],
+  ['preacher', /preacher/i],
+  ['row', /(?:dumbbell|barbell|cable|seated|t-bar|pendlay|trx)\s*row(?!.*upright)/i],
+  ['press', /(?:bench|incline|decline)\s*press/i],
+  ['fly', /fly|flye|crossover|pec.?deck/i],
+  ['pulldown', /pulldown|pull.?down/i],
+  ['pullup', /pull.?up|chin.?up/i],
+  ['raise', /(?:lateral|front|rear.?delt)\s*raise/i],
+  ['extension', /(?:tricep|overhead|cable)\s*extension|skullcrusher|skull.?crusher/i],
+  ['kickback', /kickback/i],
+  ['dip', /dip(?!\s*belt)/i],
+  ['squat', /squat(?!.*split)/i],
+  ['lunge', /lunge|split.?squat|step.?up/i],
+  ['deadlift', /deadlift|rdl|romanian/i],
+  ['legCurl', /leg.?curl|hamstring.?curl/i],
+  ['legExtension', /leg.?extension/i],
+  ['hipThrust', /hip.?thrust|glute.?bridge/i],
+  ['calfRaise', /calf.?raise/i],
+];
+
+function getExerciseFamily(name: string): string | null {
+  for (const [family, pattern] of EXERCISE_FAMILIES) {
+    if (pattern.test(name)) return family;
+  }
+  return null;
+}
 
 const CORE_KEYWORDS = /crunch|plank|dead.?bug|windshield.?wiper|reverse.?crunch|cable.?crunch|exercise.?ball.?crunch|russian.?twist|toe.?toucher|vertical.?knee.?raise/i;
 const CARDIO_KEYWORDS = /treadmill|elliptical|cycling|rowing/i;
@@ -143,6 +173,7 @@ export interface GeneratedWorkout {
   dayType: string;
   globalModifier: number;
   isInCut: boolean;
+  programDriven?: boolean;
   exercises: GeneratedExercise[];
 }
 
@@ -199,6 +230,7 @@ function pickByMuscleTargets(
 ): ScoredExercise[] {
   const selected: ScoredExercise[] = [];
   const usedIds = new Set<number>();
+  const usedFamilies = new Set<string>();
 
   for (const [muscle, count] of targets) {
     const muscleExercises = scored
@@ -214,13 +246,56 @@ function pickByMuscleTargets(
       ordered = muscleExercises.sort((a, b) => b.score - a.score);
     }
 
-    for (let i = 0; i < count && i < ordered.length; i++) {
-      selected.push(ordered[i]);
-      usedIds.add(ordered[i].id);
+    let picked = 0;
+    for (const candidate of ordered) {
+      if (picked >= count) break;
+      const family = getExerciseFamily(candidate.name);
+      if (family && usedFamilies.has(family)) continue;
+      selected.push(candidate);
+      usedIds.add(candidate.id);
+      if (family) usedFamilies.add(family);
+      picked++;
     }
   }
 
   return selected;
+}
+
+/**
+ * Interleave exercises so consecutive exercises target different muscles.
+ * Round-robins through muscle-group buckets for even distribution.
+ */
+function interleaveByMuscle(exercises: ScoredExercise[]): ScoredExercise[] {
+  const buckets = new Map<string, ScoredExercise[]>();
+  const bucketOrder: string[] = [];
+  for (const ex of exercises) {
+    const primary = ex.muscles[0] ?? 'other';
+    if (!buckets.has(primary)) {
+      buckets.set(primary, []);
+      bucketOrder.push(primary);
+    }
+    buckets.get(primary)!.push(ex);
+  }
+
+  const result: ScoredExercise[] = [];
+  let idx = 0;
+  while (result.length < exercises.length) {
+    if (bucketOrder.length === 0) break;
+    const key = bucketOrder[idx % bucketOrder.length];
+    const bucket = buckets.get(key)!;
+    if (bucket.length > 0) {
+      result.push(bucket.shift()!);
+      idx++;
+    }
+    if (bucket.length === 0) {
+      const removeIdx = bucketOrder.indexOf(key);
+      bucketOrder.splice(removeIdx, 1);
+      if (bucketOrder.length > 0) {
+        idx = idx % bucketOrder.length;
+      }
+    }
+  }
+  return result;
 }
 
 export function generateWorkout(dayType: string, equipment: string, db: DB, options?: { supersets?: boolean; durationMinutes?: number; isInCut?: boolean }): GeneratedWorkout {
@@ -281,14 +356,14 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
     targets = [
       ['back', 1], ['chest', 1], ['shoulders', 1],
       ['quads', 1], ['hamstrings', 1], ['glutes', 1],
-      ['biceps', 1], ['triceps', 1],
+      ['biceps', 1],
     ];
   }
   targets = scaleMuscleTargets(targets, maxStrength);
 
   const trainerList = TRAINER_EXERCISES[dayType];
   const trainerNames = trainerList ? new Set(trainerList) : undefined;
-  const selected = pickByMuscleTargets(scored, targets, trainerNames);
+  const selected = interleaveByMuscle(pickByMuscleTargets(scored, targets, trainerNames));
   const coreSelected = scoredCore.slice(0, profile.coreCount);
   const cardioSelected = scoredCardio.slice(0, cutCardioCount);
 
@@ -380,6 +455,121 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
   }
 
   return { dayType, globalModifier, isInCut, exercises };
+}
+
+export interface ProgramExerciseInput {
+  exerciseId: number | null;
+  exerciseName: string;
+  targetSets: number | null;
+  targetReps: string | null; // '15' or 'AMRAP'
+  restSeconds: number | null;
+}
+
+export function generateFromProgram(
+  dayType: string,
+  programExercises: ProgramExerciseInput[],
+  db: DB,
+  options?: { supersets?: boolean; isInCut?: boolean },
+): GeneratedWorkout {
+  const globalModifier = getGlobalRecoveryModifier(db);
+  const suppressProgression = globalModifier < 0.85;
+  const isInCut = options?.isInCut ?? false;
+
+  // Look up exercises by ID, compute progression for weight suggestions
+  const exerciseIds = programExercises
+    .map(e => e.exerciseId)
+    .filter((id): id is number => id != null);
+
+  const exerciseRows = exerciseIds.length > 0
+    ? db.all<{ id: number; name: string; rest_seconds: number | null }>(
+        sql`SELECT id, name, rest_seconds FROM exercises WHERE id IN (${sql.join(exerciseIds.map(id => sql`${id}`), sql`, `)})`
+      )
+    : [];
+  const exerciseMap = new Map(exerciseRows.map(r => [r.id, r]));
+
+  const progressionMap = computeProgressionBatch(
+    exerciseRows.map(e => ({ id: e.id, name: e.name })),
+    db,
+  );
+
+  // Batch-fetch last performed dates
+  const lastDates = batchLastPerformed(exerciseIds, db);
+  const now = Date.now();
+
+  const exercises: GeneratedExercise[] = [];
+  let focusIndex = -1;
+  let bestFocusScore = -1;
+
+  for (const pe of programExercises) {
+    const row = pe.exerciseId ? exerciseMap.get(pe.exerciseId) : null;
+    if (!row) continue; // skip unlinked exercises
+
+    const isCardio = CARDIO_KEYWORDS.test(row.name);
+    const prog = progressionMap.get(row.id);
+    if (!prog) continue;
+
+    // Use program's target sets/reps as baseline, fall back to progression defaults
+    const targetSets = pe.targetSets ?? prog.sets;
+    const targetReps = pe.targetReps
+      ? (pe.targetReps.toUpperCase() === 'AMRAP' ? prog.repRange.max : parseInt(pe.targetReps) || prog.reps)
+      : prog.reps;
+
+    let suggestedSets = targetSets;
+    let suggestedReps = targetReps;
+    let suggestedWeightKg = prog.weightKg;
+    let directive = prog.directive;
+
+    if (suppressProgression && directive === 'up') {
+      directive = 'hold';
+      suggestedWeightKg = Math.max(0, suggestedWeightKg - prog.repRange.jump);
+      suggestedSets = Math.max(2, suggestedSets - 1);
+    }
+
+    if (isInCut && directive === 'up') {
+      directive = 'hold';
+      suggestedWeightKg = Math.max(0, suggestedWeightKg - prog.repRange.jump);
+    }
+
+    const lastDate = lastDates.get(row.id);
+    let daysSince = 7;
+    if (lastDate) {
+      daysSince = (now - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24);
+    }
+
+    const ex: GeneratedExercise = {
+      id: row.id,
+      name: row.name,
+      suggestedSets: isCardio ? 1 : suggestedSets,
+      suggestedReps: isCardio ? 1 : suggestedReps,
+      suggestedWeightKg: isCardio ? 0 : suggestedWeightKg,
+      lastPerformedDaysAgo: Math.round(daysSince * 10) / 10,
+      isFocus: false,
+      isCardio,
+      restSeconds: pe.restSeconds ?? row.rest_seconds ?? 60,
+      progression: isCardio ? undefined : directive,
+      repRange: isCardio ? undefined : { min: prog.repRange.min, max: prog.repRange.max },
+    };
+
+    exercises.push(ex);
+
+    if (!isCardio && directive === 'up') {
+      const score = Math.min(1, daysSince / 7) + 1;
+      if (score > bestFocusScore) {
+        bestFocusScore = score;
+        focusIndex = exercises.length - 1;
+      }
+    }
+  }
+
+  if (focusIndex >= 0) {
+    exercises[focusIndex].isFocus = true;
+  }
+
+  if (options?.supersets !== false) {
+    assignSupersets(exercises);
+  }
+
+  return { dayType, globalModifier, isInCut, programDriven: true, exercises };
 }
 
 function getAntagonist(muscle: string): string | null {
