@@ -75,26 +75,30 @@ Fetch completed workouts for writing to Apple Health as workout samples.
 | `HKQuantityTypeIdentifier.dietaryEnergyConsumed` | `calories` | Daily total (from MFP etc.) |
 | `HKQuantityTypeIdentifier.dietaryProtein` | `proteinG` | Daily total (from MFP etc.) |
 
-## Swift App Behavior
+## iOS Shortcut: Workout Calorie Writeback
 
-### Daily Sync (Background)
-1. Register `BGAppRefreshTask` with identifier `com.fitlocal.healthsync`
-2. On trigger: query HealthKit for today's values
-3. `POST /health/sync` to FitLocal server (configurable host URL)
-4. `GET /workouts/export?since={lastSyncDate}` — write any new workouts to HealthKit
-5. Schedule next refresh
+Add these steps to the existing **10 PM "FitLocal Sync"** Shortcut, after the health sync POST:
 
-### Initial Setup
-1. Request HealthKit permissions (read: all above types; write: workout type)
-2. Query last 90 days of health data
-3. `POST /health/sync-batch` to backfill
+### Steps
 
-### Configuration
-- Server URL stored in `UserDefaults` (e.g., `http://macbook.local:3001`)
-- Last sync date tracked in `UserDefaults`
+1. **Get Contents of URL**
+   - URL: `https://<server>/api/workouts/export?date=<Current Date formatted as yyyy-MM-dd>`
+   - Method: GET
 
-## Discovery
+2. **If** → result is not empty (Count > 0)
 
-The Swift app finds the server via:
-1. User-entered URL (settings screen)
-2. Bonjour/mDNS discovery (future enhancement)
+3. **Repeat with Each** (the result array)
+
+4. **Log Health Sample**
+   - Type: **Active Energy Burned**
+   - Value: `Repeat Item.caloriesBurned`
+   - Unit: kcal
+   - Date: `Repeat Item.date`
+
+5. **End Repeat / End If**
+
+### Notes
+- The export endpoint uses MET-based calorie estimation factoring in your latest body weight
+- Cardio exercises (treadmill, cycling, etc.) use reps-as-minutes at ~5 METs; strength sets at ~4 METs
+- HealthKit deduplicates by source + date, so running the Shortcut twice won't double-count
+- Use `?date=` for a single day (Shortcut use) or `?since=` for a date range (backfill)

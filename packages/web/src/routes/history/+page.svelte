@@ -63,6 +63,11 @@
     return Math.round((kg * KG_TO_LBS) / 2.5) * 2.5;
   }
 
+  const CARDIO_PATTERN = /treadmill|elliptical|cycling|rowing|bike|run|walk/i;
+  function isCardio(name: string): boolean {
+    return CARDIO_PATTERN.test(name);
+  }
+
   function formatDate(dateStr: string): string {
     const d = new Date(dateStr + 'T12:00:00');
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -296,17 +301,18 @@
                         {/if}
                       </div>
                       {#if we.sets && we.sets.length > 0}
+                        {@const cardio = isCardio(we.exercise?.name ?? '')}
                         <div class="space-y-0.5 pl-2">
                           {#each we.sets as set, idx}
                             <div class="text-xs {set.isWarmup ? 'text-neutral-600' : 'text-neutral-400'} font-mono">
                               {#if set.isWarmup}<span class="text-neutral-600 mr-1">W</span>{:else}<span class="text-neutral-600 mr-1">{idx + 1}</span>{/if}
-                              {#if set.durationSeconds && (!set.reps || set.reps === 0)}
-                                {Math.round(set.durationSeconds / 60)} min
+                              {#if cardio}
+                                {set.reps ?? 0} min{#if set.rpe}, resistance {set.rpe}{/if}{#if set.weightKg && set.weightKg > 0}, {set.weightKg} mi{/if}
                               {:else}
                                 {set.reps ?? 0} reps
-                              {/if}
-                              {#if set.weightKg && set.weightKg > 0}
-                                @ {kgToLbs(set.weightKg)} lbs
+                                {#if set.weightKg && set.weightKg > 0}
+                                  @ {kgToLbs(set.weightKg)} lbs
+                                {/if}
                               {/if}
                             </div>
                           {/each}
