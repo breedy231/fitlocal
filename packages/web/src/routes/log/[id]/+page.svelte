@@ -15,7 +15,7 @@
 
   // Exercise search for swap/add
   let searchQuery = $state('');
-  let searchResults: { id: number; name: string }[] = $state([]);
+  let searchResults: { id: number; name: string; primaryMuscles?: string[]; equipment?: string[] }[] = $state([]);
   let swappingExercise: WorkoutExercise | null = $state(null);
   let addingExercise = $state(false);
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -40,13 +40,34 @@
   let plateCalcWeightLbs: number | null = $state(null);
   let plateCalcSet: SetData | null = $state(null);
 
+  // Exercise history (lazy-loaded per exercise)
+  interface HistoryPoint { date: string; maxWeight: number; maxReps: number; sessionVolume: number }
+  let exerciseHistory: Record<number, HistoryPoint[] | 'loading'> = $state({});
+
+  async function toggleHistory(exerciseId: number) {
+    if (exerciseHistory[exerciseId]) {
+      delete exerciseHistory[exerciseId];
+      exerciseHistory = { ...exerciseHistory };
+      return;
+    }
+    exerciseHistory[exerciseId] = 'loading';
+    exerciseHistory = { ...exerciseHistory };
+    try {
+      const res = await api<{ dataPoints: HistoryPoint[] }>(`/reports/exercise-progression?exerciseId=${exerciseId}`);
+      exerciseHistory[exerciseId] = res.dataPoints.slice(-5);
+    } catch {
+      delete exerciseHistory[exerciseId];
+    }
+    exerciseHistory = { ...exerciseHistory };
+  }
+
   interface SetData {
     id: number;
     reps: number | null;
     weightKg: number | null;
     isWarmup: boolean;
     rpe?: number | null;
-    completed?: boolean;
+    completed: boolean;
     isPR?: boolean;
   }
 
@@ -225,9 +246,14 @@
   const SUPERSET_REST_SECONDS = 30;
 
   const CARDIO_PATTERN = /treadmill|elliptical|cycling|rowing/i;
+  const TREADMILL_PATTERN = /treadmill|walking/i;
 
   function isCardio(ex: WorkoutExercise): boolean {
     return CARDIO_PATTERN.test(ex.exercise?.name ?? '');
+  }
+
+  function isTreadmill(ex: WorkoutExercise): boolean {
+    return TREADMILL_PATTERN.test(ex.exercise?.name ?? '');
   }
 
   const KG_TO_LBS = 2.20462;
@@ -250,8 +276,15 @@
     // First try actual muscle data from exercises
     const muscles = new Set<string>();
     for (const ex of workout.exercises) {
-      if (ex.exercise.primaryMuscles) {
-        for (const m of ex.exercise.primaryMuscles) muscles.add(m);
+      let pm = ex.exercise.primaryMuscles;
+      // primaryMuscles may be a JSON string from SQLite — parse it
+      if (typeof pm === 'string') {
+        try { pm = JSON.parse(pm); } catch { pm = []; }
+      }
+      if (Array.isArray(pm)) {
+        for (const m of pm) {
+          if (typeof m === 'string' && m.length > 1) muscles.add(m);
+        }
       }
     }
     if (muscles.size > 0) return [...muscles];
@@ -264,8 +297,10 @@
       if (PULL_KEYWORDS.test(n)) pullScore++;
       if (LEGS_KEYWORDS.test(n)) legScore++;
     }
-    if (pushScore >= pullScore && pushScore >= legScore) return ['chest', 'shoulders', 'triceps'];
-    if (pullScore >= pushScore && pullScore >= legScore) return ['back', 'biceps', 'shoulders'];
+    if (legScore > pushScore && legScore > pullScore) return ['quads', 'hamstrings', 'glutes', 'calves'];
+    if (pullScore > pushScore && pullScore > legScore) return ['back', 'biceps', 'shoulders'];
+    if (pushScore > pullScore && pushScore > legScore) return ['chest', 'shoulders', 'triceps'];
+    // Tie or all zero — fall back to legs (most common for generic exercises)
     return ['quads', 'hamstrings', 'glutes', 'calves'];
   }
 
@@ -308,14 +343,15 @@
 
   function initWorkout(w: Workout) {
     for (const ex of w.exercises) {
-      ex.expanded = true;
+      ex.expanded = !ex.sets.every(s => s.completed);
       for (const s of ex.sets) {
-        s.completed = false;
+        s.completed = !!s.completed;
       }
     }
   }
 
   onMount(async () => {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     const id = $page.params.id!;
     try {
       workout = await api<Workout>(`/workouts/${id}`);
@@ -341,9 +377,21 @@
     }
   });
 
+  // When user returns to app, check if rest timer expired while away
+  function handleVisibilityChange() {
+    if (document.visibilityState === 'visible' && restTimerActive && restEndTime > 0) {
+      const remaining = Math.ceil((restEndTime - Date.now()) / 1000);
+      if (remaining <= 0) {
+        fireRestCompleteNotification();
+        dismissRestTimer();
+      }
+    }
+  }
+
   onDestroy(() => {
     if (restTimerInterval) clearInterval(restTimerInterval);
     if (stretchTimerInterval) clearInterval(stretchTimerInterval);
+    if (browser) document.removeEventListener('visibilitychange', handleVisibilityChange);
   });
 
   function adjustReps(set: SetData, delta: number) {
@@ -363,16 +411,16 @@
 
   async function toggleComplete(set: SetData, ex: WorkoutExercise) {
     set.completed = !set.completed;
-    // Save set to API immediately when completing
+    // Persist completion state + set data to API
+    try {
+      await api(`/sets/${set.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, completed: set.completed }),
+      });
+    } catch {
+      showToast('Failed to save set — will retry on finish', 'error');
+    }
     if (set.completed) {
-      try {
-        await api(`/sets/${set.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe }),
-        });
-      } catch {
-        showToast('Failed to save set — will retry on finish', 'error');
-      }
       // PR detection: check if this set's weight exceeds the all-time best
       if (set.weightKg && set.weightKg > 0 && ex.prWeightKg != null && set.weightKg > ex.prWeightKg) {
         set.isPR = true;
@@ -462,6 +510,28 @@
     navigator.serviceWorker?.controller?.postMessage(msg);
   }
 
+  let restNextSetLabel = '';
+  let restNotificationFired = false;
+
+  function fireRestCompleteNotification() {
+    if (restNotificationFired) return;
+    restNotificationFired = true;
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([300, 100, 300]);
+    }
+    // Fire notification from main thread as fallback (more reliable on iOS than SW setTimeout)
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      try {
+        new Notification('Rest Complete', {
+          body: restNextSetLabel || 'Time for your next set',
+          tag: 'rest-timer',
+        });
+      } catch {
+        // Notification constructor may fail on some platforms — SW is the backup
+      }
+    }
+  }
+
   function startRestTimer(seconds: number, nextSetLabel = '') {
     if (restTimerInterval) clearInterval(restTimerInterval);
     restTotalTime = seconds;
@@ -469,9 +539,11 @@
     restTimeLeft = seconds;
     restTimerActive = true;
     hasVibrated10s = false;
+    restNotificationFired = false;
+    restNextSetLabel = nextSetLabel;
     requestNotificationPermission();
 
-    // Schedule notification via service worker so it fires even when tab is backgrounded
+    // Schedule notification via service worker as backup
     sendSwMessage({
       type: 'SCHEDULE_REST_NOTIFICATION',
       delayMs: seconds * 1000,
@@ -490,9 +562,7 @@
         }
       }
       if (restTimeLeft <= 0) {
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-          navigator.vibrate([300, 100, 300]);
-        }
+        fireRestCompleteNotification();
         dismissRestTimer();
       }
     }, 250);
@@ -518,7 +588,7 @@
   async function searchExercises(query: string) {
     if (query.length < 2) { searchResults = []; return; }
     try {
-      searchResults = await api<{ id: number; name: string }[]>(`/exercises/search?q=${encodeURIComponent(query)}`);
+      searchResults = await api<typeof searchResults>(`/exercises/search?q=${encodeURIComponent(query)}`);
     } catch { searchResults = []; }
   }
 
@@ -875,6 +945,17 @@
       {/if}
     </div>
     <div class="flex items-center gap-1 shrink-0">
+      {#if !isCardio(ex)}
+        <button
+          onclick={(e) => { e.stopPropagation(); toggleHistory(ex.exerciseId); }}
+          class="p-1.5 rounded-md transition-colors {exerciseHistory[ex.exerciseId] ? 'text-green-400 bg-green-500/10' : 'text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800'}"
+          title="View history"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+          </svg>
+        </button>
+      {/if}
       <button
         onclick={(e) => { e.stopPropagation(); swappingExercise = ex; searchQuery = ''; searchResults = []; }}
         class="p-1.5 rounded-md text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-colors"
@@ -944,7 +1025,7 @@
                 </div>
               </div>
               <div>
-                <label class="text-xs text-neutral-500 block mb-1">Resistance</label>
+                <label class="text-xs text-neutral-500 block mb-1">{isTreadmill(ex) ? 'Incline' : 'Resistance'}</label>
                 <input
                   type="number"
                   value={set.rpe ?? ''}
@@ -1080,6 +1161,31 @@
               >{rir}</button>
             {/each}
           </div>
+        </div>
+      {/if}
+
+      <!-- Exercise history panel -->
+      {#if exerciseHistory[ex.exerciseId]}
+        <div class="mt-2 pt-2 border-t border-neutral-800/50">
+          {#if exerciseHistory[ex.exerciseId] === 'loading'}
+            <div class="flex justify-center py-2">
+              <div class="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          {:else}
+            {@const history = exerciseHistory[ex.exerciseId] as HistoryPoint[]}
+            {#if history.length === 0}
+              <p class="text-xs text-neutral-500 text-center py-1">No history yet</p>
+            {:else}
+              <div class="space-y-1">
+                {#each history as h}
+                  <div class="flex justify-between items-center text-xs px-1">
+                    <span class="text-neutral-500">{new Date(h.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    <span class="text-neutral-300 font-medium">{kgToLbs(h.maxWeight)} lbs x {h.maxReps}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          {/if}
         </div>
       {/if}
 
@@ -1340,33 +1446,55 @@
 
 <!-- Exercise Search Modal (swap or add) -->
 {#if swappingExercise || addingExercise}
-  <div class="fixed inset-0 z-50 flex items-end justify-center" style="background-color: rgba(0,0,0,0.6);">
-    <div class="w-full max-w-lg rounded-t-2xl p-5 max-h-[70vh] flex flex-col" style="background-color: #1a1a1a;">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-bold">{swappingExercise ? `Replace ${swappingExercise.exercise?.name}` : 'Add Exercise'}</h2>
-        <button onclick={() => { swappingExercise = null; addingExercise = false; searchQuery = ''; searchResults = []; }} class="text-neutral-500 hover:text-white p-1">
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 z-50 flex items-end justify-center"
+    style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px);"
+    onclick={(e) => { if (e.target === e.currentTarget) { swappingExercise = null; addingExercise = false; searchQuery = ''; searchResults = []; } }}
+  >
+    <div class="w-full max-w-lg rounded-t-2xl max-h-[80vh] flex flex-col" style="background-color: #242424;">
+      <!-- Handle bar -->
+      <div class="flex justify-center pt-3 pb-1">
+        <div class="w-10 h-1 rounded-full bg-neutral-600"></div>
+      </div>
+      <div class="flex justify-between items-center px-5 pb-3">
+        <h2 class="text-lg font-bold text-white">{swappingExercise ? `Replace ${swappingExercise.exercise?.name}` : 'Add Exercise'}</h2>
+        <button onclick={() => { swappingExercise = null; addingExercise = false; searchQuery = ''; searchResults = []; }} class="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-white">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
       </div>
-      <input
-        type="text"
-        placeholder="Search exercises..."
-        value={searchQuery}
-        oninput={(e) => onSearchInput(e.currentTarget.value)}
-        class="w-full px-4 py-3 rounded-xl bg-neutral-800 text-white border-none outline-none mb-3 text-sm"
-        autofocus
-      />
-      <div class="flex-1 overflow-y-auto -mx-1 px-1" style="-webkit-overflow-scrolling: touch;">
-        {#each searchResults as result}
-          <button
-            onclick={() => swappingExercise ? swapExercise(result.id, result.name) : addExerciseToWorkout(result.id, result.name)}
-            class="w-full text-left px-3 py-3 rounded-lg text-sm hover:bg-neutral-800 transition-colors text-neutral-200"
-          >
-            {result.name}
-          </button>
-        {/each}
-        {#if searchQuery.length >= 2 && searchResults.length === 0}
-          <p class="text-neutral-500 text-sm text-center py-4">No exercises found</p>
+      <div class="px-5 pb-3">
+        <input
+          type="text"
+          placeholder="Search exercises..."
+          value={searchQuery}
+          oninput={(e) => onSearchInput(e.currentTarget.value)}
+          class="w-full px-4 py-3.5 rounded-xl text-base text-white placeholder-neutral-500 border border-neutral-700 outline-none focus:border-green-500/50 transition-colors"
+          style="background-color: #1a1a1a;"
+          autofocus
+        />
+      </div>
+      <div class="flex-1 overflow-y-auto px-5 pb-6" style="-webkit-overflow-scrolling: touch;">
+        {#if searchResults.length > 0}
+          <div class="space-y-0.5">
+            {#each searchResults as result}
+              <button
+                onclick={() => swappingExercise ? swapExercise(result.id, result.name) : addExerciseToWorkout(result.id, result.name)}
+                class="w-full text-left px-4 py-3.5 rounded-xl hover:bg-neutral-700/50 active:bg-neutral-700 transition-colors"
+              >
+                <div class="font-medium text-[15px] text-white">{result.name}</div>
+                {#if result.primaryMuscles && Array.isArray(result.primaryMuscles) && result.primaryMuscles.length > 0}
+                  <div class="text-xs text-neutral-400 mt-0.5">{result.primaryMuscles.join(', ')}</div>
+                {:else if result.equipment && Array.isArray(result.equipment) && result.equipment.length > 0}
+                  <div class="text-xs text-neutral-500 mt-0.5">{result.equipment.join(', ')}</div>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        {:else if searchQuery.length >= 2}
+          <p class="text-neutral-500 text-sm text-center py-8">No exercises found</p>
+        {:else}
+          <p class="text-neutral-600 text-sm text-center py-8">Type to search exercises</p>
         {/if}
       </div>
     </div>

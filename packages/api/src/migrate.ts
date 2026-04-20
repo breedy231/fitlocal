@@ -228,6 +228,9 @@ sqlite.exec(`
   );
 `);
 
+// Add completed column to sets (persists set completion state across reloads)
+try { sqlite.exec('ALTER TABLE sets ADD COLUMN completed INTEGER DEFAULT 0'); } catch { /* exists */ }
+
 // Performance indexes for JOIN-heavy queries
 sqlite.exec(`
   CREATE INDEX IF NOT EXISTS idx_we_workout_id ON workout_exercises(workout_id);
