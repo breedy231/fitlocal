@@ -52,6 +52,11 @@ export async function healthRoutes(app: FastifyInstance) {
     const calories = raw.calories || null;
     const proteinG = raw.proteinG || null;
 
+    const fields = { hrv, restingHr, sleepHours, steps, bodyWeightKg, calories, proteinG };
+    const present = Object.entries(fields).filter(([, v]) => v != null).map(([k]) => k);
+    const missing = Object.entries(fields).filter(([, v]) => v == null).map(([k]) => k);
+    req.log.info({ date, present, missing, raw: req.body }, `health/sync for ${date} — fields: ${present.join(', ') || 'none'}`);
+
     const existing = db.all<{ id: number }>(
       sql`SELECT id FROM health_snapshots WHERE date = ${date} LIMIT 1`
     );
@@ -69,6 +74,7 @@ export async function healthRoutes(app: FastifyInstance) {
       const updated = db.all<Record<string, unknown>>(
         sql`SELECT * FROM health_snapshots WHERE date = ${date} LIMIT 1`
       );
+      req.log.info({ date, action: 'updated', result: updated[0] }, `health/sync updated existing row for ${date}`);
       return reply.status(200).send(updated[0]);
     }
 
@@ -77,6 +83,7 @@ export async function healthRoutes(app: FastifyInstance) {
       .values({ date, hrv, restingHr, sleepHours, steps, bodyWeightKg, calories, proteinG })
       .returning()
       .get();
+    req.log.info({ date, action: 'inserted', result }, `health/sync inserted new row for ${date}`);
     return reply.status(201).send(result);
   });
 
@@ -99,6 +106,9 @@ export async function healthRoutes(app: FastifyInstance) {
     if (!snapshots || !Array.isArray(snapshots) || snapshots.length === 0) {
       return reply.status(400).send({ error: 'snapshots must be a non-empty array' });
     }
+
+    const dates = snapshots.map(s => s.date).sort();
+    req.log.info({ count: snapshots.length, dateRange: `${dates[0]} → ${dates[dates.length - 1]}`, dates }, `health/sync-batch: ${snapshots.length} snapshots`);
 
     const results = db.transaction((tx) => {
       return snapshots.map((s) => {
@@ -126,6 +136,9 @@ export async function healthRoutes(app: FastifyInstance) {
       });
     });
 
+    const inserted = results.filter(r => r.action === 'inserted').length;
+    const updated = results.filter(r => r.action === 'updated').length;
+    req.log.info({ inserted, updated }, `health/sync-batch done: ${inserted} inserted, ${updated} updated`);
     return reply.status(200).send({ synced: results });
   });
 
@@ -141,6 +154,7 @@ export async function healthRoutes(app: FastifyInstance) {
     if (!type || !samples || !Array.isArray(samples) || samples.length === 0) {
       return reply.status(400).send({ error: 'type and non-empty samples array required' });
     }
+    req.log.info({ type, sampleCount: samples.length }, `health/import-samples: ${samples.length} ${type} samples`);
 
     const columnMap: Record<string, string> = {
       hrv: 'hrv',
@@ -202,6 +216,7 @@ export async function healthRoutes(app: FastifyInstance) {
       return { inserted, updated };
     });
 
+    req.log.info({ type, ...results, daysAggregated: aggregated.size }, `health/import-samples done: ${results.inserted} inserted, ${results.updated} updated across ${aggregated.size} days`);
     return reply.status(200).send({
       type,
       samplesReceived: samples.length,

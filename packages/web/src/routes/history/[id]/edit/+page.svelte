@@ -11,6 +11,8 @@
     reps: number | null;
     weightKg: number | null;
     isWarmup: boolean;
+    rpe?: number | null;
+    durationSeconds?: number | null;
     dirty?: boolean;
   }
 
@@ -19,6 +21,11 @@
     exerciseId: number;
     exercise: { id: number; name: string };
     sets: SetData[];
+  }
+
+  const CARDIO_PATTERN = /treadmill|elliptical|cycling|rowing|bike|run/i;
+  function isCardio(we: WorkoutExercise): boolean {
+    return CARDIO_PATTERN.test(we.exercise?.name ?? '');
   }
 
   interface Workout {
@@ -141,7 +148,12 @@
           if (set.dirty) {
             await api(`/sets/${set.id}`, {
               method: 'PATCH',
-              body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg }),
+              body: JSON.stringify({
+                reps: set.reps,
+                weightKg: set.weightKg,
+                rpe: set.rpe,
+                durationSeconds: set.durationSeconds,
+              }),
             });
           }
         }
@@ -209,40 +221,89 @@
           </div>
 
           <div class="px-4 pb-4 space-y-2">
-            <!-- Header -->
-            <div class="grid grid-cols-[1fr_70px_70px_36px] gap-2 text-xs text-neutral-500 px-1">
-              <span>SET</span>
-              <span class="text-center">REPS</span>
-              <span class="text-center">LBS</span>
-              <span></span>
-            </div>
-
-            {#each we.sets as set, idx}
-              <div class="grid grid-cols-[1fr_70px_70px_36px] gap-2 items-center">
-                <span class="text-sm text-neutral-400 pl-1">{idx + 1}</span>
-                <input
-                  type="number"
-                  value={set.reps ?? 0}
-                  onchange={(e) => updateReps(set, e.currentTarget.value)}
-                  class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
-                />
-                <input
-                  type="number"
-                  value={kgToLbs(set.weightKg)}
-                  onchange={(e) => updateWeight(set, e.currentTarget.value)}
-                  class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
-                  step="2.5"
-                />
-                <button
-                  onclick={() => deleteSet(we, set.id)}
-                  class="w-8 h-8 rounded flex items-center justify-center text-neutral-600 hover:text-red-400 transition-colors"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                  </svg>
-                </button>
+            {#if isCardio(we)}
+              <!-- Cardio layout: Duration, Resistance, Distance -->
+              <div class="grid grid-cols-[1fr_1fr_1fr_36px] gap-2 text-xs text-neutral-500 px-1">
+                <span>DURATION</span>
+                <span class="text-center">RESIST.</span>
+                <span class="text-center">DIST (mi)</span>
+                <span></span>
               </div>
-            {/each}
+
+              {#each we.sets as set, idx}
+                <div class="grid grid-cols-[1fr_1fr_1fr_36px] gap-2 items-center">
+                  <input
+                    type="number"
+                    value={set.reps ?? 0}
+                    onchange={(e) => { set.reps = parseInt(e.currentTarget.value) || 0; set.dirty = true; }}
+                    class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
+                    placeholder="min"
+                    step="1"
+                  />
+                  <input
+                    type="number"
+                    value={set.rpe ?? ''}
+                    onchange={(e) => { set.rpe = parseFloat(e.currentTarget.value) || 0; set.dirty = true; }}
+                    class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
+                    placeholder="level"
+                    step="1"
+                    min="0"
+                    max="30"
+                  />
+                  <input
+                    type="number"
+                    value={set.weightKg ?? ''}
+                    onchange={(e) => { set.weightKg = parseFloat(e.currentTarget.value) || 0; set.dirty = true; }}
+                    class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
+                    placeholder="mi"
+                    step="0.1"
+                  />
+                  <button
+                    onclick={() => deleteSet(we, set.id)}
+                    class="w-8 h-8 rounded flex items-center justify-center text-neutral-600 hover:text-red-400 transition-colors"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                  </button>
+                </div>
+              {/each}
+            {:else}
+              <!-- Strength layout: Set#, Reps, Weight -->
+              <div class="grid grid-cols-[1fr_70px_70px_36px] gap-2 text-xs text-neutral-500 px-1">
+                <span>SET</span>
+                <span class="text-center">REPS</span>
+                <span class="text-center">LBS</span>
+                <span></span>
+              </div>
+
+              {#each we.sets as set, idx}
+                <div class="grid grid-cols-[1fr_70px_70px_36px] gap-2 items-center">
+                  <span class="text-sm text-neutral-400 pl-1">{idx + 1}</span>
+                  <input
+                    type="number"
+                    value={set.reps ?? 0}
+                    onchange={(e) => updateReps(set, e.currentTarget.value)}
+                    class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
+                  />
+                  <input
+                    type="number"
+                    value={kgToLbs(set.weightKg)}
+                    onchange={(e) => updateWeight(set, e.currentTarget.value)}
+                    class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
+                    step="2.5"
+                  />
+                  <button
+                    onclick={() => deleteSet(we, set.id)}
+                    class="w-8 h-8 rounded flex items-center justify-center text-neutral-600 hover:text-red-400 transition-colors"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                  </button>
+                </div>
+              {/each}
+            {/if}
 
             <button
               onclick={() => addSet(we)}
