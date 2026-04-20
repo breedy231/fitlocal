@@ -90,7 +90,7 @@ export async function workoutRoutes(app: FastifyInstance) {
       ex_primary_muscles: string | null; ex_secondary_muscles: string | null; ex_equipment: string | null;
       set_id: number | null; set_reps: number | null; set_weight_kg: number | null;
       set_is_warmup: number | null; set_rpe: number | null; set_multiplier: number | null;
-      set_duration_seconds: number | null;
+      set_duration_seconds: number | null; set_completed: number | null;
     }>(sql`
       SELECT
         we.id as we_id, we.exercise_id, we.display_order, we.superset_group,
@@ -99,7 +99,7 @@ export async function workoutRoutes(app: FastifyInstance) {
         e.equipment as ex_equipment,
         s.id as set_id, s.reps as set_reps, s.weight_kg as set_weight_kg,
         s.is_warmup as set_is_warmup, s.rpe as set_rpe, s.multiplier as set_multiplier,
-        s.duration_seconds as set_duration_seconds
+        s.duration_seconds as set_duration_seconds, s.completed as set_completed
       FROM workout_exercises we
       JOIN exercises e ON we.exercise_id = e.id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
@@ -122,9 +122,9 @@ export async function workoutRoutes(app: FastifyInstance) {
             name: r.ex_name,
             restSeconds: r.ex_rest_seconds,
             imageUrl: r.ex_image_url,
-            primaryMuscles: r.ex_primary_muscles,
-            secondaryMuscles: r.ex_secondary_muscles,
-            equipment: r.ex_equipment,
+            primaryMuscles: typeof r.ex_primary_muscles === 'string' ? JSON.parse(r.ex_primary_muscles || '[]') : (r.ex_primary_muscles ?? []),
+            secondaryMuscles: typeof r.ex_secondary_muscles === 'string' ? JSON.parse(r.ex_secondary_muscles || '[]') : (r.ex_secondary_muscles ?? []),
+            equipment: typeof r.ex_equipment === 'string' ? JSON.parse(r.ex_equipment || '[]') : (r.ex_equipment ?? []),
           },
           sets: [],
           restSeconds: r.ex_rest_seconds ?? 60,
@@ -140,6 +140,7 @@ export async function workoutRoutes(app: FastifyInstance) {
           rpe: r.set_rpe,
           multiplier: r.set_multiplier,
           durationSeconds: r.set_duration_seconds,
+          completed: !!r.set_completed,
         });
       }
     }
@@ -147,31 +148,51 @@ export async function workoutRoutes(app: FastifyInstance) {
     // Enrich with last performance + PR data for each exercise
     const exerciseIds = [...new Set(Array.from(exerciseMap.values()).map((e: any) => e.exerciseId as number))];
     if (exerciseIds.length > 0) {
-      // Last session's sets per exercise (excluding current workout)
-      const lastRows = db.all<{
-        exercise_id: number; workout_date: string; reps: number; weight_kg: number;
+      // Last session's sets per exercise (excluding current workout).
+      // Find the most recent workout_exercise entry per exercise, then grab its sets.
+      const lastWeRows = db.all<{
+        exercise_id: number; we_id: number; workout_date: string;
       }>(sql`
-        SELECT we.exercise_id, w.date as workout_date, s.reps, s.weight_kg
-        FROM sets s
-        JOIN workout_exercises we ON s.workout_exercise_id = we.id
+        SELECT we.exercise_id, we.id as we_id, w.date as workout_date
+        FROM workout_exercises we
         JOIN workouts w ON we.workout_id = w.id
         WHERE we.exercise_id IN (${sql.join(exerciseIds.map(eid => sql`${eid}`), sql`, `)})
           AND w.id != ${id}
-          AND s.is_warmup = 0
-          AND s.reps > 0
-        ORDER BY w.date DESC, s.id ASC
+        ORDER BY w.date DESC, we.id DESC
       `);
 
-      // Group by exercise → most recent date → sets
-      const lastPerf = new Map<number, { date: string; sets: { reps: number; weightKg: number }[] }>();
-      for (const r of lastRows) {
-        if (!lastPerf.has(r.exercise_id)) {
-          lastPerf.set(r.exercise_id, { date: r.workout_date, sets: [] });
+      // Pick the most recent workout_exercise per exercise
+      const latestWeIds = new Map<number, { weId: number; date: string }>();
+      for (const r of lastWeRows) {
+        if (!latestWeIds.has(r.exercise_id)) {
+          latestWeIds.set(r.exercise_id, { weId: r.we_id, date: r.workout_date });
         }
-        const entry = lastPerf.get(r.exercise_id)!;
-        // Only include sets from the most recent session
-        if (r.workout_date === entry.date) {
-          entry.sets.push({ reps: r.reps, weightKg: r.weight_kg });
+      }
+
+      const lastPerf = new Map<number, { date: string; sets: { reps: number; weightKg: number }[] }>();
+      if (latestWeIds.size > 0) {
+        const weIds = [...latestWeIds.values()].map(v => v.weId);
+        const setRows = db.all<{
+          we_id: number; reps: number; weight_kg: number;
+        }>(sql`
+          SELECT s.workout_exercise_id as we_id, s.reps, s.weight_kg
+          FROM sets s
+          WHERE s.workout_exercise_id IN (${sql.join(weIds.map(wid => sql`${wid}`), sql`, `)})
+            AND s.is_warmup = 0
+            AND s.reps > 0
+          ORDER BY s.id ASC
+        `);
+
+        // Build a we_id → exercise_id reverse map
+        const weToExercise = new Map<number, number>();
+        for (const [exId, v] of latestWeIds) weToExercise.set(v.weId, exId);
+
+        for (const r of setRows) {
+          const exId = weToExercise.get(r.we_id)!;
+          if (!lastPerf.has(exId)) {
+            lastPerf.set(exId, { date: latestWeIds.get(exId)!.date, sets: [] });
+          }
+          lastPerf.get(exId)!.sets.push({ reps: r.reps, weightKg: r.weight_kg });
         }
       }
 
@@ -331,37 +352,60 @@ export async function workoutRoutes(app: FastifyInstance) {
     return reply.status(201).send(result);
   });
 
-  // Export workouts for HealthKit writeback
-  app.get<{ Querystring: { since?: string } }>('/workouts/export', async (req) => {
-    const since = req.query.since || '1970-01-01';
+  // Export workouts for HealthKit writeback (used by iOS Shortcut)
+  app.get<{ Querystring: { since?: string; date?: string } }>('/workouts/export', async (req) => {
+    const dateFilter = req.query.date
+      ? sql`w.date = ${req.query.date}`
+      : sql`w.date >= ${req.query.since || '1970-01-01'}`;
+
+    // Get latest body weight for MET-based calorie estimation
+    const weightRow = db.get<{ body_weight_kg: number | null }>(sql`
+      SELECT body_weight_kg FROM health_snapshots
+      WHERE body_weight_kg IS NOT NULL ORDER BY date DESC LIMIT 1
+    `);
+    const bodyWeightKg = weightRow?.body_weight_kg || 80; // fallback 80kg
+
     const rows = db.all<{
       date: string;
-      set_count: number;
-      total_reps: number;
+      strength_sets: number;
+      cardio_minutes: number;
       has_cardio: number;
     }>(sql`
       SELECT w.date,
-        COUNT(s.id) as set_count,
-        COALESCE(SUM(s.reps), 0) as total_reps,
-        MAX(CASE WHEN lower(e.name) GLOB '*treadmill*' OR lower(e.name) GLOB '*elliptical*'
-          OR lower(e.name) GLOB '*cycling*' OR lower(e.name) GLOB '*rowing*'
-          OR lower(e.name) GLOB '*bike*' OR lower(e.name) GLOB '*run*'
-          OR lower(e.name) GLOB '*cardio*' THEN 1 ELSE 0 END) as has_cardio
+        SUM(CASE WHEN e.name NOT IN ('Walking','Walking - Treadmill','Cycling','Cycling - Stationary',
+          'Elliptical','Rowing','Running','Running - Treadmill')
+          THEN 1 ELSE 0 END) as strength_sets,
+        COALESCE(SUM(CASE WHEN e.name IN ('Walking','Walking - Treadmill','Cycling','Cycling - Stationary',
+          'Elliptical','Rowing','Running','Running - Treadmill')
+          THEN s.reps ELSE 0 END), 0) as cardio_minutes,
+        MAX(CASE WHEN e.name IN ('Walking','Walking - Treadmill','Cycling','Cycling - Stationary',
+          'Elliptical','Rowing','Running','Running - Treadmill')
+          THEN 1 ELSE 0 END) as has_cardio
       FROM workouts w
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON we.exercise_id = e.id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
-      WHERE w.date >= ${since}
+      WHERE ${dateFilter}
       GROUP BY w.id
       ORDER BY w.date
     `);
 
-    return rows.map(r => ({
-      date: r.date,
-      durationMinutes: Math.round(r.set_count * 2.5),  // ~2.5 min per set including rest
-      caloriesBurned: Math.round(r.total_reps * 0.5 + r.set_count * 8), // rough estimate
-      exerciseType: r.has_cardio ? 'mixed' : 'strength',
-    }));
+    return rows.map(r => {
+      // MET-based estimation: strength ~4 METs, cardio ~5 METs (walking/cycling mix)
+      // Formula: MET * bodyWeightKg * durationHours
+      const strengthMinutes = r.strength_sets * 2.5; // ~2.5 min per set including rest
+      const cardioMinutes = r.cardio_minutes; // reps = minutes for cardio exercises
+      const strengthCals = 4 * bodyWeightKg * (strengthMinutes / 60);
+      const cardioCals = 5 * bodyWeightKg * (cardioMinutes / 60);
+      const totalMinutes = Math.round(strengthMinutes + cardioMinutes);
+
+      return {
+        date: r.date,
+        durationMinutes: totalMinutes,
+        caloriesBurned: Math.round(strengthCals + cardioCals),
+        exerciseType: r.has_cardio ? 'mixed' : 'strength',
+      };
+    });
   });
 
   // Delete workout_exercise (cascades sets)

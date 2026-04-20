@@ -20,7 +20,7 @@ export async function setRoutes(app: FastifyInstance) {
   });
 
   // Update set (PATCH)
-  app.patch<{ Params: { id: string }; Body: { reps?: number; weightKg?: number } }>('/sets/:id', async (req, reply) => {
+  app.patch<{ Params: { id: string }; Body: { reps?: number; weightKg?: number; rpe?: number; durationSeconds?: number } }>('/sets/:id', async (req, reply) => {
     const id = parseInt(req.params.id);
     const result = db.update(schema.sets).set(req.body).where(eq(schema.sets.id, id)).returning().get();
     if (!result) return reply.status(404).send({ error: 'Not found' });
