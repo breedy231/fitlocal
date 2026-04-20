@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import ExerciseSearch from '$lib/ExerciseSearch.svelte';
+  import { showToast } from '$lib/toast';
 
   interface SetData {
     id: number;
@@ -52,7 +53,7 @@
       workout = await api<Workout>(`/workouts/${id}`);
       originalDate = workout.date;
     } catch {
-      alert('Could not load workout');
+      showToast('Could not load workout', 'error');
     } finally {
       loading = false;
     }
@@ -81,7 +82,7 @@
       });
       exercise.sets = [...exercise.sets, newSet];
     } catch {
-      alert('Failed to add set');
+      showToast('Failed to add set', 'error');
     }
   }
 
@@ -90,7 +91,7 @@
       await api(`/sets/${setId}`, { method: 'DELETE' });
       exercise.sets = exercise.sets.filter(s => s.id !== setId);
     } catch {
-      alert('Failed to delete set');
+      showToast('Failed to delete set', 'error');
     }
   }
 
@@ -100,7 +101,7 @@
       await api(`/workout-exercises/${we.id}`, { method: 'DELETE' });
       workout.exercises = workout.exercises.filter(e => e.id !== we.id);
     } catch {
-      alert('Failed to remove exercise');
+      showToast('Failed to remove exercise', 'error');
     }
   }
 
@@ -119,7 +120,7 @@
         { id: we.id, exerciseId: exercise.id, exercise: { id: exercise.id, name: exercise.name }, sets: [] },
       ];
     } catch {
-      alert('Failed to add exercise');
+      showToast('Failed to add exercise', 'error');
     }
   }
 
@@ -147,7 +148,7 @@
       }
       goto('/history');
     } catch {
-      alert('Failed to save changes');
+      showToast('Failed to save changes', 'error');
     } finally {
       saving = false;
     }
@@ -160,14 +161,14 @@
       await api(`/workouts/${workout.id}`, { method: 'DELETE' });
       goto('/history');
     } catch {
-      alert('Failed to delete workout');
+      showToast('Failed to delete workout', 'error');
     } finally {
       deleting = false;
     }
   }
 </script>
 
-<div class="p-4 max-w-lg mx-auto">
+<div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   {#if loading}
     <div class="flex justify-center py-12">
       <div class="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>

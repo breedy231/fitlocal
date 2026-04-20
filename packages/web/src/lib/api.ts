@@ -1,13 +1,62 @@
-const API_BASE = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
-  ? `http://${window.location.hostname}:3001`
-  : 'http://localhost:3001';
+import { enqueue, replayQueue } from './offline-queue';
+import { showToast } from './toast';
+import { invalidateAfterMutation } from './api-cache.svelte';
+
+function getApiBase(): string {
+  if (typeof window === 'undefined') return 'http://localhost:3001';
+  const { hostname, port, protocol } = window.location;
+  if (port === '5173') {
+    // Dev mode — proxy through Vite to avoid mixed-content (HTTPS frontend → HTTP API)
+    return '/api';
+  }
+  // Production — same origin, /api prefix
+  return `${protocol}//${hostname}${port ? ':' + port : ''}/api`;
+}
+
+const API_BASE = getApiBase();
+
+function isNetworkError(err: unknown): boolean {
+  return err instanceof TypeError && (err as TypeError).message.includes('fetch');
+}
+
+function isMutation(options?: RequestInit): boolean {
+  const method = (options?.method ?? 'GET').toUpperCase();
+  return method !== 'GET' && method !== 'HEAD';
+}
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
+  const hasBody = options?.body != null;
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: hasBody ? { 'Content-Type': 'application/json' } : {},
+      ...options,
+    });
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    if (res.status === 204) {
+      if (isMutation(options)) invalidateAfterMutation(path);
+      return undefined as T;
+    }
+    const data = await res.json();
+    if (isMutation(options)) invalidateAfterMutation(path);
+    return data;
+  } catch (err) {
+    if (isNetworkError(err) && isMutation(options)) {
+      // Queue the mutation for replay when back online
+      const body = typeof options?.body === 'string' ? options.body : null;
+      await enqueue(options!.method!, path, body);
+      showToast('Saved offline — will sync when connected', 'info');
+      return undefined as T;
+    }
+    throw err;
+  }
+}
+
+// Replay queued requests when coming back online
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', async () => {
+    const count = await replayQueue(API_BASE);
+    if (count > 0) {
+      showToast(`Synced ${count} offline change${count > 1 ? 's' : ''}`, 'success');
+    }
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  if (res.status === 204) return undefined as T;
-  return res.json();
 }
