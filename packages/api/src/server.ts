@@ -17,6 +17,7 @@ import { challengeRoutes } from './routes/challenges.js';
 import { achievementRoutes } from './routes/achievements.js';
 import { goalRoutes } from './routes/goals.js';
 import { routineRoutes } from './routes/routines.js';
+import { sqlite } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === 'production';
@@ -115,6 +116,33 @@ if (isProduction) {
     return reply.sendFile('index.html');
   });
 }
+
+// Graceful shutdown: checkpoint the WAL into the main DB file before exiting.
+// Prevents data loss if the next startup encounters corruption — writes that
+// live only in the WAL are merged to disk while the server still holds the
+// lock, so recovery tools operate on a complete main file, not a half-applied WAL.
+let shuttingDown = false;
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  app.log.info({ signal }, 'shutdown: starting graceful stop');
+  try {
+    await app.close();
+  } catch (err) {
+    app.log.error({ err }, 'shutdown: fastify close failed');
+  }
+  try {
+    const result = sqlite.pragma('wal_checkpoint(TRUNCATE)');
+    app.log.info({ result }, 'shutdown: WAL checkpoint complete');
+    sqlite.close();
+  } catch (err) {
+    app.log.error({ err }, 'shutdown: WAL checkpoint failed');
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
 
 try {
   await app.listen({ port, host: '0.0.0.0' });

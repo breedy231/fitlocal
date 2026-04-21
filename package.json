@@ -5,9 +5,10 @@
     "packages/*"
   ],
   "scripts": {
+    "backup": "bash scripts/backup-db.sh",
     "dev:api": "npm run dev -w packages/api",
     "dev:web": "npm run dev -w packages/web",
-    "dev": "npm run dev:api & npm run dev:web",
+    "dev": "npm run backup && (npm run dev:api & npm run dev:web)",
     "build": "npm run build -w packages/api && npm run build -w packages/web"
   }
 }
