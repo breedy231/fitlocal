@@ -115,10 +115,11 @@
   let allSetsCompleted = $state(false);
   let hasCelebrated = false;
 
+  // Only strength exercises count toward "all done" — cardio doesn't block or trigger completion
   let allComplete = $derived(
     workout !== null &&
-    (workout as Workout).exercises.length > 0 &&
-    (workout as Workout).exercises.every((ex: WorkoutExercise) => ex.sets.length > 0 && ex.sets.every((s: SetData) => s.completed))
+    (workout as Workout).exercises.some((ex: WorkoutExercise) => !isCardio(ex)) &&
+    (workout as Workout).exercises.filter((ex: WorkoutExercise) => !isCardio(ex)).every((ex: WorkoutExercise) => ex.sets.length > 0 && ex.sets.every((s: SetData) => s.completed))
   );
 
   // Watch for all-complete and trigger celebration
@@ -200,6 +201,7 @@
   let restTimeLeft = $state(0);
   let restTotalTime = $state(0);
   let restTimerActive = $state(false);
+  let restTimerDone = $state(false); // "GO!" flash state after timer hits 0
   let restTimerInterval: ReturnType<typeof setInterval> | null = null;
   let restEndTime = 0; // ms timestamp when rest finishes
   let hasVibrated10s = false;
@@ -245,7 +247,8 @@
 
   const SUPERSET_REST_SECONDS = 30;
 
-  const CARDIO_PATTERN = /treadmill|elliptical|cycling|rowing/i;
+  // Require specific cardio equipment names — bare "rowing" would match "Barbell Rowing", etc.
+  const CARDIO_PATTERN = /\b(treadmill|elliptical|rowing\s+machine|stationary\s+bike|stair\s*climber|air\s+bike|assault\s+bike)\b/i;
   const TREADMILL_PATTERN = /treadmill|walking/i;
 
   function isCardio(ex: WorkoutExercise): boolean {
@@ -448,7 +451,7 @@
         }
       }
 
-      // Auto-collapse when all sets complete, then move to bottom of incomplete exercises
+      // Auto-collapse when all sets complete — delay is longer for strength so user can tap RIR
       if (allExSetsComplete && workout) {
         setTimeout(() => {
           ex.expanded = false;
@@ -463,7 +466,7 @@
               document.getElementById(`exercise-${nextIncomplete.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 100);
           }
-        }, 600);
+        }, isCardio(ex) ? 600 : 4000);
       }
 
       // Start rest timer — between sets of same exercise, or between exercises
@@ -563,13 +566,22 @@
       }
       if (restTimeLeft <= 0) {
         fireRestCompleteNotification();
-        dismissRestTimer();
+        // Show "GO!" flash for 2s before hiding the bar
+        if (restTimerInterval) { clearInterval(restTimerInterval); restTimerInterval = null; }
+        sendSwMessage({ type: 'CANCEL_REST_NOTIFICATION' });
+        restTimerDone = true;
+        setTimeout(() => {
+          restTimerDone = false;
+          restTimerActive = false;
+          restTimeLeft = 0;
+        }, 2000);
       }
     }, 250);
   }
 
   function dismissRestTimer() {
     restTimerActive = false;
+    restTimerDone = false;
     restTimeLeft = 0;
     if (restTimerInterval) {
       clearInterval(restTimerInterval);
@@ -947,6 +959,15 @@
     <div class="flex items-center gap-1 shrink-0">
       {#if !isCardio(ex)}
         <button
+          onclick={(e) => { e.stopPropagation(); const firstSet = ex.sets[0]; if (firstSet) { plateCalcWeightLbs = kgToLbs(firstSet.weightKg); plateCalcSet = firstSet; } }}
+          class="p-1.5 rounded-md text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-colors"
+          title="Plate calculator"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+          </svg>
+        </button>
+        <button
           onclick={(e) => { e.stopPropagation(); toggleHistory(ex.exerciseId); }}
           class="p-1.5 rounded-md transition-colors {exerciseHistory[ex.exerciseId] ? 'text-green-400 bg-green-500/10' : 'text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800'}"
           title="View history"
@@ -1065,67 +1086,63 @@
       {:else}
         {#each ex.sets as set, idx}
           {@const lastSet = ex.lastPerformance?.sets[idx]}
-          <div class="flex items-center gap-2 py-1.5 {idx > 0 ? 'border-t border-neutral-800/50' : ''}">
-            <div class="w-6 text-center shrink-0">
+          <!-- Grid: [set#] [reps] [×] [weight] [✓] — 1fr columns keep checkbox on-card on all iPhones -->
+          <div class="grid items-center gap-x-1 py-1.5 {idx > 0 ? 'border-t border-neutral-800/50' : ''}" style="grid-template-columns: 26px 1fr 12px 1fr 44px">
+            <!-- Set number + last performance -->
+            <div class="text-center">
               <span class="text-xs text-neutral-500">{idx + 1}</span>
               {#if lastSet}
                 <div class="text-[9px] text-neutral-600 leading-tight mt-0.5" title="Last session">{kgToLbs(lastSet.weightKg)}×{lastSet.reps}</div>
               {/if}
             </div>
 
-            <div class="flex items-center gap-1 shrink-0">
+            <!-- Reps: −/input/+ -->
+            <div class="flex items-center gap-0.5">
               <button
                 onclick={() => adjustReps(set, -1)}
-                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700 shrink-0"
               >−</button>
               <input
                 type="number"
                 value={set.reps ?? 0}
                 onchange={(e) => { set.reps = Math.max(0, parseInt(e.currentTarget.value) || 0); }}
-                class="w-10 text-center text-sm font-bold py-1.5 rounded-lg bg-neutral-800/50 text-white border-none outline-none"
+                class="flex-1 min-w-0 text-center text-sm font-bold py-1.5 rounded-lg bg-neutral-800/50 text-white border-none outline-none"
                 inputmode="numeric"
                 min="0"
               />
               <button
                 onclick={() => adjustReps(set, 1)}
-                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700 shrink-0"
               >+</button>
             </div>
 
-            <span class="text-neutral-600 text-xs shrink-0">×</span>
+            <!-- × separator -->
+            <span class="text-neutral-600 text-xs text-center">×</span>
 
-            <div class="flex items-center gap-1 shrink-0">
+            <!-- Weight: −/input/+ -->
+            <div class="flex items-center gap-0.5">
               <button
                 onclick={() => adjustWeightLbs(set, -5)}
-                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700 shrink-0"
               >−</button>
               <input
                 type="number"
                 value={kgToLbs(set.weightKg)}
                 onchange={(e) => updateWeightLbs(set, e.currentTarget.value)}
-                class="w-14 text-center text-sm font-bold py-1.5 rounded-lg bg-neutral-800/50 text-white border-none outline-none"
+                class="flex-1 min-w-0 text-center text-sm font-bold py-1.5 rounded-lg bg-neutral-800/50 text-white border-none outline-none"
                 step="2.5"
                 inputmode="decimal"
               />
               <button
                 onclick={() => adjustWeightLbs(set, 5)}
-                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700"
+                class="w-9 h-9 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-lg active:bg-neutral-700 shrink-0"
               >+</button>
             </div>
 
-            <button
-              onclick={() => { plateCalcWeightLbs = kgToLbs(set.weightKg); plateCalcSet = set; }}
-              class="w-7 h-7 rounded-md flex items-center justify-center text-neutral-500 hover:text-neutral-300 hover:bg-neutral-700 transition-colors shrink-0"
-              title="Plate calculator"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
-              </svg>
-            </button>
-
-            <div class="flex items-center gap-1 shrink-0 ml-auto">
+            <!-- Complete button (PR badge overlaid) -->
+            <div class="relative flex items-center justify-center">
               {#if set.isPR}
-                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 animate-pulse">PR</span>
+                <span class="absolute -top-1.5 left-1/2 -translate-x-1/2 text-[8px] font-bold px-1 rounded-full bg-amber-500/20 text-amber-400 whitespace-nowrap">PR</span>
               {/if}
               <button
                 onclick={() => toggleComplete(set, ex)}
@@ -1355,7 +1372,7 @@
                 <span class="text-sm text-neutral-600">{stretch.duration}s</span>
               {/if}
             </div>
-            <p class="text-sm text-neutral-400 mb-3">{stretch.instructions}</p>
+            <p class="mb-3 {idx === activeStretchIndex ? 'text-base text-neutral-200' : 'text-sm text-neutral-400'}">{stretch.instructions}</p>
             <div class="flex gap-2 text-xs">
               {#each stretch.muscles as muscle}
                 <span class="px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">{muscle}</span>
@@ -1548,29 +1565,43 @@
 {/if}
 
 <!-- Non-blocking Rest Timer Bar -->
-{#if restTimerActive}
+{#if restTimerActive || restTimerDone}
   <div class="fixed bottom-20 left-0 right-0 z-40 flex justify-center pointer-events-none px-4">
-    <div class="w-full max-w-lg rounded-xl px-4 py-3 pointer-events-auto shadow-lg" style="background-color: #1a1a1a; border: 1px solid #333;">
-      <div class="flex items-center justify-between gap-3">
-        <div class="flex items-center gap-3 min-w-0">
-          <span class="text-xs text-neutral-500 uppercase tracking-wider shrink-0">Rest</span>
-          <span class="text-2xl font-mono font-bold text-white">{formatTime(restTimeLeft)}</span>
+    <div
+      class="w-full max-w-lg rounded-xl px-4 py-3 pointer-events-auto shadow-lg transition-colors"
+      style="background-color: #1a1a1a; border: 1px solid {restTimerDone ? '#22c55e' : '#333'};"
+    >
+      {#if restTimerDone}
+        <!-- "GO!" flash — shown for 2s after timer hits 0 -->
+        <div class="flex items-center justify-between">
+          <span class="text-2xl font-bold text-green-400 animate-pulse">GO! 🔔</span>
+          <button
+            onclick={dismissRestTimer}
+            class="text-xs font-medium text-neutral-400 hover:text-white transition-colors shrink-0 px-2 py-1 rounded-md hover:bg-neutral-800"
+          >Dismiss</button>
         </div>
-        <div class="flex-1 mx-2">
-          <div class="h-1 rounded-full bg-neutral-800 overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all duration-1000 ease-linear"
-              style="width: {restTotalTime > 0 ? ((restTotalTime - restTimeLeft) / restTotalTime) * 100 : 0}%; background-color: #22c55e;"
-            ></div>
+      {:else}
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="text-xs text-neutral-500 uppercase tracking-wider shrink-0">Rest</span>
+            <span class="text-2xl font-mono font-bold text-white">{formatTime(restTimeLeft)}</span>
           </div>
+          <div class="flex-1 mx-2">
+            <div class="h-1 rounded-full bg-neutral-800 overflow-hidden">
+              <div
+                class="h-full rounded-full transition-all duration-1000 ease-linear"
+                style="width: {restTotalTime > 0 ? ((restTotalTime - restTimeLeft) / restTotalTime) * 100 : 0}%; background-color: #22c55e;"
+              ></div>
+            </div>
+          </div>
+          <button
+            onclick={dismissRestTimer}
+            class="text-xs font-medium text-neutral-400 hover:text-white transition-colors shrink-0 px-2 py-1 rounded-md hover:bg-neutral-800"
+          >
+            Skip
+          </button>
         </div>
-        <button
-          onclick={dismissRestTimer}
-          class="text-xs font-medium text-neutral-400 hover:text-white transition-colors shrink-0 px-2 py-1 rounded-md hover:bg-neutral-800"
-        >
-          Skip
-        </button>
-      </div>
+      {/if}
     </div>
   </div>
 {/if}
