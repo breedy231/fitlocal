@@ -3,17 +3,12 @@
   import { cachedGet } from '$lib/api-cache.svelte';
   import { goto } from '$app/navigation';
   import CalendarHeatmap from '$lib/CalendarHeatmap.svelte';
+  import type { WorkoutListItem, WorkoutDetail, CalendarReport } from 'fitlocal-shared';
 
-  interface Workout {
-    id: number;
-    date: string;
-    notes?: string;
-    exerciseCount: number;
-    setCount: number;
-    exercises?: { exercise?: { name: string }; sets?: any[] }[];
-  }
+  // Workouts start as list items, optionally enriched with full detail after lazy fetch.
+  type Workout = WorkoutListItem & Partial<Pick<WorkoutDetail, 'exercises'>>;
 
-  const workoutCache = cachedGet<Workout[]>('/workouts');
+  const workoutCache = cachedGet<WorkoutListItem[]>('/workouts');
   let workouts: Workout[] = $state([]);
   let loading = $derived(workoutCache.loading && workouts.length === 0);
   let expandedId: number | null = $state(null);
@@ -32,14 +27,7 @@
   let calYear = $state(new Date().getFullYear());
   let calMonth = $state(new Date().getMonth() + 1);
 
-  interface CalendarDay {
-    date: string;
-    workoutCount: number;
-    totalSets: number;
-    primaryMuscles: string[];
-  }
-
-  let calendarCache = $derived(cachedGet<{ year: number; month: number; days: CalendarDay[] }>(`/reports/calendar?year=${calYear}&month=${calMonth}`));
+  let calendarCache = $derived(cachedGet<CalendarReport>(`/reports/calendar?year=${calYear}&month=${calMonth}`));
   let calendarDays = $derived(calendarCache.data?.days ?? []);
 
   function onCalendarNavigate(y: number, m: number) {
