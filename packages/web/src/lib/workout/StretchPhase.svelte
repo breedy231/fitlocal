@@ -69,7 +69,7 @@
 <div class="py-6">
   <div class="flex items-center justify-between mb-8">
     <h1 class="text-2xl font-bold">{phase === 'warmup' ? 'Warm Up' : 'Cool Down'}</h1>
-    <button onclick={skip} class="text-sm text-neutral-500 hover:text-neutral-300">
+    <button onclick={skip} class="min-h-[44px] px-3 py-2 rounded-md text-sm text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors touch-manipulation">
       {phase === 'warmup' ? 'Skip to Workout' : 'Skip Cool Down'}
     </button>
   </div>
@@ -96,11 +96,11 @@
         {#if idx === activeStretchIndex}
           <div class="mt-4 flex gap-3">
             {#if !stretchTimerActive}
-              <button onclick={startStretchTimer} class="flex-1 py-2.5 rounded-lg font-medium text-sm" style="background-color: #22c55e; color: #0f0f0f;">
+              <button onclick={startStretchTimer} class="flex-1 min-h-[48px] py-3 rounded-lg font-semibold text-base active:opacity-80 transition-opacity touch-manipulation" style="background-color: #22c55e; color: #0f0f0f;">
                 Start
               </button>
             {:else}
-              <button onclick={advanceStretch} class="flex-1 py-2.5 rounded-lg font-medium text-sm bg-neutral-700 text-neutral-200">
+              <button onclick={advanceStretch} class="flex-1 min-h-[48px] py-3 rounded-lg font-semibold text-base bg-neutral-700 text-neutral-100 active:bg-neutral-600 transition-colors touch-manipulation">
                 {#if idx < stretches.length - 1}
                   Next Stretch
                 {:else if phase === 'warmup'}
