@@ -1,18 +1,8 @@
 <script lang="ts">
-  interface Challenge {
-    id: number;
-    month: string;
-    type: string;
-    description: string;
-    targetValue: number;
-    currentValue: number;
-    unit: string;
-    completed: boolean;
-    completedAt: string | null;
-  }
+  import type { Challenge } from 'fitlocal-shared';
 
   interface Props {
-    challenge: Challenge;
+    challenge: Challenge & { currentValue: number };
   }
 
   let { challenge }: Props = $props();

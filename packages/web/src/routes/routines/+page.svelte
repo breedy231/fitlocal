@@ -1,13 +1,7 @@
 <script lang="ts">
   import { api } from '$lib/api';
   import { showToast } from '$lib/toast';
-
-  interface Routine {
-    id: number;
-    name: string;
-    exercises: { exerciseName: string; exerciseId: number | null; targetSets: number; targetReps: string }[];
-    createdAt: string;
-  }
+  import type { Routine, RoutineCreateResponse } from 'fitlocal-shared';
 
   let routines: Routine[] = $state([]);
   let loading = $state(true);
@@ -33,7 +27,7 @@
     if (!newName.trim() || !newText.trim()) return;
     creating = true;
     try {
-      const result = await api<{ id: number; matched: number; unmatched: number }>('/routines', {
+      const result = await api<RoutineCreateResponse>('/routines', {
         method: 'POST',
         body: JSON.stringify({ name: newName.trim(), text: newText.trim() }),
       });

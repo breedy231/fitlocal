@@ -1,15 +1,8 @@
 <script lang="ts">
   import { cachedGet } from '$lib/api-cache.svelte';
+  import type { AchievementsResponse } from 'fitlocal-shared';
 
-  interface Achievement {
-    key: string;
-    name: string;
-    description: string;
-    icon: string;
-    unlockedAt: string | null;
-  }
-
-  const cache = cachedGet<{ total: number; unlocked: number; achievements: Achievement[] }>('/achievements');
+  const cache = cachedGet<AchievementsResponse>('/achievements');
   let data = $derived(cache.data);
   let achievements = $derived(data?.achievements ?? []);
   let loading = $derived(cache.loading);

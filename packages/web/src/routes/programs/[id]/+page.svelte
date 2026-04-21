@@ -5,37 +5,10 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { showToast } from '$lib/toast';
-
-  interface ProgramExercise {
-    id: number;
-    exerciseName: string;
-    exerciseId: number | null;
-    targetSets: number | null;
-    targetReps: string | null;
-    restSeconds: number | null;
-    notes: string | null;
-  }
-
-  interface ProgramDay {
-    id: number;
-    name: string;
-    dayOrder: number;
-    musclesFocus: string | null;
-    exercises: ProgramExercise[];
-  }
-
-  interface Program {
-    id: number;
-    name: string;
-    description: string | null;
-    daysPerWeek: number | null;
-    durationWeeks: number | null;
-    source: string | null;
-    days: ProgramDay[];
-  }
+  import type { ProgramDetail } from 'fitlocal-shared';
 
   const activeCache = cachedGet<{ program: { id: number } }>('/programs/active');
-  let program: Program | null = $state(null);
+  let program: ProgramDetail | null = $state(null);
   let isActive = $derived.by(() => {
     const a = activeCache.data;
     return a != null && program != null && a.program.id === program.id;
@@ -45,7 +18,7 @@
   onMount(async () => {
     const id = $page.params.id;
     try {
-      program = await api<Program>(`/programs/${id}`);
+      program = await api<ProgramDetail>(`/programs/${id}`);
     } catch {
       showToast('Failed to load program', 'error');
     } finally {

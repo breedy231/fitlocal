@@ -3,20 +3,13 @@
   import { cachedGet } from '$lib/api-cache.svelte';
   import { invalidateAfterMutation } from '$lib/api-cache.svelte';
   import { showToast } from '$lib/toast';
+  import type { UserGoals } from 'fitlocal-shared';
 
   const KG_TO_LBS = 2.20462;
   const LBS_TO_KG = 1 / KG_TO_LBS;
 
   // Cut phase goals
-  interface Goals {
-    maintenanceCalories: number | null;
-    targetCalories: number | null;
-    targetProteinG: number | null;
-    targetWeightKg: number | null;
-    cutStartDate: string | null;
-    cutEndDate: string | null;
-  }
-  const goalsCache = cachedGet<Goals>('/goals');
+  const goalsCache = cachedGet<UserGoals>('/goals');
   let goalsLoaded = $state(false);
   let cutMaintenance = $state('');
   let cutTargetCal = $state('');

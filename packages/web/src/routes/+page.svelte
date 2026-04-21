@@ -6,85 +6,35 @@
   import CutProgressCard from '$lib/CutProgressCard.svelte';
   import Expandable from '$lib/Expandable.svelte';
   import BarChart from '$lib/BarChart.svelte';
+  import type {
+    RecoverySummary,
+    WorkoutListItem,
+    ActiveProgram,
+    TrainingLoad,
+    WeeklyGoals,
+    DeloadCheck,
+    NutritionData,
+    WeeklyProgress,
+    ChallengeCurrentResponse,
+  } from 'fitlocal-shared';
 
-  interface MuscleRecovery {
-    name: string;
-    recoveryPct: number;
-  }
-
-  interface Workout {
-    id: number;
-    date: string;
-    locationProfile?: string;
-    notes?: string;
-    exercises?: any[];
-  }
-
-  interface ActiveProgram {
-    program: { id: number; name: string };
-    dayIndex: number;
-    totalDays: number;
-    day: { name: string; musclesFocus: string | null };
-  }
-
-  interface TrainingLoad {
-    label: 'well_below' | 'below' | 'steady' | 'above' | 'well_above';
-    ratio: number;
-    currentLoad: number;
-    baselineLoad: number;
-  }
-
-  const recovery = cachedGet<{ muscles: MuscleRecovery[] }>('/recovery-summary');
-  const workoutCache = cachedGet<Workout[]>('/workouts?limit=5');
+  const recovery = cachedGet<RecoverySummary>('/recovery-summary');
+  const workoutCache = cachedGet<WorkoutListItem[]>('/workouts?limit=5');
   const programCache = cachedGet<ActiveProgram>('/programs/active');
   const trainingLoadCache = cachedGet<TrainingLoad>('/training-load');
 
-  interface WeeklyGoals {
-    volume: { current: number; target: number };
-    consistency: { current: number; target: number };
-    recovery: { current: number; target: number };
-  }
-
   const weeklyGoalsCache = cachedGet<WeeklyGoals>('/weekly-goals');
-  const deloadCache = cachedGet<{ suggest: boolean; consecutiveWeeks: number; message: string | null }>('/deload-check');
+  const deloadCache = cachedGet<DeloadCheck>('/deload-check');
   let deloadSuggestion = $derived(deloadCache.data);
   let deloadDismissed = $state(false);
 
-  interface NutritionData {
-    date: string;
-    snapshotDate?: string;
-    isStale?: boolean;
-    calories: { current: number | null; target: number | null };
-    protein: { current: number | null; target: number | null };
-    isInCut: boolean;
-    deficitMagnitude: number | null;
-    deficitPct: number | null;
-  }
   const nutritionCache = cachedGet<NutritionData>('/goals/daily-nutrition');
   let nutritionData = $derived(nutritionCache.data);
 
-  interface WeeklyProgress {
-    isInCut: boolean;
-    week: { avgCalories: number | null; avgDeficit: number | null; targetDeficit: number; daysLogged: number };
-    weight: { currentTrendLbs: number | null; changeLbs: number | null; weeklyTargetLbs: number | null };
-    pace: 'on_track' | 'ahead' | 'behind' | null;
-  }
   const weeklyProgressCache = cachedGet<WeeklyProgress>('/goals/weekly-progress');
   let weeklyProgress = $derived(weeklyProgressCache.data);
 
-  interface Challenge {
-    id: number;
-    month: string;
-    type: string;
-    description: string;
-    targetValue: number;
-    currentValue: number;
-    unit: string;
-    completed: boolean;
-    completedAt: string | null;
-  }
-
-  const challengeCache = cachedGet<{ challenge: Challenge | null }>('/challenges/current');
+  const challengeCache = cachedGet<ChallengeCurrentResponse>('/challenges/current');
   let challenge = $derived(challengeCache.data?.challenge);
   let ringsExpanded = $state(false);
   let loadExpanded = $state(false);
