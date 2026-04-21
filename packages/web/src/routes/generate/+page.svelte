@@ -53,6 +53,11 @@
   );
 
   let dayType = $state('');
+  let lastDayType = $state(
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('fitlocal-last-day-type') || ''
+      : ''
+  );
   let duration = $state(
     typeof localStorage !== 'undefined'
       ? parseInt(localStorage.getItem('fitlocal-duration') || '60') || 60
@@ -71,6 +76,16 @@
   let workout: GeneratedWorkout | null = $state(null);
   let loading = $state(false);
   let starting = $state(false);
+  let quickStarting = $state(false);
+
+  const DAY_TYPE_LABELS: Record<string, string> = {
+    push: 'Push',
+    pull: 'Pull',
+    legs: 'Legs',
+    upper: 'Upper',
+    lower: 'Lower',
+    fullbody: 'Full Body',
+  };
 
   function kgToLbs(kg: number): string {
     const lbs = kg * 2.20462;
@@ -132,7 +147,61 @@
 
   function selectDay(type: string) {
     dayType = type;
+    lastDayType = type;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('fitlocal-last-day-type', type);
+    }
     generate();
+  }
+
+  // Quick Start (freestyle): generate + start with zero intermediate screens.
+  // Uses last-used day type (or 'fullbody' fallback), equipment, duration, supersets from localStorage.
+  async function quickStartFreestyle() {
+    const type = lastDayType || 'fullbody';
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      showToast('Connect to Wi-Fi to start workout', 'error');
+      return;
+    }
+    quickStarting = true;
+    try {
+      const generated = await api<GeneratedWorkout>(
+        `/generate-workout?dayType=${type}&equipment=${equipment}&supersets=${supersets}&duration=${duration}`
+      );
+
+      // Show the exercises so the user can see what they're about to do
+      dayType = type;
+      lastDayType = type;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('fitlocal-last-day-type', type);
+      }
+      workout = generated;
+
+      const d = new Date();
+      const now = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      const created = await api<{ id: number }>('/workouts/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          date: now,
+          notes: `${generated.dayType} day`,
+          exercises: generated.exercises.map((ex, i) => ({
+            exerciseId: ex.id,
+            displayOrder: i,
+            supersetGroup: ex.supersetGroup ?? null,
+            sets: Array.from({ length: ex.suggestedSets }, () => ({
+              reps: ex.suggestedReps,
+              weightKg: ex.suggestedWeightKg,
+            })),
+          })),
+        }),
+      });
+
+      goto(`/log/${created.id}`);
+    } catch (e: any) {
+      showToast(e.message || 'Failed to start workout', 'error');
+    } finally {
+      quickStarting = false;
+    }
   }
 
   async function openSwapSheet(exerciseId: number) {
@@ -495,6 +564,16 @@
 
   <!-- Program Mode -->
   {#if mode === 'program' && activeProgram && !programLoading}
+    <!-- Quick Start — one tap goes straight into the workout -->
+    <button
+      onclick={startProgramWorkout}
+      disabled={startingProgram}
+      class="w-full font-semibold text-lg py-5 rounded-xl mb-4 disabled:opacity-50"
+      style="background-color: #22c55e; color: #0f0f0f;"
+    >
+      {startingProgram ? 'Starting...' : `⚡ Quick Start: ${activeProgram.day.name}`}
+    </button>
+
     <div class="rounded-xl p-4 mb-4" style="background-color: #1a1a1a;">
       <div class="flex items-center justify-between mb-1">
         <span class="text-xs text-neutral-500">{activeProgram.program.name}</span>
@@ -665,6 +744,21 @@
 
   <!-- Freestyle Mode -->
   {#if mode === 'freestyle' && !programLoading}
+  {#if lastDayType}
+    <!-- Quick Start — generate + start in one tap using last-used defaults -->
+    <button
+      onclick={quickStartFreestyle}
+      disabled={quickStarting}
+      class="w-full font-semibold text-lg py-5 rounded-xl mb-4 disabled:opacity-50"
+      style="background-color: #22c55e; color: #0f0f0f;"
+    >
+      {quickStarting ? 'Starting...' : `⚡ Quick Start: ${DAY_TYPE_LABELS[lastDayType] ?? lastDayType}`}
+    </button>
+    <p class="text-xs text-neutral-500 text-center -mt-2 mb-4">
+      {DAY_TYPE_LABELS[lastDayType] ?? lastDayType} · {duration} min · {equipment === 'full' ? 'Full Gym' : 'Travel'}{supersets ? ' · Supersets' : ''}
+    </p>
+  {/if}
+
   <!-- Equipment & Supersets Toggles -->
   <div class="flex items-center justify-between mb-2 rounded-xl p-4" style="background-color: #1a1a1a;">
     <span class="text-sm font-medium text-neutral-300">Equipment</span>
