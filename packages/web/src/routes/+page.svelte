@@ -1,5 +1,8 @@
 <script lang="ts">
   import { cachedGet } from '$lib/api-cache.svelte';
+  import { api } from '$lib/api';
+  import { goto } from '$app/navigation';
+  import { showToast } from '$lib/toast';
   import TrainingRings from '$lib/TrainingRings.svelte';
   import ChallengeCard from '$lib/ChallengeCard.svelte';
   import NutritionCard from '$lib/NutritionCard.svelte';
@@ -16,6 +19,7 @@
     NutritionData,
     WeeklyProgress,
     ChallengeCurrentResponse,
+    GeneratedWorkout,
   } from 'fitlocal-shared';
 
   const recovery = cachedGet<RecoverySummary>('/recovery-summary');
@@ -68,10 +72,163 @@
     const d = new Date(dateStr + 'T12:00:00');
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   }
+
+  function parseTargetReps(reps: string | null): number {
+    if (!reps) return 10;
+    if (/amrap/i.test(reps)) return 1;
+    const num = parseInt(reps);
+    return isNaN(num) ? 10 : num;
+  }
+
+  function todayIsoDate(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // Primary CTA state
+  let ctaBusy = $state(false);
+  let daySheetOpen = $state(false);
+
+  const dayTypeOptions: { type: string; label: string; group: 'ppl' | 'classic' }[] = [
+    { type: 'push', label: 'Push', group: 'ppl' },
+    { type: 'pull', label: 'Pull', group: 'ppl' },
+    { type: 'legs', label: 'Legs', group: 'ppl' },
+    { type: 'upper', label: 'Upper', group: 'classic' },
+    { type: 'lower', label: 'Lower', group: 'classic' },
+    { type: 'fullbody', label: 'Full Body', group: 'classic' },
+  ];
+
+  async function startProgramQuick() {
+    if (!activeProgram || ctaBusy) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      showToast('Connect to Wi-Fi to start workout', 'error');
+      return;
+    }
+    ctaBusy = true;
+    try {
+      const resolvedExercises = await Promise.all(
+        activeProgram.day.exercises.map(async (ex) => {
+          let exerciseId = ex.exerciseId;
+          if (!exerciseId) {
+            const created = await api<{ id: number }>('/exercises', {
+              method: 'POST',
+              body: JSON.stringify({ name: ex.exerciseName }),
+            });
+            exerciseId = created.id;
+          }
+          return { ...ex, exerciseId };
+        })
+      );
+
+      const created = await api<{ id: number }>('/workouts/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          date: todayIsoDate(),
+          notes: `${activeProgram.program.name} — ${activeProgram.day.name}`,
+          exercises: resolvedExercises.map((ex, i) => ({
+            exerciseId: ex.exerciseId,
+            displayOrder: i,
+            sets: Array.from({ length: ex.targetSets || 3 }, () => ({
+              reps: ex.suggestedReps ?? parseTargetReps(ex.targetReps),
+              weightKg: ex.suggestedWeightKg ?? 0,
+            })),
+          })),
+        }),
+      });
+
+      await api('/programs/active/advance', { method: 'POST' }).catch(() => {});
+      goto(`/log/${created.id}`);
+    } catch (e: any) {
+      showToast(e.message || 'Failed to start workout', 'error');
+      ctaBusy = false;
+    }
+  }
+
+  async function startFreestyleQuick(dayType: string) {
+    if (ctaBusy) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      showToast('Connect to Wi-Fi to start workout', 'error');
+      return;
+    }
+    ctaBusy = true;
+    daySheetOpen = false;
+    try {
+      const equipment = (typeof localStorage !== 'undefined' && localStorage.getItem('fitlocal-equipment')) || 'full';
+      const duration = (typeof localStorage !== 'undefined' && parseInt(localStorage.getItem('fitlocal-duration') || '60')) || 60;
+      const supersets = typeof localStorage !== 'undefined' ? localStorage.getItem('fitlocal-supersets') !== 'false' : true;
+
+      const generated = await api<GeneratedWorkout>(
+        `/generate-workout?dayType=${dayType}&equipment=${equipment}&supersets=${supersets}&duration=${duration}`
+      );
+
+      const created = await api<{ id: number }>('/workouts/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          date: todayIsoDate(),
+          notes: `${generated.dayType} day`,
+          exercises: generated.exercises.map((ex, i) => ({
+            exerciseId: ex.id,
+            displayOrder: i,
+            supersetGroup: ex.supersetGroup ?? null,
+            sets: Array.from({ length: ex.suggestedSets }, () => ({
+              reps: ex.suggestedReps,
+              weightKg: ex.suggestedWeightKg,
+            })),
+          })),
+        }),
+      });
+
+      goto(`/log/${created.id}`);
+    } catch (e: any) {
+      showToast(e.message || 'Failed to start workout', 'error');
+      ctaBusy = false;
+    }
+  }
+
+  function onPrimaryCta() {
+    if (ctaBusy) return;
+    if (activeProgram) {
+      startProgramQuick();
+    } else {
+      daySheetOpen = true;
+    }
+  }
 </script>
 
 <div class="p-4 max-w-lg md:max-w-2xl mx-auto">
-  <h1 class="text-3xl font-bold mb-6">FitLocal</h1>
+  <h1 class="text-3xl font-bold mb-4">FitLocal</h1>
+
+  <!-- Primary CTA: one-tap into the gym flow -->
+  <button
+    onclick={onPrimaryCta}
+    disabled={ctaBusy || programCache.loading}
+    class="w-full rounded-2xl min-h-24 px-5 py-5 mb-6 flex items-center justify-between text-left font-semibold shadow-lg active:scale-[0.99] transition-transform disabled:opacity-60"
+    style="background-color: #22c55e; color: #0f0f0f;"
+  >
+    <span class="flex flex-col">
+      {#if ctaBusy}
+        <span class="text-2xl leading-tight">Starting…</span>
+      {:else if programCache.loading}
+        <span class="text-2xl leading-tight">Start Today's Workout</span>
+      {:else if activeProgram}
+        <span class="text-xs uppercase tracking-wider opacity-70">{activeProgram.program.name} &middot; Day {activeProgram.dayIndex + 1} of {activeProgram.totalDays}</span>
+        <span class="text-2xl leading-tight mt-1">Start {activeProgram.day.name}</span>
+        {#if activeProgram.day.musclesFocus}
+          <span class="text-xs opacity-75 mt-0.5">{activeProgram.day.musclesFocus}</span>
+        {/if}
+      {:else}
+        <span class="text-2xl leading-tight">Start Workout</span>
+        <span class="text-xs opacity-75 mt-0.5">Pick a day type</span>
+      {/if}
+    </span>
+    {#if ctaBusy}
+      <span class="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0"></span>
+    {:else}
+      <svg class="w-7 h-7 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path>
+      </svg>
+    {/if}
+  </button>
 
   {#if loading}
     <div class="flex justify-center py-12">
@@ -201,13 +358,13 @@
       </a>
     {/if}
 
-    <!-- Generate Button -->
+    <!-- Secondary: generate freestyle (program users) or customize (others) -->
     <a
       href="/generate"
-      class="block w-full text-center font-semibold text-lg py-4 rounded-xl mb-6"
-      style="background-color: #22c55e; color: #0f0f0f;"
+      class="block w-full text-center font-medium text-sm py-3 rounded-xl mb-6 text-neutral-300 hover:text-white transition-colors"
+      style="background-color: #1a1a1a;"
     >
-      {activeProgram ? 'Generate Freestyle Workout' : 'Generate Workout'}
+      {activeProgram ? 'Generate freestyle workout' : 'Customize workout'}
     </a>
 
     <!-- Achievements link -->
@@ -252,5 +409,44 @@
         </div>
       {/if}
     </section>
+  {/if}
+
+  <!-- Day-type picker sheet (no-program path) -->
+  {#if daySheetOpen}
+    <div class="fixed inset-0 z-50 flex items-end justify-center">
+      <button class="absolute inset-0 bg-black/60" onclick={() => (daySheetOpen = false)} aria-label="Close"></button>
+      <div class="relative w-full max-w-lg bg-neutral-900 rounded-t-2xl p-5 pb-8">
+        <div class="w-10 h-1 rounded-full bg-neutral-700 mx-auto mb-4"></div>
+        <h2 class="text-lg font-bold mb-4">Pick a day</h2>
+
+        <p class="text-xs text-neutral-500 uppercase tracking-wider mb-1.5">PPL Split</p>
+        <div class="grid grid-cols-3 gap-3 mb-4">
+          {#each dayTypeOptions.filter((d) => d.group === 'ppl') as opt}
+            <button
+              onclick={() => startFreestyleQuick(opt.type)}
+              disabled={ctaBusy}
+              class="py-4 rounded-xl text-center font-semibold min-h-[56px] text-neutral-100 hover:text-white disabled:opacity-50"
+              style="background-color: #1a1a1a;"
+            >
+              {opt.label}
+            </button>
+          {/each}
+        </div>
+
+        <p class="text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Classic</p>
+        <div class="grid grid-cols-3 gap-3">
+          {#each dayTypeOptions.filter((d) => d.group === 'classic') as opt}
+            <button
+              onclick={() => startFreestyleQuick(opt.type)}
+              disabled={ctaBusy}
+              class="py-4 rounded-xl text-center font-semibold min-h-[56px] text-neutral-100 hover:text-white disabled:opacity-50"
+              style="background-color: #1a1a1a;"
+            >
+              {opt.label}
+            </button>
+          {/each}
+        </div>
+      </div>
+    </div>
   {/if}
 </div>
