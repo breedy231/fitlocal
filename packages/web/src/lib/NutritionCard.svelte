@@ -1,14 +1,5 @@
 <script lang="ts">
-  interface NutritionData {
-    date: string;
-    snapshotDate?: string;
-    isStale?: boolean;
-    calories: { current: number | null; target: number | null };
-    protein: { current: number | null; target: number | null };
-    isInCut: boolean;
-    deficitMagnitude: number | null;
-    deficitPct: number | null;
-  }
+  import type { NutritionData } from 'fitlocal-shared';
 
   let { data }: { data: NutritionData } = $props();
 

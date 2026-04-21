@@ -8,6 +8,7 @@
   import NutritionCard from '$lib/NutritionCard.svelte';
   import { cachedGet } from '$lib/api-cache.svelte';
   import { showToast } from '$lib/toast';
+  import type { NutritionData, LastPerformance, ExerciseProgressionReport } from 'fitlocal-shared';
 
   import { browser } from '$app/environment';
 
@@ -25,23 +26,13 @@
   const REST_PRESETS = [30, 45, 60, 90, 120, 180];
 
   // Daily nutrition for post-workout summary
-  interface NutritionData {
-    calories: { current: number | null; target: number | null };
-    protein: { current: number | null; target: number | null };
-    isInCut: boolean;
-    deficitMagnitude: number | null;
-    deficitPct: number | null;
-    date: string;
-    snapshotDate?: string;
-    isStale?: boolean;
-  }
   const nutritionCache = cachedGet<NutritionData>('/goals/daily-nutrition');
   let nutritionData = $derived(nutritionCache.data);
   let plateCalcWeightLbs: number | null = $state(null);
   let plateCalcSet: SetData | null = $state(null);
 
   // Exercise history (lazy-loaded per exercise)
-  interface HistoryPoint { date: string; maxWeight: number; maxReps: number; sessionVolume: number }
+  type HistoryPoint = ExerciseProgressionReport['dataPoints'][number];
   let exerciseHistory: Record<number, HistoryPoint[] | 'loading'> = $state({});
 
   async function toggleHistory(exerciseId: number) {
@@ -53,7 +44,7 @@
     exerciseHistory[exerciseId] = 'loading';
     exerciseHistory = { ...exerciseHistory };
     try {
-      const res = await api<{ dataPoints: HistoryPoint[] }>(`/reports/exercise-progression?exerciseId=${exerciseId}`);
+      const res = await api<ExerciseProgressionReport>(`/reports/exercise-progression?exerciseId=${exerciseId}`);
       exerciseHistory[exerciseId] = res.dataPoints.slice(-5);
     } catch {
       delete exerciseHistory[exerciseId];
@@ -69,11 +60,6 @@
     rpe?: number | null;
     completed: boolean;
     isPR?: boolean;
-  }
-
-  interface LastPerformance {
-    date: string;
-    sets: { reps: number; weightKg: number }[];
   }
 
   interface WorkoutExercise {

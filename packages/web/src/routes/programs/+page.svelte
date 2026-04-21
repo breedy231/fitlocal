@@ -2,24 +2,9 @@
   import { api } from '$lib/api';
   import { cachedGet } from '$lib/api-cache.svelte';
   import { showToast } from '$lib/toast';
+  import type { ProgramListItem, ActiveProgram } from 'fitlocal-shared';
 
-  interface Program {
-    id: number;
-    name: string;
-    daysPerWeek: number | null;
-    durationWeeks: number | null;
-    source: string | null;
-    dayCount: number;
-  }
-
-  interface ActiveProgram {
-    program: { id: number; name: string };
-    dayIndex: number;
-    totalDays: number;
-    day: { name: string; musclesFocus: string | null };
-  }
-
-  const programsCache = cachedGet<Program[]>('/programs');
+  const programsCache = cachedGet<ProgramListItem[]>('/programs');
   const activeCache = cachedGet<ActiveProgram>('/programs/active');
 
   let programs = $derived(programsCache.data ?? []);
