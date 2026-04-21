@@ -33,8 +33,8 @@
       </div>
       <div class="flex justify-between items-center px-5 pb-3">
         <h2 class="text-lg font-bold text-white">{title}</h2>
-        <button onclick={onClose} class="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-white">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        <button onclick={onClose} class="w-11 h-11 flex items-center justify-center rounded-md text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors touch-manipulation" aria-label="Close search">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
       </div>
       <div class="px-5 pb-3">
@@ -54,7 +54,7 @@
             {#each results as result}
               <button
                 onclick={() => onSelect(result)}
-                class="w-full text-left px-4 py-3.5 rounded-xl hover:bg-neutral-700/50 active:bg-neutral-700 transition-colors"
+                class="w-full text-left min-h-[56px] px-4 py-3.5 rounded-xl hover:bg-neutral-700/50 active:bg-neutral-700 transition-colors touch-manipulation"
               >
                 <div class="font-medium text-[15px] text-white">{result.name}</div>
                 {#if result.primaryMuscles && Array.isArray(result.primaryMuscles) && result.primaryMuscles.length > 0}
