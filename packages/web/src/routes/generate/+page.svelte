@@ -4,63 +4,17 @@
   import { goto } from '$app/navigation';
   import ExerciseDetail from '$lib/ExerciseDetail.svelte';
   import { showToast } from '$lib/toast';
+  import type {
+    GeneratedExercise,
+    GeneratedWorkout,
+    GenerateReplaceResponse,
+    ActiveProgram,
+    ActiveProgramExercise as ProgramExercise,
+    Routine as RoutineSummary,
+    RoutineDetail,
+  } from 'fitlocal-shared';
 
   let detailExerciseId: number | null = $state(null);
-
-  interface GeneratedExercise {
-    id: number;
-    name: string;
-    suggestedSets: number;
-    suggestedReps: number;
-    suggestedWeightKg: number;
-    lastPerformedDaysAgo: number;
-    isFocus: boolean;
-    isCardio: boolean;
-    suggestedDurationSec?: number;
-    progression?: 'up' | 'deload' | 'hold';
-    repRange?: { min: number; max: number };
-    supersetGroup?: number;
-  }
-
-  interface GeneratedWorkout {
-    dayType: string;
-    globalModifier: number;
-    isInCut: boolean;
-    exercises: GeneratedExercise[];
-  }
-
-  interface ProgramExercise {
-    id: number;
-    exerciseName: string;
-    exerciseId: number | null;
-    displayOrder: number;
-    targetSets: number | null;
-    targetReps: string | null;
-    restSeconds: number | null;
-    notes: string | null;
-    progression: 'up' | 'deload' | 'hold' | null;
-    suggestedWeightKg: number | null;
-    suggestedReps: number | null;
-    repRange: { min: number; max: number } | null;
-    isEstimate?: boolean;
-  }
-
-  interface ActiveProgram {
-    program: { id: number; name: string };
-    dayIndex: number;
-    totalDays: number;
-    day: {
-      id: number;
-      name: string;
-      musclesFocus: string | null;
-      exercises: ProgramExercise[];
-    };
-    cardio: {
-      week: number;
-      sessions: number[];
-      completedThisWeek: number;
-    } | null;
-  }
 
   // Program state — cached so revisiting this page is instant
   const programCached = cachedGet<ActiveProgram>('/programs/active');
@@ -68,27 +22,6 @@
   let startingProgram = $state(false);
   let programLoading = $derived(programCached.loading);
 
-  // Routine state
-  interface RoutineSummary {
-    id: number;
-    name: string;
-    exercises: { exerciseName: string; exerciseId: number | null; targetSets: number; targetReps: string }[];
-  }
-  interface RoutineDetail {
-    id: number;
-    name: string;
-    exercises: {
-      exerciseName: string;
-      exerciseId: number | null;
-      targetSets: number;
-      targetReps: string;
-      suggestedWeightKg: number | null;
-      suggestedReps: number | null;
-      repRange: { min: number; max: number } | null;
-      progression: 'up' | 'deload' | 'hold' | null;
-      isEstimate: boolean;
-    }[];
-  }
   const routinesCached = cachedGet<RoutineSummary[]>('/routines');
   let routinesList: RoutineSummary[] = $derived(routinesCached.data ?? []);
   let selectedRoutineId: number | null = $state(null);
@@ -209,7 +142,7 @@
     loadingAlternatives = true;
     try {
       const excludeIds = workout.exercises.map(e => e.id).join(',');
-      const result = await api<{ alternatives: GeneratedExercise[] }>(
+      const result = await api<GenerateReplaceResponse>(
         `/generate-workout/replace?exerciseId=${exerciseId}&dayType=${dayType}&equipment=${equipment}&excludeIds=${excludeIds}`
       );
       swapAlternatives = result.alternatives;
@@ -268,6 +201,7 @@
     // Add to the local list immediately
     activeProgram.day.exercises = [...activeProgram.day.exercises, {
       id: -Date.now(), // temp id
+      programDayId: activeProgram.day.id,
       exerciseName: exercise.name,
       exerciseId: exercise.id,
       displayOrder: nextOrder,

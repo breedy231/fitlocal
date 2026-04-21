@@ -1,23 +1,10 @@
 <script lang="ts">
   import Expandable from '$lib/Expandable.svelte';
+  import type { WeeklyProgress } from 'fitlocal-shared';
 
-  interface WeeklyProgress {
-    isInCut: boolean;
-    week: {
-      avgCalories: number | null;
-      avgDeficit: number | null;
-      targetDeficit: number;
-      daysLogged: number;
-    };
-    weight: {
-      currentTrendLbs: number | null;
-      changeLbs: number | null;
-      weeklyTargetLbs: number | null;
-    };
-    pace: 'on_track' | 'ahead' | 'behind' | null;
-  }
+  type InCutProgress = Extract<WeeklyProgress, { isInCut: true }>;
 
-  let { data }: { data: WeeklyProgress } = $props();
+  let { data }: { data: InCutProgress } = $props();
   let expanded = $state(false);
 
   const paceConfig = {

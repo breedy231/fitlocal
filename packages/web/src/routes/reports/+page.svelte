@@ -7,43 +7,27 @@
   import VolumeHeatmap from '$lib/VolumeHeatmap.svelte';
   import WeightTrendChart from '$lib/WeightTrendChart.svelte';
   import Expandable from '$lib/Expandable.svelte';
+  import type {
+    SummaryReport as Summary,
+    FrequencyReport,
+    VolumeWorkout,
+    VolumeReport,
+    MuscleDistributionReport,
+    PersonalRecord as PR,
+    PersonalRecordsReport,
+    BenchmarkExercise,
+    BenchmarksReport,
+    VolumeHeatmapWeek as VolumeWeek,
+    VolumeHeatmapReport,
+    ExerciseWithHistory as ExerciseOption,
+    ExercisesWithHistoryReport,
+    ExerciseDataPoint,
+    HealthTrendSnapshot as HealthSnapshot,
+    HealthTrendsReport,
+  } from 'fitlocal-shared';
 
-  interface Summary {
-    totalWorkouts: number;
-    totalWorkingSets: number;
-    totalVolumeKg: number;
-    currentStreak: number;
-    workoutsThisWeek: number;
-    workoutsThisMonth: number;
-  }
-
-  interface FrequencyWeek { week: string; weekStart: string; count: number }
-  interface VolumeWorkout { id: number; date: string; notes: string | null; totalVolume: number; exerciseCount: number; setCount: number }
-  interface MuscleData { name: string; sets: number }
-  interface PR { exerciseName: string; maxWeightKg: number; repsAtMax: number; dateAchieved: string; estimated1RmKg: number }
-  interface BenchmarkExercise {
-    name: string;
-    estimated1RmKg: number;
-    ratio: number;
-    level: string;
-    thresholds: Record<string, number>;
-  }
-  interface VolumeWeek {
-    weekStart: string;
-    days: { date: string; muscles: Record<string, number> }[];
-  }
-  interface ExerciseOption { id: number; name: string; workoutCount: number }
-  interface ExerciseDataPoint { date: string; maxWeight: number; maxReps: number; sessionVolume: number; estimated1RmKg: number }
-  interface HealthSnapshot {
-    date: string;
-    restingHr: number | null;
-    hrv: number | null;
-    sleepHours: number | null;
-    calories: number | null;
-    proteinG: number | null;
-    steps: number | null;
-    bodyWeightKg: number | null;
-  }
+  type MuscleData = MuscleDistributionReport['muscles'][number];
+  type FrequencyWeek = FrequencyReport['weeks'][number];
 
   let selectedExerciseId: number | null = $state(null);
   let exerciseProgression: ExerciseDataPoint[] = $state([]);
@@ -144,24 +128,16 @@
   }
 
   const summaryCache = cachedGet<Summary>(withExclusions('/reports/summary'));
-  const freqCache = cachedGet<{ weeks: FrequencyWeek[] }>(withExclusions('/reports/frequency'));
-  const volCache = cachedGet<{ workouts: VolumeWorkout[] }>(withExclusions('/reports/volume'));
-  const muscleCache = cachedGet<{ muscles: MuscleData[] }>(withExclusions('/reports/muscle-distribution'));
-  const prCache = cachedGet<{ records: PR[] }>(withExclusions('/reports/personal-records'));
-  const exCache = cachedGet<{ exercises: ExerciseOption[] }>(withExclusions('/reports/exercises-with-history'));
-  const healthCache = cachedGet<{ snapshots: HealthSnapshot[] }>('/reports/health-trends');
-  const volumeHeatmapCache = cachedGet<{ muscles: string[]; weeks: VolumeWeek[] }>('/reports/volume-heatmap?weeks=4');
+  const freqCache = cachedGet<FrequencyReport>(withExclusions('/reports/frequency'));
+  const volCache = cachedGet<VolumeReport>(withExclusions('/reports/volume'));
+  const muscleCache = cachedGet<MuscleDistributionReport>(withExclusions('/reports/muscle-distribution'));
+  const prCache = cachedGet<PersonalRecordsReport>(withExclusions('/reports/personal-records'));
+  const exCache = cachedGet<ExercisesWithHistoryReport>(withExclusions('/reports/exercises-with-history'));
+  const healthCache = cachedGet<HealthTrendsReport>('/reports/health-trends');
+  const volumeHeatmapCache = cachedGet<VolumeHeatmapReport>('/reports/volume-heatmap?weeks=4');
 
-  interface WeightTrendPoint { date: string; rawKg: number; trendKg: number }
-  interface WeightTrendData {
-    points: WeightTrendPoint[];
-    weeklyRateLbs: number | null;
-    targetWeightKg: number | null;
-    cutStartDate: string | null;
-    cutEndDate: string | null;
-  }
   // Fetch all available weight trend data (uses default 90d, but we request 365d to cover all filters)
-  const weightTrendCache = cachedGet<WeightTrendData>('/goals/weight-trend?since=' + new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10));
+  const weightTrendCache = cachedGet<import('fitlocal-shared').WeightTrend>('/goals/weight-trend?since=' + new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10));
   let weightTrendRaw = $derived(weightTrendCache.data);
 
   // Filter weight trend points by the same healthRange used for other health charts
@@ -220,7 +196,7 @@
   // Load benchmarks reactively when gender changes
   async function loadBenchmarks(gender: 'male' | 'female') {
     try {
-      const result = await api<{ bodyWeightKg: number | null; exercises: BenchmarkExercise[] }>(`/reports/benchmarks?gender=${gender}`);
+      const result = await api<BenchmarksReport>(`/reports/benchmarks?gender=${gender}`);
       benchmarks = result.exercises;
       bodyWeightKg = result.bodyWeightKg;
     } catch { benchmarks = []; }
@@ -252,7 +228,7 @@
   async function loadExerciseProgression(exerciseId: number) {
     selectedExerciseId = exerciseId;
     try {
-      const result = await api<{ exerciseName: string; dataPoints: ExerciseDataPoint[] }>(
+      const result = await api<import('fitlocal-shared').ExerciseProgressionReport>(
         withExclusions(`/reports/exercise-progression?exerciseId=${exerciseId}`)
       );
       exerciseProgression = result.dataPoints;
