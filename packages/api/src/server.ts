@@ -106,13 +106,19 @@ app.addHook('onSend', (_request, reply, _payload, done) => {
 // In production, serve the SvelteKit static build
 if (isProduction) {
   const webBuildPath = path.resolve(__dirname, '../../web/build');
+  // wildcard: true (default) serves files from disk dynamically — new files from
+  // a rebuild are picked up without restarting the server. wildcard: false caches
+  // the file list at startup, which forced a kickstart after every web rebuild.
   await app.register(fastifyStatic, {
     root: webBuildPath,
-    wildcard: false,
   });
 
-  // SPA fallback — serve index.html for unmatched routes
-  app.setNotFoundHandler((_req, reply) => {
+  // SPA fallback — serve index.html for unmatched non-API routes. API routes
+  // that don't exist should return a proper JSON 404, not the HTML shell.
+  app.setNotFoundHandler((req, reply) => {
+    if (req.url.startsWith('/api/')) {
+      return reply.code(404).send({ error: 'Not found' });
+    }
     return reply.sendFile('index.html');
   });
 }
