@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Online backup of fitlocal.db using sqlite3 .backup (WAL-safe, atomic).
-# Writes to ~/fitlocal-backups/ with a timestamped filename. Prunes files older than 14 days.
+# Writes to ~/fitlocal-backups/ with a timestamped filename, then calls
+# prune-backups.py to apply tiered retention (24 hourly / 14 daily / 8 weekly).
 #
 # Safe to run against a live database — .backup uses the SQLite online backup API
 # and coordinates with any active writers via the shared cache / page lock protocol.
@@ -9,7 +10,6 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$REPO_ROOT/fitlocal.db"
 DEST_DIR="${FITLOCAL_BACKUP_DIR:-$HOME/fitlocal-backups}"
-RETENTION_DAYS="${FITLOCAL_BACKUP_RETENTION_DAYS:-14}"
 
 if [[ ! -f "$SRC" ]]; then
   echo "[backup-db] no DB at $SRC — nothing to back up" >&2
@@ -39,7 +39,6 @@ mv "$TMP" "$DEST"
 rm -f "$TMP-shm" "$TMP-wal"
 echo "[backup-db] wrote $DEST ($(du -h "$DEST" | cut -f1))"
 
-# Prune old backups. Only deletes files whose names match our format, so it can't
-# accidentally remove unrelated files a user drops in this directory.
-find "$DEST_DIR" -maxdepth 1 -type f -name 'fitlocal-*.db' -mtime "+$RETENTION_DAYS" -print -delete \
-  | sed 's/^/[backup-db] pruned /' || true
+# Tiered retention: last 24 hourly + 14 daily + 8 weekly. Only touches files
+# matching fitlocal-YYYYMMDD-HHMMSS.db, so unrelated files are safe.
+python3 "$REPO_ROOT/scripts/prune-backups.py" "$DEST_DIR"

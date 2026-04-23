@@ -9,6 +9,13 @@ const dbPath = path.join(__dirname, '../../../fitlocal.db');
 const sqlite: Database.Database = new Database(dbPath);
 sqlite.pragma('journal_mode = WAL');
 sqlite.pragma('foreign_keys = ON');
+// Aggressive WAL checkpoint: default is 1000 pages (~4 MB). The Apr 21 incident
+// had 1000+ pages pending when the DB corrupted, which meant losing that window
+// of writes would have cost days of data. With 100 pages (~400 KB), the worst-
+// case loss between checkpoints is minutes, not days. Trade-off is slightly
+// more frequent fsync; at our write volume (a few rows per set, a few sets per
+// workout) this is imperceptible.
+sqlite.pragma('wal_autocheckpoint = 100');
 
 // Ensure performance indexes exist
 sqlite.exec(`
