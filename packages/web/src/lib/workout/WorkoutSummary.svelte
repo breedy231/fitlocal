@@ -194,7 +194,7 @@
   </div>
 
   <!-- Daily Nutrition (if goals are set) -->
-  {#if nutritionData && nutritionData.calories.target != null}
+  {#if nutritionData && nutritionData.calories?.target != null}
     <div class="mb-6">
       <NutritionCard data={nutritionData} />
     </div>
