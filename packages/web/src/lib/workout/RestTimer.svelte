@@ -141,7 +141,7 @@
           <span class="text-2xl font-bold text-green-400 animate-pulse">GO! 🔔</span>
           <button
             onclick={dismissRestTimer}
-            class="text-xs font-medium text-neutral-400 hover:text-white transition-colors shrink-0 px-2 py-1 rounded-md hover:bg-neutral-800"
+            class="min-h-[44px] min-w-[56px] text-sm font-medium text-neutral-300 hover:text-white transition-colors shrink-0 px-3 py-2 rounded-md hover:bg-neutral-800 active:bg-neutral-700 touch-manipulation"
           >Dismiss</button>
         </div>
       {:else}
@@ -160,7 +160,7 @@
           </div>
           <button
             onclick={dismissRestTimer}
-            class="text-xs font-medium text-neutral-400 hover:text-white transition-colors shrink-0 px-2 py-1 rounded-md hover:bg-neutral-800"
+            class="min-h-[44px] min-w-[56px] text-sm font-medium text-neutral-300 hover:text-white transition-colors shrink-0 px-3 py-2 rounded-md hover:bg-neutral-800 active:bg-neutral-700 touch-manipulation"
           >
             Skip
           </button>
