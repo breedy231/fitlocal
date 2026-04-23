@@ -253,7 +253,7 @@
     {/if}
 
     <!-- Daily Nutrition (during cut or when goals are configured) -->
-    {#if nutritionData && (nutritionData.isInCut || (nutritionData.calories.target != null))}
+    {#if nutritionData && (nutritionData.isInCut || (nutritionData.calories?.target != null))}
       <section class="mb-6">
         <NutritionCard data={nutritionData} />
       </section>
