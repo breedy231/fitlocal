@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.fitlocal.backup</string>
+
+    <!-- Hourly online backup of fitlocal.db with tiered retention.
+         StartInterval fires every 3600s while the machine is awake; while
+         asleep it pauses, which is fine because the DB can't change then.
+         RunAtLoad catches the case where the Mac just woke up and we want
+         an immediate snapshot before any writes happen. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/brendanreed/Projects/fitlocal/scripts/backup-db.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/brendanreed/Projects/fitlocal</string>
+
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Backup script is idempotent and self-contained; no need for KeepAlive. -->
+
+    <key>StandardOutPath</key>
+    <string>/Users/brendanreed/Library/Logs/fitlocal-backup.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/brendanreed/Library/Logs/fitlocal-backup.log</string>
+</dict>
+</plist>

@@ -10,3 +10,9 @@ fitlocal.db-wal
 packages/api/fitlocal.db-shm
 packages/api/fitlocal.db-wal
 certs/
+# Manual DB recovery scratch area — raw file copies created during incident
+# recovery land here. Never commit: can contain corrupted state or full user data.
+db-backups/
+# Corrupted DBs quarantined during recovery (e.g. fitlocal.db.CORRUPT.YYYYMMDD-HHMMSS).
+# The plain *.db rule above only matches files ending in `.db`, so they need this.
+fitlocal.db.CORRUPT.*
