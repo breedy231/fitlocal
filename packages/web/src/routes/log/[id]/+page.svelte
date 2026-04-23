@@ -720,16 +720,16 @@
 
     <!-- Add Exercise button -->
     <button
-      onclick={() => { addingExercise = true; searchQuery = ''; searchResults = []; }}
-      class="w-full py-3 rounded-xl text-sm font-medium text-neutral-400 bg-neutral-800/50 hover:bg-neutral-800 transition-colors mb-4"
+      onclick={() => { if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(10); addingExercise = true; searchQuery = ''; searchResults = []; }}
+      class="w-full min-h-[48px] py-3.5 rounded-xl text-base font-medium text-neutral-300 bg-neutral-800/70 hover:bg-neutral-800 active:bg-neutral-700 transition-colors mb-4 touch-manipulation"
     >
       + Add Exercise
     </button>
 
     <button
-      onclick={finishWorkout}
+      onclick={() => { if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20); finishWorkout(); }}
       disabled={finishing}
-      class="w-full font-semibold text-lg py-4 rounded-xl disabled:opacity-50 mb-24"
+      class="w-full font-semibold text-lg py-4 rounded-xl disabled:opacity-50 mb-24 active:opacity-80 transition-opacity touch-manipulation"
       style="background-color: #22c55e; color: #0f0f0f;"
     >
       {finishing ? 'Saving...' : 'Finish Workout'}
