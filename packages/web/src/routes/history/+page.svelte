@@ -295,7 +295,7 @@
                             <div class="text-xs {set.isWarmup ? 'text-neutral-600' : 'text-neutral-400'} font-mono">
                               {#if set.isWarmup}<span class="text-neutral-600 mr-1">W</span>{:else}<span class="text-neutral-600 mr-1">{idx + 1}</span>{/if}
                               {#if cardio}
-                                {set.reps ?? 0} min{#if set.rpe}, resistance {set.rpe}{/if}{#if set.weightKg && set.weightKg > 0}, {set.weightKg} mi{/if}
+                                {set.reps ?? 0} min{#if set.resistance}, resistance {set.resistance}{/if}{#if set.distanceMeters && set.distanceMeters > 0}, {(set.distanceMeters / 1609.344).toFixed(2)} mi{/if}
                               {:else}
                                 {set.reps ?? 0} reps
                                 {#if set.weightKg && set.weightKg > 0}
