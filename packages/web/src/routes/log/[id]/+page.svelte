@@ -265,6 +265,19 @@
     stretchPhase = phase;
   }
 
+  async function loadAllLastPerformance(w: Workout, workoutId: number) {
+    await Promise.all(w.exercises.map(async (ex) => {
+      try {
+        const perf = await api<LastPerformance>(
+          `/exercises/${ex.exerciseId}/last-performance?excludeWorkoutId=${workoutId}`
+        );
+        if (perf.sets.length > 0) {
+          ex.lastPerformance = perf;
+        }
+      } catch { /* no history — that's fine */ }
+    }));
+  }
+
   const CACHE_PREFIX = 'fitlocal-workout-';
 
   function cacheWorkout(id: string, data: Workout) {
@@ -294,6 +307,8 @@
       if (workout?.exercises) {
         cacheWorkout(id, workout);
         initWorkout(workout);
+        // Fetch last performance for each exercise (runs in parallel, non-blocking)
+        loadAllLastPerformance(workout, parseInt(id));
         const muscles = getWorkoutMuscles();
         const stretchList = await loadStretches(muscles);
         beginStretchPhase('warmup', stretchList);
@@ -313,8 +328,31 @@
     }
   });
 
+  // Persist workout state when app goes to background or is about to close
+  function saveWorkoutState() {
+    if (workout) {
+      cacheWorkout($page.params.id!, workout);
+    }
+  }
+
+  onMount(() => {
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('beforeunload', saveWorkoutState);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('beforeunload', saveWorkoutState);
+    };
+  });
+
+  function onVisibilityChange() {
+    if (document.visibilityState === 'hidden') {
+      saveWorkoutState();
+    }
+  }
+
   onDestroy(() => {
     if (searchTimeout) clearTimeout(searchTimeout);
+    saveWorkoutState();
   });
 
   function adjustReps(set: SetData, delta: number) {
@@ -334,18 +372,20 @@
 
   async function toggleComplete(set: SetData, ex: WorkoutExercise) {
     set.completed = !set.completed;
+    // Cache locally immediately so state survives app exit
+    saveWorkoutState();
     // Persist completion state + set data to API
     try {
       await api(`/sets/${set.id}`, {
         method: 'PUT',
-        body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, completed: set.completed }),
+        body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, distanceMeters: set.distanceMeters, resistance: set.resistance, completed: set.completed }),
       });
     } catch {
       showToast('Failed to save set — will retry on finish', 'error');
     }
     if (set.completed) {
-      // PR detection: check if this set's weight exceeds the all-time best
-      if (set.weightKg && set.weightKg > 0 && ex.prWeightKg != null && set.weightKg > ex.prWeightKg) {
+      // PR detection: check if this set's weight exceeds the all-time best (skip warm-up sets)
+      if (!set.isWarmup && set.weightKg && set.weightKg > 0 && ex.prWeightKg != null && set.weightKg > ex.prWeightKg) {
         set.isPR = true;
         ex.prWeightKg = set.weightKg;
         prExerciseName = ex.exercise?.name ?? 'Exercise';
@@ -558,19 +598,32 @@
     }
   }
 
-  async function addSet(exercise: WorkoutExercise) {
+  async function addSet(exercise: WorkoutExercise, isWarmup = false) {
     try {
       const lastSet = exercise.sets[exercise.sets.length - 1];
+      // Warm-up sets use lighter weight (50% of working weight) and fewer reps
+      const workingWeight = lastSet?.weightKg ?? 0;
       const newSet = await api<SetData>('/sets', {
         method: 'POST',
         body: JSON.stringify({
           workoutExerciseId: exercise.id,
-          reps: lastSet?.reps ?? 10,
-          weightKg: lastSet?.weightKg ?? 0,
+          reps: isWarmup ? Math.min(lastSet?.reps ?? 10, 8) : (lastSet?.reps ?? 10),
+          weightKg: isWarmup ? Math.round(workingWeight * 0.5 * 100) / 100 : workingWeight,
+          isWarmup,
         }),
       });
       newSet.completed = false;
-      exercise.sets = [...exercise.sets, newSet];
+      if (isWarmup) {
+        // Insert warm-up sets before working sets
+        const firstWorkingIdx = exercise.sets.findIndex(s => !s.isWarmup);
+        if (firstWorkingIdx >= 0) {
+          exercise.sets = [...exercise.sets.slice(0, firstWorkingIdx), newSet, ...exercise.sets.slice(firstWorkingIdx)];
+        } else {
+          exercise.sets = [...exercise.sets, newSet];
+        }
+      } else {
+        exercise.sets = [...exercise.sets, newSet];
+      }
     } catch (e: any) {
       showToast('Failed to add set', 'error');
     }
@@ -593,7 +646,7 @@
         for (const set of ex.sets) {
           await api(`/sets/${set.id}`, {
             method: 'PUT',
-            body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe }),
+            body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, distanceMeters: set.distanceMeters, resistance: set.resistance }),
           });
         }
       }
@@ -685,7 +738,7 @@
         onToggleHistory={() => toggleHistory(ex.exerciseId)}
         onSwap={() => { swappingExercise = ex; searchQuery = ''; searchResults = []; }}
         onRemove={() => removeExercise(ex)}
-        onAddSet={() => addSet(ex)}
+        onAddSet={(isWarmup) => addSet(ex, isWarmup)}
         onDeleteSet={(setId) => deleteSet(ex, setId)}
         onSetRir={(rpe) => { for (const s of ex.sets) s.rpe = rpe; }}
       />

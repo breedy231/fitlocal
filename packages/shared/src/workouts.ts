@@ -11,6 +11,8 @@ export interface Set {
   rpe: number | null;
   multiplier: number | null;
   durationSeconds: number | null;
+  distanceMeters: number | null;
+  resistance: number | null;
   completed: boolean;
 }
 

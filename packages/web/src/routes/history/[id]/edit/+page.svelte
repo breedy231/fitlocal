@@ -13,6 +13,8 @@
     isWarmup: boolean;
     rpe?: number | null;
     durationSeconds?: number | null;
+    distanceMeters?: number | null;
+    resistance?: number | null;
     dirty?: boolean;
   }
 
@@ -153,6 +155,8 @@
                 weightKg: set.weightKg,
                 rpe: set.rpe,
                 durationSeconds: set.durationSeconds,
+                distanceMeters: set.distanceMeters,
+                resistance: set.resistance,
               }),
             });
           }
@@ -242,8 +246,8 @@
                   />
                   <input
                     type="number"
-                    value={set.rpe ?? ''}
-                    onchange={(e) => { set.rpe = parseFloat(e.currentTarget.value) || 0; set.dirty = true; }}
+                    value={set.resistance ?? ''}
+                    onchange={(e) => { set.resistance = parseFloat(e.currentTarget.value) || 0; set.dirty = true; }}
                     class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
                     placeholder="level"
                     step="1"
@@ -252,8 +256,12 @@
                   />
                   <input
                     type="number"
-                    value={set.weightKg ?? ''}
-                    onchange={(e) => { set.weightKg = parseFloat(e.currentTarget.value) || 0; set.dirty = true; }}
+                    value={set.distanceMeters != null ? Math.round((set.distanceMeters / 1609.344) * 100) / 100 : ''}
+                    onchange={(e) => {
+                      const mi = parseFloat(e.currentTarget.value);
+                      set.distanceMeters = isNaN(mi) ? null : Math.round(mi * 1609.344);
+                      set.dirty = true;
+                    }}
                     class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
                     placeholder="mi"
                     step="0.1"

@@ -103,8 +103,8 @@
         <label class="text-xs text-neutral-500 block mb-1">{mode === 'treadmill' ? 'Incline' : 'Resistance'}</label>
         <input
           type="number"
-          value={set.rpe ?? ''}
-          onchange={(e) => { set.rpe = parseFloat(e.currentTarget.value) || 0; }}
+          value={set.resistance ?? ''}
+          onchange={(e) => { set.resistance = parseFloat(e.currentTarget.value) || 0; }}
           placeholder="level"
           class="w-full h-12 text-center text-base py-2 rounded-lg bg-neutral-800 text-white border-none outline-none"
           step="1"
@@ -116,8 +116,11 @@
         <label class="text-xs text-neutral-500 block mb-1">Distance (mi)</label>
         <input
           type="number"
-          value={set.weightKg ?? ''}
-          onchange={(e) => { set.weightKg = parseFloat(e.currentTarget.value) || 0; }}
+          value={set.distanceMeters != null ? Math.round((set.distanceMeters / 1609.344) * 100) / 100 : ''}
+          onchange={(e) => {
+            const mi = parseFloat(e.currentTarget.value);
+            set.distanceMeters = isNaN(mi) ? null : Math.round(mi * 1609.344);
+          }}
           placeholder="opt."
           class="w-full h-12 text-center text-base py-2 rounded-lg bg-neutral-800 text-white border-none outline-none"
           step="0.1"
@@ -127,7 +130,7 @@
         <button
           onclick={handleComplete}
           class="w-12 h-12 rounded-lg flex items-center justify-center transition-colors touch-manipulation
-            {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
+            {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-700 text-neutral-400 border border-neutral-600'}"
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
@@ -139,12 +142,16 @@
 {:else}
   <!-- Grid: [set#] [reps] [×] [weight] [✓] — 1fr columns keep checkbox on-card on all iPhones -->
   <!-- 4c sizing: 48px tap targets per iOS HIG 44pt minimum (rounded up) -->
-  <div class="grid items-center gap-x-1 py-2 {index > 0 ? 'border-t border-neutral-800/50' : ''}" style="grid-template-columns: 28px 1fr 10px 1fr 48px">
+  <div class="grid items-center gap-x-1 py-2 {index > 0 ? 'border-t border-neutral-800/50' : ''} {set.isWarmup ? 'opacity-70' : ''}" style="grid-template-columns: 28px 1fr 10px 1fr 48px">
     <!-- Set number + last performance -->
     <div class="text-center">
-      <span class="text-xs text-neutral-500">{index + 1}</span>
+      {#if set.isWarmup}
+        <span class="text-[10px] font-bold text-amber-500/80">W</span>
+      {:else}
+        <span class="text-xs text-neutral-500">{index + 1}</span>
+      {/if}
       {#if lastSet}
-        <div class="text-[9px] text-neutral-600 leading-tight mt-0.5" title="Last session">{kgToLbs(lastSet.weightKg)}×{lastSet.reps}</div>
+        <div class="text-[9px] text-neutral-600 leading-tight mt-0.5" title="Last session">{lastSet.weightKg > 0 ? `${kgToLbs(lastSet.weightKg)}×` : ''}{lastSet.reps}</div>
       {/if}
     </div>
 
@@ -215,7 +222,7 @@
       <button
         onclick={handleComplete}
         class="w-12 h-12 rounded-lg flex items-center justify-center transition-colors touch-manipulation
-          {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-600'}"
+          {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-700 text-neutral-400 border border-neutral-600'}"
         aria-label={set.completed ? 'Mark set incomplete' : 'Mark set complete'}
       >
         <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
