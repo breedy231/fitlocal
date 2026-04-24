@@ -218,6 +218,18 @@ sqlite.exec(`
 // Add duration_seconds column to sets (cardio tracking)
 try { sqlite.exec('ALTER TABLE sets ADD COLUMN duration_seconds INTEGER'); } catch { /* exists */ }
 
+// Promote cardio distance + resistance to first-class columns.
+// Prior to this, the UI overloaded weight_kg for miles and rpe for resistance
+// when rendering cardio exercises — which broke PR detection, volume math, and
+// any report query that touched those columns. These stay nullable so strength
+// sets are unaffected.
+for (const col of [
+  'ALTER TABLE sets ADD COLUMN distance_meters REAL',
+  'ALTER TABLE sets ADD COLUMN resistance REAL',
+]) {
+  try { sqlite.exec(col); } catch { /* Column already exists */ }
+}
+
 // Routines table (lightweight trainer-provided exercise lists)
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS routines (

@@ -90,7 +90,8 @@ export async function workoutRoutes(app: FastifyInstance) {
       ex_primary_muscles: string | null; ex_secondary_muscles: string | null; ex_equipment: string | null;
       set_id: number | null; set_reps: number | null; set_weight_kg: number | null;
       set_is_warmup: number | null; set_rpe: number | null; set_multiplier: number | null;
-      set_duration_seconds: number | null; set_completed: number | null;
+      set_duration_seconds: number | null; set_distance_meters: number | null;
+      set_resistance: number | null; set_completed: number | null;
     }>(sql`
       SELECT
         we.id as we_id, we.exercise_id, we.display_order, we.superset_group,
@@ -99,7 +100,9 @@ export async function workoutRoutes(app: FastifyInstance) {
         e.equipment as ex_equipment,
         s.id as set_id, s.reps as set_reps, s.weight_kg as set_weight_kg,
         s.is_warmup as set_is_warmup, s.rpe as set_rpe, s.multiplier as set_multiplier,
-        s.duration_seconds as set_duration_seconds, s.completed as set_completed
+        s.duration_seconds as set_duration_seconds,
+        s.distance_meters as set_distance_meters, s.resistance as set_resistance,
+        s.completed as set_completed
       FROM workout_exercises we
       JOIN exercises e ON we.exercise_id = e.id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
@@ -140,6 +143,8 @@ export async function workoutRoutes(app: FastifyInstance) {
           rpe: r.set_rpe,
           multiplier: r.set_multiplier,
           durationSeconds: r.set_duration_seconds,
+          distanceMeters: r.set_distance_meters,
+          resistance: r.set_resistance,
           completed: !!r.set_completed,
         });
       }

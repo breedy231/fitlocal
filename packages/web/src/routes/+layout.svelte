@@ -94,7 +94,7 @@
     </div>
   {/if}
 
-  <main class="flex-1 pb-24 md:pb-0 md:ml-[200px]">
+  <main class="flex-1 pb-32 md:pb-0 md:ml-[200px]">
     {@render children()}
   </main>
 

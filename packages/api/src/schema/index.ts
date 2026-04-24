@@ -39,6 +39,8 @@ export const sets = sqliteTable('sets', {
   rpe: real('rpe'),
   multiplier: real('multiplier').default(1.0),
   durationSeconds: integer('duration_seconds'),
+  distanceMeters: real('distance_meters'),
+  resistance: real('resistance'),
   completed: integer('completed', { mode: 'boolean' }).default(false),
 });
 

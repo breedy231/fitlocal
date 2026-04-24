@@ -39,7 +39,7 @@
     onToggleHistory: () => void;
     onSwap: () => void;
     onRemove: () => void;
-    onAddSet: () => void;
+    onAddSet: (isWarmup?: boolean) => void;
     onDeleteSet: (setId: number) => void;
     onSetRir: (rpe: number) => void;
   }
@@ -88,8 +88,10 @@
   );
 </script>
 
-<div
-  class="w-full text-left p-4 flex justify-between items-center cursor-pointer {allExDone ? 'opacity-60' : ''}"
+<!-- Header row: name + rest pill + collapse. Tools move to expanded body for more name room. -->
+<button
+  onclick={() => { vibrate(); onToggleExpanded(); }}
+  class="w-full text-left px-4 pt-4 pb-2 flex justify-between items-center cursor-pointer {allExDone ? 'opacity-60' : ''} touch-manipulation"
 >
   <div class="flex items-center gap-2 min-w-0">
     {#if allExDone}
@@ -97,74 +99,32 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
       </svg>
     {/if}
-    <span class="font-medium truncate">
-      <button
-        onclick={(e) => { e.stopPropagation(); onOpenExerciseDetail(ex.exerciseId); }}
+    <span class="font-medium truncate text-base">
+      <span
+        role="link"
+        tabindex="-1"
+        onclick={(e: MouseEvent) => { e.stopPropagation(); onOpenExerciseDetail(ex.exerciseId); }}
+        onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.stopPropagation(); onOpenExerciseDetail(ex.exerciseId); } }}
         class="underline decoration-neutral-600 underline-offset-2 hover:text-green-400 transition-colors"
-      >{ex.exercise?.name ?? 'Exercise'}</button>
+      >{ex.exercise?.name ?? 'Exercise'}</span>
     </span>
     {#if !isCardio}
-      <button
-        onclick={(e) => { e.stopPropagation(); vibrate(); onEditRest(); }}
-        class="min-h-[36px] text-xs px-3 py-1.5 rounded-full bg-neutral-800 text-neutral-400 hover:text-neutral-200 shrink-0 touch-manipulation"
+      <span
+        role="button"
+        tabindex="-1"
+        onclick={(e: MouseEvent) => { e.stopPropagation(); vibrate(); onEditRest(); }}
+        onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.stopPropagation(); vibrate(); onEditRest(); } }}
+        class="min-h-[36px] text-xs px-3 py-1.5 rounded-full bg-neutral-800 text-neutral-400 hover:text-neutral-200 shrink-0 touch-manipulation inline-flex items-center"
         title="Edit rest time"
-      >{(ex.restSeconds ?? 60) >= 60 ? `${Math.round((ex.restSeconds ?? 60) / 60)}m` : `${ex.restSeconds}s`}</button>
+      >{(ex.restSeconds ?? 60) >= 60 ? `${Math.round((ex.restSeconds ?? 60) / 60)}m` : `${ex.restSeconds}s`}</span>
     {/if}
   </div>
-  <div class="flex items-center gap-0.5 shrink-0">
-    {#if !isCardio}
-      <button
-        onclick={(e) => { e.stopPropagation(); vibrate(); const firstSet = ex.sets[0]; if (firstSet) onOpenPlateCalc(firstSet); }}
-        class="w-11 h-11 flex items-center justify-center rounded-md text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-colors touch-manipulation"
-        title="Plate calculator"
-        aria-label="Plate calculator"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
-        </svg>
-      </button>
-      <button
-        onclick={(e) => { e.stopPropagation(); vibrate(); onToggleHistory(); }}
-        class="w-11 h-11 flex items-center justify-center rounded-md transition-colors touch-manipulation {historyState ? 'text-green-400 bg-green-500/10' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'}"
-        title="View history"
-        aria-label="View history"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-        </svg>
-      </button>
-    {/if}
-    <button
-      onclick={(e) => { e.stopPropagation(); vibrate(); onSwap(); }}
-      class="w-11 h-11 flex items-center justify-center rounded-md text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-colors touch-manipulation"
-      title="Swap exercise"
-      aria-label="Swap exercise"
-    >
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
-      </svg>
-    </button>
-    <button
-      onclick={(e) => { e.stopPropagation(); vibrate(20); if (confirm(`Remove ${ex.exercise?.name}?`)) onRemove(); }}
-      class="w-11 h-11 flex items-center justify-center rounded-md text-neutral-500 hover:text-red-400 hover:bg-neutral-800 transition-colors touch-manipulation"
-      title="Remove exercise"
-      aria-label="Remove exercise"
-    >
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-      </svg>
-    </button>
-    <button
-      onclick={() => { vibrate(); onToggleExpanded(); }}
-      class="w-11 h-11 flex items-center justify-center rounded-md hover:bg-neutral-800 transition-colors touch-manipulation"
-      aria-label={ex.expanded ? 'Collapse exercise' : 'Expand exercise'}
-    >
-      <svg class="w-5 h-5 text-neutral-500 transition-transform {ex.expanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-      </svg>
-    </button>
+  <div class="flex items-center shrink-0 ml-2">
+    <svg class="w-5 h-5 text-neutral-500 transition-transform {ex.expanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+    </svg>
   </div>
-</div>
+</button>
 
 <!-- Inline rest time editor -->
 {#if restEditing}
@@ -180,6 +140,43 @@
 
 {#if ex.expanded}
   <div class="px-4 pb-4 space-y-2">
+    <!-- Tool buttons -->
+    <div class="flex items-center gap-1 pb-1">
+      {#if !isCardio}
+        <button
+          onclick={() => { vibrate(); const firstSet = ex.sets[0]; if (firstSet) onOpenPlateCalc(firstSet); }}
+          class="h-9 px-2.5 rounded-md text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-colors touch-manipulation flex items-center gap-1.5 text-xs"
+          title="Plate calculator"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+          Plates
+        </button>
+        <button
+          onclick={() => { vibrate(); onToggleHistory(); }}
+          class="h-9 px-2.5 rounded-md transition-colors touch-manipulation flex items-center gap-1.5 text-xs {historyState ? 'text-green-400 bg-green-500/10' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'}"
+          title="View history"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+          History
+        </button>
+      {/if}
+      <button
+        onclick={() => { vibrate(); onSwap(); }}
+        class="h-9 px-2.5 rounded-md text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-colors touch-manipulation flex items-center gap-1.5 text-xs"
+        title="Swap exercise"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
+        Swap
+      </button>
+      <button
+        onclick={() => { vibrate(20); if (confirm(`Remove ${ex.exercise?.name}?`)) onRemove(); }}
+        class="h-9 px-2.5 rounded-md text-neutral-500 hover:text-red-400 hover:bg-neutral-800 transition-colors touch-manipulation flex items-center gap-1.5 text-xs ml-auto"
+        title="Remove exercise"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    </div>
+
     {#each ex.sets as set, idx (set.id)}
       <SetRow
         {set}
@@ -216,6 +213,15 @@
     <ExerciseHistoryPanel state={historyState} {kgToLbs} />
 
     <div class="flex gap-2 mt-3">
+      {#if !isCardio}
+        <button
+          onclick={() => { vibrate(); onAddSet(true); }}
+          class="min-h-[48px] px-4 py-3 rounded-lg text-sm font-medium text-amber-500/80 bg-neutral-800/70 hover:bg-neutral-800 active:bg-neutral-700 transition-colors touch-manipulation"
+          title="Add warm-up set"
+        >
+          + Warm-up
+        </button>
+      {/if}
       <button
         onclick={() => { vibrate(); onAddSet(); }}
         class="flex-1 min-h-[48px] py-3 rounded-lg text-base font-medium text-neutral-300 bg-neutral-800/70 hover:bg-neutral-800 active:bg-neutral-700 transition-colors touch-manipulation"
