@@ -8,3 +8,4 @@ export * from './reports.js';
 export * from './health.js';
 export * from './challenges.js';
 export * from './generation.js';
+export * from './equipment-profiles.js';

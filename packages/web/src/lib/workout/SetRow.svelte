@@ -140,9 +140,9 @@
     </div>
   </div>
 {:else}
-  <!-- Grid: [set#] [reps] [×] [weight] [✓] — 1fr columns keep checkbox on-card on all iPhones -->
-  <!-- 4c sizing: 48px tap targets per iOS HIG 44pt minimum (rounded up) -->
-  <div class="grid items-center gap-x-1 py-2 {index > 0 ? 'border-t border-neutral-800/50' : ''} {set.isWarmup ? 'opacity-70' : ''}" style="grid-template-columns: 28px 1fr 10px 1fr 48px">
+  <!-- Grid: [set#] [reps] [weight] [✓] — compact 4-col layout for iPhone viewport -->
+  <!-- 44px tap targets = exact iOS HIG minimum -->
+  <div class="grid items-center gap-x-1 py-2 {index > 0 ? 'border-t border-neutral-800/50' : ''} {set.isWarmup ? 'opacity-70' : ''}" style="grid-template-columns: 24px minmax(0,1fr) minmax(0,1fr) 44px">
     <!-- Set number + last performance -->
     <div class="text-center">
       {#if set.isWarmup}
@@ -162,14 +162,14 @@
         onpointerup={clearHold}
         onpointerleave={clearHold}
         onpointercancel={clearHold}
-        class="w-12 h-12 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-xl active:bg-neutral-700 shrink-0 touch-manipulation select-none"
+        class="w-11 h-11 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-xl active:bg-neutral-700 shrink-0 touch-manipulation select-none"
         aria-label="Decrease reps"
       >−</button>
       <input
         type="number"
         value={set.reps ?? 0}
         onchange={(e) => { set.reps = Math.max(0, parseInt(e.currentTarget.value) || 0); }}
-        class="flex-1 min-w-0 h-12 text-center text-base font-bold rounded-lg bg-neutral-800/50 text-white border-none outline-none"
+        class="flex-1 min-w-0 h-11 text-center text-base font-bold rounded-lg bg-neutral-800/50 text-white border-none outline-none"
         inputmode="numeric"
         min="0"
       />
@@ -178,13 +178,10 @@
         onpointerup={clearHold}
         onpointerleave={clearHold}
         onpointercancel={clearHold}
-        class="w-12 h-12 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-xl active:bg-neutral-700 shrink-0 touch-manipulation select-none"
+        class="w-11 h-11 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-xl active:bg-neutral-700 shrink-0 touch-manipulation select-none"
         aria-label="Increase reps"
       >+</button>
     </div>
-
-    <!-- × separator -->
-    <span class="text-neutral-600 text-xs text-center">×</span>
 
     <!-- Weight: −/input/+ -->
     <div class="flex items-center gap-0.5">
@@ -193,14 +190,14 @@
         onpointerup={clearHold}
         onpointerleave={clearHold}
         onpointercancel={clearHold}
-        class="w-12 h-12 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-xl active:bg-neutral-700 shrink-0 touch-manipulation select-none"
+        class="w-11 h-11 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-xl active:bg-neutral-700 shrink-0 touch-manipulation select-none"
         aria-label="Decrease weight"
       >−</button>
       <input
         type="number"
         value={kgToLbs(set.weightKg)}
         onchange={(e) => updateWeightLbs(set, e.currentTarget.value)}
-        class="flex-1 min-w-0 h-12 text-center text-base font-bold rounded-lg bg-neutral-800/50 text-white border-none outline-none"
+        class="flex-1 min-w-0 h-11 text-center text-base font-bold rounded-lg bg-neutral-800/50 text-white border-none outline-none"
         step="2.5"
         inputmode="decimal"
       />
@@ -209,7 +206,7 @@
         onpointerup={clearHold}
         onpointerleave={clearHold}
         onpointercancel={clearHold}
-        class="w-12 h-12 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-xl active:bg-neutral-700 shrink-0 touch-manipulation select-none"
+        class="w-11 h-11 rounded-lg bg-neutral-800 text-neutral-300 flex items-center justify-center text-xl active:bg-neutral-700 shrink-0 touch-manipulation select-none"
         aria-label="Increase weight"
       >+</button>
     </div>
@@ -221,11 +218,11 @@
       {/if}
       <button
         onclick={handleComplete}
-        class="w-12 h-12 rounded-lg flex items-center justify-center transition-colors touch-manipulation
+        class="w-11 h-11 rounded-lg flex items-center justify-center transition-colors touch-manipulation
           {set.completed ? 'bg-green-500/20 text-green-400' : 'bg-neutral-700 text-neutral-400 border border-neutral-600'}"
         aria-label={set.completed ? 'Mark set incomplete' : 'Mark set complete'}
       >
-        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
         </svg>
       </button>

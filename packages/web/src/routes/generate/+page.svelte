@@ -12,7 +12,9 @@
     ActiveProgramExercise as ProgramExercise,
     Routine as RoutineSummary,
     RoutineDetail,
+    EquipmentProfile,
   } from 'fitlocal-shared';
+  import { onMount } from 'svelte';
 
   let detailExerciseId: number | null = $state(null);
 
@@ -63,11 +65,39 @@
       ? parseInt(localStorage.getItem('fitlocal-duration') || '60') || 60
       : 60
   );
-  let equipment = $state(
+  // Gym profiles
+  let profiles: EquipmentProfile[] = $state([]);
+  let selectedProfileId = $state(
     typeof localStorage !== 'undefined'
-      ? localStorage.getItem('fitlocal-equipment') || 'full'
-      : 'full'
+      ? parseInt(localStorage.getItem('fitlocal-profile-id') || '0') || 0
+      : 0
   );
+  let selectedProfile = $derived(profiles.find(p => p.id === selectedProfileId) ?? profiles[0] ?? null);
+
+  onMount(async () => {
+    // Migrate from old binary equipment to profile-based
+    if (typeof localStorage !== 'undefined') {
+      const oldEquipment = localStorage.getItem('fitlocal-equipment');
+      if (oldEquipment && !localStorage.getItem('fitlocal-profile-id')) {
+        localStorage.setItem('fitlocal-profile-id', oldEquipment === 'travel' ? '2' : '1');
+        localStorage.removeItem('fitlocal-equipment');
+      }
+    }
+    try {
+      profiles = await api<EquipmentProfile[]>('/equipment-profiles');
+      if (!selectedProfileId && profiles.length > 0) {
+        selectedProfileId = profiles[0].id;
+      }
+    } catch { /* profiles not available yet */ }
+  });
+
+  function selectProfile(id: number) {
+    selectedProfileId = id;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('fitlocal-profile-id', id.toString());
+    }
+  }
+
   let supersets = $state(
     typeof localStorage !== 'undefined'
       ? localStorage.getItem('fitlocal-supersets') !== 'false'
@@ -101,7 +131,7 @@
     loading = true;
     workout = null;
     try {
-      workout = await api<GeneratedWorkout>(`/generate-workout?dayType=${dayType}&equipment=${equipment}&supersets=${supersets}&duration=${duration}`);
+      workout = await api<GeneratedWorkout>(`/generate-workout?dayType=${dayType}&profileId=${selectedProfileId}&supersets=${supersets}&duration=${duration}`);
     } catch (e: any) {
       showToast(e.message || 'Failed to generate workout — is the server running?', 'error');
     } finally {
@@ -125,6 +155,7 @@
         body: JSON.stringify({
           date: now,
           notes: `${workout.dayType} day`,
+          locationProfile: selectedProfile?.name ?? null,
           exercises: workout.exercises.map((ex, i) => ({
             exerciseId: ex.id,
             displayOrder: i,
@@ -165,7 +196,7 @@
     quickStarting = true;
     try {
       const generated = await api<GeneratedWorkout>(
-        `/generate-workout?dayType=${type}&equipment=${equipment}&supersets=${supersets}&duration=${duration}`
+        `/generate-workout?dayType=${type}&profileId=${selectedProfileId}&supersets=${supersets}&duration=${duration}`
       );
 
       // Show the exercises so the user can see what they're about to do
@@ -184,6 +215,7 @@
         body: JSON.stringify({
           date: now,
           notes: `${generated.dayType} day`,
+          locationProfile: selectedProfile?.name ?? null,
           exercises: generated.exercises.map((ex, i) => ({
             exerciseId: ex.id,
             displayOrder: i,
@@ -212,7 +244,7 @@
     try {
       const excludeIds = workout.exercises.map(e => e.id).join(',');
       const result = await api<GenerateReplaceResponse>(
-        `/generate-workout/replace?exerciseId=${exerciseId}&dayType=${dayType}&equipment=${equipment}&excludeIds=${excludeIds}`
+        `/generate-workout/replace?exerciseId=${exerciseId}&dayType=${dayType}&profileId=${selectedProfileId}&excludeIds=${excludeIds}`
       );
       swapAlternatives = result.alternatives;
     } catch (e: any) {
@@ -337,14 +369,6 @@
     return groups;
   });
 
-  function toggleEquipment() {
-    equipment = equipment === 'full' ? 'travel' : 'full';
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('fitlocal-equipment', equipment);
-    }
-    if (dayType) generate();
-  }
-
   function toggleSupersets() {
     supersets = !supersets;
     if (typeof localStorage !== 'undefined') {
@@ -397,6 +421,7 @@
         body: JSON.stringify({
           date: now,
           notes: `Routine: ${routineDetail.name}`,
+          locationProfile: selectedProfile?.name ?? null,
           exercises: resolvedExercises.map((ex, i) => ({
             exerciseId: ex.exerciseId,
             displayOrder: i,
@@ -462,6 +487,7 @@
         body: JSON.stringify({
           date: now,
           notes: `${activeProgram.program.name} — ${activeProgram.day.name}`,
+          locationProfile: selectedProfile?.name ?? null,
           exercises: resolvedExercises.map((ex, i) => ({
             exerciseId: ex.exerciseId,
             displayOrder: i,
@@ -755,20 +781,25 @@
       {quickStarting ? 'Starting...' : `⚡ Quick Start: ${DAY_TYPE_LABELS[lastDayType] ?? lastDayType}`}
     </button>
     <p class="text-xs text-neutral-500 text-center -mt-2 mb-4">
-      {DAY_TYPE_LABELS[lastDayType] ?? lastDayType} · {duration} min · {equipment === 'full' ? 'Full Gym' : 'Travel'}{supersets ? ' · Supersets' : ''}
+      {DAY_TYPE_LABELS[lastDayType] ?? lastDayType} · {duration} min · {selectedProfile?.name ?? 'Full Gym'}{supersets ? ' · Supersets' : ''}
     </p>
   {/if}
 
-  <!-- Equipment & Supersets Toggles -->
-  <div class="flex items-center justify-between mb-2 rounded-xl p-4" style="background-color: #1a1a1a;">
-    <span class="text-sm font-medium text-neutral-300">Equipment</span>
-    <button
-      onclick={toggleEquipment}
-      class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {equipment === 'full' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}"
-    >
-      {equipment === 'full' ? '🏋️ Full Gym' : '🧳 Travel'}
-    </button>
-  </div>
+  <!-- Gym Profile Selector -->
+  {#if profiles.length > 0}
+    <div class="mb-2 rounded-xl p-4" style="background-color: #1a1a1a;">
+      <span class="text-sm font-medium text-neutral-300 block mb-2">Gym Profile</span>
+      <div class="flex flex-wrap gap-2">
+        {#each profiles as profile}
+          <button
+            onclick={() => { selectProfile(profile.id); if (dayType) generate(); }}
+            class="px-4 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation
+              {selectedProfileId === profile.id ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200'}"
+          >{profile.name}</button>
+        {/each}
+      </div>
+    </div>
+  {/if}
   <div class="flex items-center justify-between mb-4 rounded-xl p-4" style="background-color: #1a1a1a;">
     <span class="text-sm font-medium text-neutral-300">Supersets</span>
     <button
