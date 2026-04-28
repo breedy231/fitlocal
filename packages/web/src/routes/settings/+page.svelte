@@ -3,7 +3,8 @@
   import { cachedGet } from '$lib/api-cache.svelte';
   import { invalidateAfterMutation } from '$lib/api-cache.svelte';
   import { showToast } from '$lib/toast';
-  import type { UserGoals } from 'fitlocal-shared';
+  import { onMount } from 'svelte';
+  import type { UserGoals, EquipmentProfile } from 'fitlocal-shared';
 
   const KG_TO_LBS = 2.20462;
   const LBS_TO_KG = 1 / KG_TO_LBS;
@@ -71,11 +72,72 @@
     }
   }
 
-  let equipment = $state(
-    typeof localStorage !== 'undefined'
-      ? localStorage.getItem('fitlocal-equipment') || 'full'
-      : 'full'
-  );
+  // Gym profiles
+  const EQUIPMENT_OPTIONS = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'band', 'trx', 'kettlebell', 'bench', 'rack', 'smith machine', 'cardio'];
+  let profiles: EquipmentProfile[] = $state([]);
+  let editingProfile: { id?: number; name: string; availableEquipment: string[] } | null = $state(null);
+  let profileSaving = $state(false);
+
+  onMount(async () => {
+    try {
+      profiles = await api<EquipmentProfile[]>('/equipment-profiles');
+    } catch { /* seed may not have run yet */ }
+  });
+
+  function startAddProfile() {
+    editingProfile = { name: '', availableEquipment: [] };
+  }
+
+  function startEditProfile(p: EquipmentProfile) {
+    editingProfile = { id: p.id, name: p.name, availableEquipment: [...p.availableEquipment] };
+  }
+
+  function toggleEquipmentChip(equip: string) {
+    if (!editingProfile) return;
+    const idx = editingProfile.availableEquipment.indexOf(equip);
+    if (idx >= 0) {
+      editingProfile.availableEquipment = editingProfile.availableEquipment.filter(e => e !== equip);
+    } else {
+      editingProfile.availableEquipment = [...editingProfile.availableEquipment, equip];
+    }
+  }
+
+  async function saveProfile() {
+    if (!editingProfile || !editingProfile.name.trim()) return;
+    profileSaving = true;
+    try {
+      if (editingProfile.id) {
+        await api(`/equipment-profiles/${editingProfile.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ name: editingProfile.name, availableEquipment: editingProfile.availableEquipment }),
+        });
+      } else {
+        await api('/equipment-profiles', {
+          method: 'POST',
+          body: JSON.stringify({ name: editingProfile.name, availableEquipment: editingProfile.availableEquipment }),
+        });
+      }
+      profiles = await api<EquipmentProfile[]>('/equipment-profiles');
+      editingProfile = null;
+      showToast('Profile saved', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save', 'error');
+    } finally {
+      profileSaving = false;
+    }
+  }
+
+  async function deleteProfile(id: number) {
+    if (!confirm('Delete this gym profile?')) return;
+    try {
+      await api(`/equipment-profiles/${id}`, { method: 'DELETE' });
+      profiles = await api<EquipmentProfile[]>('/equipment-profiles');
+      showToast('Profile deleted', 'info');
+    } catch (err: any) {
+      showToast(err.message || 'Cannot delete', 'error');
+    }
+  }
+
   let importStatus = $state('');
   let importing = $state(false);
 
@@ -178,13 +240,6 @@
     } finally {
       healthImporting = false;
       input.value = '';
-    }
-  }
-
-  function toggleEquipment() {
-    equipment = equipment === 'full' ? 'travel' : 'full';
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('fitlocal-equipment', equipment);
     }
   }
 
@@ -327,18 +382,89 @@
       </div>
     </div>
 
-    <!-- Equipment Preference -->
+    <!-- Gym Profiles -->
     <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
-      <h2 class="font-medium mb-3">Equipment Preference</h2>
-      <button
-        onclick={toggleEquipment}
-        class="w-full flex items-center justify-between py-3 px-4 rounded-lg bg-neutral-800 min-h-[48px]"
-      >
-        <span class="text-neutral-300">Mode</span>
-        <span class="{equipment === 'full' ? 'text-green-400' : 'text-blue-400'} font-medium">
-          {equipment === 'full' ? '🏋️ Full Gym' : '🧳 Travel'}
-        </span>
-      </button>
+      <h2 class="font-medium mb-3">Gym Profiles</h2>
+      <p class="text-sm text-neutral-400 mb-4">Define equipment available at each gym. Select a profile when generating workouts to filter exercises.</p>
+
+      {#if editingProfile}
+        <div class="space-y-3 mb-4 rounded-lg bg-neutral-800 p-4">
+          <input
+            type="text"
+            bind:value={editingProfile.name}
+            placeholder="Profile name (e.g. Mom's House)"
+            class="w-full px-3 py-2 rounded-lg bg-neutral-900 text-neutral-200 text-sm border-none outline-none"
+          />
+          <div>
+            <label class="text-xs text-neutral-500 block mb-2">Available Equipment</label>
+            <p class="text-xs text-neutral-600 mb-2">Leave all unselected for "all equipment" (full gym).</p>
+            <div class="flex flex-wrap gap-2">
+              {#each EQUIPMENT_OPTIONS as equip}
+                <button
+                  onclick={() => toggleEquipmentChip(equip)}
+                  class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors touch-manipulation
+                    {editingProfile.availableEquipment.includes(equip) ? 'bg-green-500/20 text-green-400' : 'bg-neutral-700 text-neutral-400'}"
+                >{equip}</button>
+              {/each}
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button
+              onclick={saveProfile}
+              disabled={profileSaving || !editingProfile.name.trim()}
+              class="flex-1 py-2.5 rounded-lg bg-green-600 text-white text-sm font-medium disabled:opacity-50 min-h-[44px]"
+            >{profileSaving ? 'Saving...' : (editingProfile.id ? 'Update' : 'Create')}</button>
+            <button
+              onclick={() => editingProfile = null}
+              class="px-4 py-2.5 rounded-lg bg-neutral-700 text-neutral-300 text-sm min-h-[44px]"
+            >Cancel</button>
+          </div>
+        </div>
+      {/if}
+
+      <div class="space-y-2">
+        {#each profiles as profile}
+          <div class="flex items-start justify-between py-3 px-4 rounded-lg bg-neutral-800">
+            <div class="min-w-0">
+              <div class="font-medium text-sm text-neutral-200">{profile.name}</div>
+              <div class="flex flex-wrap gap-1 mt-1.5">
+                {#if profile.availableEquipment.length === 0}
+                  <span class="text-xs text-neutral-500">All equipment</span>
+                {:else}
+                  {#each profile.availableEquipment as equip}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-400">{equip}</span>
+                  {/each}
+                {/if}
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0 ml-2">
+              <button
+                onclick={() => startEditProfile(profile)}
+                class="p-2 rounded text-neutral-500 hover:text-neutral-300 touch-manipulation"
+                title="Edit"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+              </button>
+              {#if profiles.length > 1}
+                <button
+                  onclick={() => deleteProfile(profile.id)}
+                  class="p-2 rounded text-neutral-500 hover:text-red-400 touch-manipulation"
+                  title="Delete"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+
+      {#if !editingProfile}
+        <button
+          onclick={startAddProfile}
+          class="w-full mt-3 py-3 rounded-lg bg-neutral-800 text-neutral-300 text-sm font-medium min-h-[48px] hover:bg-neutral-700 transition-colors touch-manipulation"
+        >+ Add Profile</button>
+      {/if}
     </div>
 
     <!-- Fitbod Import -->

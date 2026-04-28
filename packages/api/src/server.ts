@@ -17,6 +17,7 @@ import { challengeRoutes } from './routes/challenges.js';
 import { achievementRoutes } from './routes/achievements.js';
 import { goalRoutes } from './routes/goals.js';
 import { routineRoutes } from './routes/routines.js';
+import { equipmentProfileRoutes } from './routes/equipment-profiles.js';
 import { sqlite } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -69,6 +70,7 @@ await app.register(challengeRoutes, { prefix: apiPrefix });
 await app.register(achievementRoutes, { prefix: apiPrefix });
 await app.register(goalRoutes, { prefix: apiPrefix });
 await app.register(routineRoutes, { prefix: apiPrefix });
+await app.register(equipmentProfileRoutes, { prefix: apiPrefix });
 
 app.get(`${apiPrefix}/health`, async () => ({ status: 'ok' }));
 

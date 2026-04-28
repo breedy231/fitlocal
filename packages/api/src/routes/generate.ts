@@ -1,15 +1,29 @@
 import { FastifyInstance } from 'fastify';
-import { sql } from 'drizzle-orm';
-import { db } from '../db.js';
+import { eq, sql } from 'drizzle-orm';
+import { db, schema } from '../db.js';
 import { generateWorkout, generateFromProgram, DAY_TYPE_MUSCLES, type ProgramExerciseInput } from '../lib/generator.js';
 import { computeProgressionBatch } from '../lib/progression.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
 
+// Resolve equipment filter: profileId takes priority, then legacy equipment param
+function resolveEquipment(profileId?: string, equipment?: string): string[] | null {
+  if (profileId) {
+    const profile = db.select().from(schema.equipmentProfiles).where(eq(schema.equipmentProfiles.id, parseInt(profileId))).get();
+    if (profile) {
+      const equip = profile.availableEquipment as string[] | null;
+      return equip && equip.length > 0 ? equip : null;
+    }
+  }
+  // Legacy backward compat
+  if (equipment === 'travel') return ['dumbbell', 'bodyweight', 'band', 'trx', 'cardio'];
+  return null; // 'full' or default = no restriction
+}
+
 export async function generateRoutes(app: FastifyInstance) {
-  app.get<{ Querystring: { dayType: string; equipment?: string; supersets?: string; duration?: string } }>(
+  app.get<{ Querystring: { dayType: string; equipment?: string; profileId?: string; supersets?: string; duration?: string } }>(
     '/generate-workout',
     async (req, reply) => {
-      let { dayType, equipment = 'full', supersets: supersetsParam, duration: durationParam } = req.query;
+      let { dayType, equipment = 'full', profileId, supersets: supersetsParam, duration: durationParam } = req.query;
       if (!dayType) {
         return reply.status(400).send({ error: 'dayType query param required (push, pull, legs, upper, lower, or fullbody)' });
       }
@@ -57,9 +71,10 @@ export async function generateRoutes(app: FastifyInstance) {
       }
 
       try {
+        const equipmentList = resolveEquipment(profileId, equipment);
         const workout = programExercises
           ? generateFromProgram(dayType, programExercises, db, { supersets, isInCut })
-          : generateWorkout(dayType, equipment, db, { supersets, durationMinutes, isInCut });
+          : generateWorkout(dayType, equipmentList, db, { supersets, durationMinutes, isInCut });
 
         // Nutrition integration: graduated volume reduction based on deficit magnitude
         const goals = db.all<{ maintenance_calories: number | null }>(
@@ -91,10 +106,10 @@ export async function generateRoutes(app: FastifyInstance) {
 
   // Replace a single exercise with an alternative of the same muscle group
   app.get<{
-    Querystring: { exerciseId: string; dayType?: string; equipment?: string; excludeIds?: string };
+    Querystring: { exerciseId: string; dayType?: string; equipment?: string; profileId?: string; excludeIds?: string };
   }>('/generate-workout/replace', async (req, reply) => {
     const exerciseId = parseInt(req.query.exerciseId);
-    const equipment = req.query.equipment || 'full';
+    const equipmentList = resolveEquipment(req.query.profileId, req.query.equipment || 'full');
     const excludeIds = (req.query.excludeIds || '')
       .split(',')
       .map(s => parseInt(s.trim()))
@@ -130,7 +145,13 @@ export async function generateRoutes(app: FastifyInstance) {
     );
 
     const excludeSet = new Set([exerciseId, ...excludeIds]);
-    const TRAVEL_KEYWORDS = /dumbbell|bodyweight|band|trx|cardio/i;
+
+    // Equipment filter helper for this request
+    const matchesEquip = (name: string) => {
+      if (!equipmentList || equipmentList.length === 0) return true;
+      const pattern = new RegExp(equipmentList.join('|'), 'i');
+      return pattern.test(name);
+    };
 
     let candidates;
 
@@ -144,13 +165,12 @@ export async function generateRoutes(app: FastifyInstance) {
       candidates = allExercises.filter(e => {
         if (excludeSet.has(e.id)) return false;
         const muscles = getMusclesForExercise(e.name);
-        // Exclude cardio from strength swaps
         if (CARDIO_KEYWORDS.test(e.name)) return false;
         return muscles.some(m => targetMuscles.includes(m));
       });
 
-      if (equipment === 'travel') {
-        candidates = candidates.filter(e => TRAVEL_KEYWORDS.test(e.name));
+      if (equipmentList && equipmentList.length > 0) {
+        candidates = candidates.filter(e => matchesEquip(e.name));
       }
     }
 
@@ -160,7 +180,7 @@ export async function generateRoutes(app: FastifyInstance) {
         if (excludeSet.has(e.id)) return false;
         if (isCardio) return CARDIO_KEYWORDS.test(e.name);
         if (CARDIO_KEYWORDS.test(e.name)) return false;
-        if (equipment === 'travel' && !TRAVEL_KEYWORDS.test(e.name)) return false;
+        if (!matchesEquip(e.name)) return false;
         return true;
       });
     }
