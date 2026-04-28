@@ -64,6 +64,19 @@ sqlite.exec(`
   );
 `);
 
+// Make equipment_profiles.name unique (needed for INSERT OR IGNORE seed below)
+sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ep_name ON equipment_profiles(name)`);
+
+// Seed default equipment profiles (idempotent — skips if names already exist)
+sqlite.exec(`
+  INSERT OR IGNORE INTO equipment_profiles (name, available_equipment)
+  VALUES ('Full Gym', '[]');
+`);
+sqlite.exec(`
+  INSERT OR IGNORE INTO equipment_profiles (name, available_equipment)
+  VALUES ('Travel', '["dumbbell","bodyweight","band","trx","cardio"]');
+`);
+
 // Add multiplier column if not present (Phase 2 migration)
 try {
   sqlite.exec(`ALTER TABLE sets ADD COLUMN multiplier REAL DEFAULT 1.0`);

@@ -101,6 +101,14 @@ const CARDIO_KEYWORDS = /treadmill|elliptical|cycling|rowing/i;
 
 const TRAVEL_KEYWORDS = /dumbbell|bodyweight|band|trx|cardio/i;
 
+// Filter exercises by an equipment list. Returns true if the exercise name matches
+// any of the equipment keywords. Empty/null list means no filtering (all equipment).
+function matchesEquipment(exerciseName: string, equipment: string[] | null): boolean {
+  if (!equipment || equipment.length === 0) return true;
+  const pattern = new RegExp(equipment.join('|'), 'i');
+  return pattern.test(exerciseName);
+}
+
 interface DurationProfile {
   maxStrength: number;
   coreCount: number;
@@ -298,7 +306,7 @@ function interleaveByMuscle(exercises: ScoredExercise[]): ScoredExercise[] {
   return result;
 }
 
-export function generateWorkout(dayType: string, equipment: string, db: DB, options?: { supersets?: boolean; durationMinutes?: number; isInCut?: boolean }): GeneratedWorkout {
+export function generateWorkout(dayType: string, equipment: string[] | null, db: DB, options?: { supersets?: boolean; durationMinutes?: number; isInCut?: boolean }): GeneratedWorkout {
   const targetMuscles = DAY_TYPE_MUSCLES[dayType];
   if (!targetMuscles) {
     throw new Error(`Unknown day type: ${dayType}. Use upper, lower, or fullbody.`);
@@ -313,13 +321,14 @@ export function generateWorkout(dayType: string, equipment: string, db: DB, opti
     return muscles.some(m => targetMuscles.includes(m));
   });
 
-  if (equipment === 'travel') {
-    candidates = candidates.filter(e => TRAVEL_KEYWORDS.test(e.name));
+  if (equipment && equipment.length > 0) {
+    candidates = candidates.filter(e => matchesEquipment(e.name, equipment));
   }
 
   let coreCandidates = allExercises.filter(e => CORE_KEYWORDS.test(e.name));
-  if (equipment === 'travel') {
-    coreCandidates = coreCandidates.filter(e => TRAVEL_KEYWORDS.test(e.name) || /crunch|plank|dead.?bug|russian.?twist|toe.?toucher/i.test(e.name));
+  if (equipment && equipment.length > 0) {
+    // For core, always allow bodyweight exercises (crunches, planks, etc.)
+    coreCandidates = coreCandidates.filter(e => matchesEquipment(e.name, equipment) || /crunch|plank|dead.?bug|russian.?twist|toe.?toucher/i.test(e.name));
   }
 
   let cardioCandidates = allExercises.filter(e => CARDIO_KEYWORDS.test(e.name));
