@@ -11,12 +11,17 @@
     title: string;
     query: string;
     results: SearchResult[];
+    suggestions?: SearchResult[];
+    suggestionsLabel?: string;
     onInput: (q: string) => void;
     onSelect: (result: SearchResult) => void;
     onClose: () => void;
   }
 
-  let { open, title, query, results, onInput, onSelect, onClose }: Props = $props();
+  let { open, title, query, results, suggestions = [], suggestionsLabel = 'Suggested', onInput, onSelect, onClose }: Props = $props();
+
+  let showingSuggestions = $derived(query.length < 2 && suggestions.length > 0);
+  let displayResults = $derived(showingSuggestions ? suggestions : results);
 </script>
 
 {#if open}
@@ -49,9 +54,12 @@
         />
       </div>
       <div class="flex-1 overflow-y-auto px-5 pb-6" style="-webkit-overflow-scrolling: touch;">
-        {#if results.length > 0}
+        {#if displayResults.length > 0}
+          {#if showingSuggestions}
+            <p class="text-xs text-neutral-500 mb-2 px-1">{suggestionsLabel}</p>
+          {/if}
           <div class="space-y-0.5">
-            {#each results as result}
+            {#each displayResults as result}
               <button
                 onclick={() => onSelect(result)}
                 class="w-full text-left min-h-[56px] px-4 py-3.5 rounded-xl hover:bg-neutral-700/50 active:bg-neutral-700 transition-colors touch-manipulation"
