@@ -15,11 +15,14 @@ Test the current UI changes using Playwright at iPhone 15 Pro Max viewport (430�
    - Any adjacent UI that could have regressed (e.g. if fixing cardio UI, also verify strength UI still looks right)
    - Edge cases mentioned in the issue or PR
 
-7. **Post to PR**: once satisfied, copy screenshots into `.github/test-screenshots/` with a `pr{N}-` prefix, commit them to the branch, push, then add a `gh pr comment` with the raw GitHub image URLs embedded in markdown. Format:
+7. **Post to PR**: add a `gh pr comment` with test results.
+
+   **Private repo limitation:** `raw.githubusercontent.com` requires auth and GitHub markdown can't inline-render those images. The only way to get images embedded in a private repo PR comment is to upload via the GitHub web UI (drag-drop in a comment box), which hosts them at `user-images.githubusercontent.com`. Via the CLI, post a text-only comment instead — describe the flow, what was checked, and the outcome. Format:
    ```
-   ## Playwright screenshots — iPhone 15 Pro Max (430×932)
-   ### [Feature name]
-   ![description](https://raw.githubusercontent.com/breedy231/fitlocal/{branch}/.github/test-screenshots/{filename})
+   ## Playwright test results — iPhone 15 Pro Max (430×932)
+   ### ✅ [Feature name]
+   **Flow tested:** [steps]
+   **Result:** [what was observed]
    ```
 
 8. **Report back**: show the screenshots inline in the conversation and summarise what passed and what (if anything) needs follow-up.
