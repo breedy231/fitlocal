@@ -41,6 +41,38 @@
   let addingExercise = $state(false);
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  // All exercises — lazy-loaded once for swap suggestions
+  type ExerciseRecord = { id: number; name: string; primaryMuscles?: string[]; equipment?: string[] };
+  let allExercises: ExerciseRecord[] = $state([]);
+  let allExercisesLoaded = false;
+
+  async function ensureAllExercises() {
+    if (allExercisesLoaded) return;
+    try {
+      allExercises = await api<ExerciseRecord[]>('/exercises');
+      allExercisesLoaded = true;
+    } catch { /* suggestions won't show, search still works */ }
+  }
+
+  let swapSuggestions = $derived.by((): ExerciseRecord[] => {
+    if (!swappingExercise || allExercises.length === 0) return [];
+    let targetMuscles = swappingExercise.exercise?.primaryMuscles ?? [];
+    if (typeof targetMuscles === 'string') {
+      try { targetMuscles = JSON.parse(targetMuscles); } catch { targetMuscles = []; }
+    }
+    const muscleSet = new Set((targetMuscles as string[]).map((m: string) => m.toLowerCase()));
+    if (muscleSet.size === 0) return [];
+    const swappingId = swappingExercise.exerciseId;
+    return allExercises
+      .filter(e => {
+        if (e.id === swappingId) return false;
+        let pm = e.primaryMuscles ?? [];
+        if (typeof pm === 'string') { try { pm = JSON.parse(pm); } catch { pm = []; } }
+        return (pm as string[]).some((m: string) => muscleSet.has(m.toLowerCase()));
+      })
+      .slice(0, 6);
+  });
+
   // Rest timer editor
   let editingRestExercise: WorkoutExercise | null = $state(null);
 
@@ -184,8 +216,9 @@
 
   const SUPERSET_REST_SECONDS = 30;
 
-  // Require specific cardio equipment names — bare "rowing" would match "Barbell Rowing", etc.
-  const CARDIO_PATTERN = /\b(treadmill|elliptical|rowing\s+machine|stationary\s+bike|stair\s*climber|air\s+bike|assault\s+bike)\b/i;
+  // Matches cardio machine exercises. "Cycling" and "Rowing" as standalone names refer to cardio
+  // machines; barbell/cable rows use "Row" not "Rowing" so the word boundary is generally safe.
+  const CARDIO_PATTERN = /\b(treadmill|elliptical|rowing\s+machine|stationary\s+bike|stair\s*climber|air\s+bike|assault\s+bike|cycling|rower|bike|rowing)\b/i;
   const TREADMILL_PATTERN = /treadmill|walking/i;
 
   function isCardio(ex: WorkoutExercise): boolean {
@@ -335,6 +368,12 @@
     }
   }
 
+  let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  function debouncedSave() {
+    if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+    saveDebounceTimer = setTimeout(saveWorkoutState, 500);
+  }
+
   onMount(() => {
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('beforeunload', saveWorkoutState);
@@ -352,22 +391,26 @@
 
   onDestroy(() => {
     if (searchTimeout) clearTimeout(searchTimeout);
+    if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
     saveWorkoutState();
   });
 
   function adjustReps(set: SetData, delta: number) {
     set.reps = Math.max(0, (set.reps ?? 0) + delta);
+    debouncedSave();
   }
 
   function adjustWeightLbs(set: SetData, deltaLbs: number) {
     const currentLbs = kgToLbs(set.weightKg);
     const newLbs = Math.max(0, currentLbs + deltaLbs);
     set.weightKg = lbsToKg(newLbs);
+    debouncedSave();
   }
 
   function updateWeightLbs(set: SetData, lbsStr: string) {
     const lbs = parseFloat(lbsStr) || 0;
     set.weightKg = lbsToKg(lbs);
+    debouncedSave();
   }
 
   async function toggleComplete(set: SetData, ex: WorkoutExercise) {
@@ -736,7 +779,7 @@
         onUpdateRestSeconds={(sec) => updateRestSeconds(ex, sec)}
         onOpenPlateCalc={(set) => { plateCalcWeightLbs = kgToLbs(set.weightKg); plateCalcSet = set; }}
         onToggleHistory={() => toggleHistory(ex.exerciseId)}
-        onSwap={() => { swappingExercise = ex; searchQuery = ''; searchResults = []; }}
+        onSwap={() => { swappingExercise = ex; searchQuery = ''; searchResults = []; ensureAllExercises(); }}
         onRemove={() => removeExercise(ex)}
         onAddSet={(isWarmup) => addSet(ex, isWarmup)}
         onDeleteSet={(setId) => deleteSet(ex, setId)}
@@ -802,6 +845,7 @@
   title={swappingExercise ? `Replace ${swappingExercise.exercise?.name}` : 'Add Exercise'}
   query={searchQuery}
   results={searchResults}
+  suggestions={swappingExercise ? swapSuggestions : []}
   onInput={onSearchInput}
   onSelect={(r) => swappingExercise ? swapExercise(r.id, r.name) : addExerciseToWorkout(r.id, r.name)}
   onClose={closeSearchSheet}
