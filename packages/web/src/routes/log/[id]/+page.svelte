@@ -54,24 +54,41 @@
     } catch { /* suggestions won't show, search still works */ }
   }
 
-  let swapSuggestions = $derived.by((): ExerciseRecord[] => {
-    if (!swappingExercise || allExercises.length === 0) return [];
+  type SwapSuggestionResult = { exercises: ExerciseRecord[]; label: string };
+  let swapSuggestionResult = $derived.by((): SwapSuggestionResult => {
+    if (!swappingExercise || allExercises.length === 0) return { exercises: [], label: '' };
+    const swappingId = swappingExercise.exerciseId;
     let targetMuscles = swappingExercise.exercise?.primaryMuscles ?? [];
     if (typeof targetMuscles === 'string') {
       try { targetMuscles = JSON.parse(targetMuscles); } catch { targetMuscles = []; }
     }
     const muscleSet = new Set((targetMuscles as string[]).map((m: string) => m.toLowerCase()));
-    if (muscleSet.size === 0) return [];
-    const swappingId = swappingExercise.exerciseId;
-    return allExercises
-      .filter(e => {
+
+    // Primary: match by muscle group
+    if (muscleSet.size > 0) {
+      const byMuscle = allExercises.filter(e => {
         if (e.id === swappingId) return false;
         let pm = e.primaryMuscles ?? [];
         if (typeof pm === 'string') { try { pm = JSON.parse(pm); } catch { pm = []; } }
         return (pm as string[]).some((m: string) => muscleSet.has(m.toLowerCase()));
-      })
-      .slice(0, 6);
+      });
+      if (byMuscle.length > 0) return { exercises: byMuscle.slice(0, 6), label: 'Suggested — same muscle group' };
+    }
+
+    // Fallback: exercises with no muscle data (other cardio / uncategorised) excluding self
+    const noMuscle = allExercises.filter(e => {
+      if (e.id === swappingId) return false;
+      let pm = e.primaryMuscles ?? [];
+      if (typeof pm === 'string') { try { pm = JSON.parse(pm); } catch { pm = []; } }
+      return (pm as string[]).length === 0;
+    });
+    if (noMuscle.length > 0) return { exercises: noMuscle.slice(0, 6), label: 'Suggested' };
+
+    // Last resort: first 6 exercises
+    return { exercises: allExercises.filter(e => e.id !== swappingId).slice(0, 6), label: 'Suggested' };
   });
+  let swapSuggestions = $derived(swapSuggestionResult.exercises);
+  let swapSuggestionsLabel = $derived(swapSuggestionResult.label);
 
   // Rest timer editor
   let editingRestExercise: WorkoutExercise | null = $state(null);
@@ -846,6 +863,7 @@
   query={searchQuery}
   results={searchResults}
   suggestions={swappingExercise ? swapSuggestions : []}
+  suggestionsLabel={swapSuggestionsLabel}
   onInput={onSearchInput}
   onSelect={(r) => swappingExercise ? swapExercise(r.id, r.name) : addExerciseToWorkout(r.id, r.name)}
   onClose={closeSearchSheet}

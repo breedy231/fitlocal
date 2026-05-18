@@ -12,12 +12,13 @@
     query: string;
     results: SearchResult[];
     suggestions?: SearchResult[];
+    suggestionsLabel?: string;
     onInput: (q: string) => void;
     onSelect: (result: SearchResult) => void;
     onClose: () => void;
   }
 
-  let { open, title, query, results, suggestions = [], onInput, onSelect, onClose }: Props = $props();
+  let { open, title, query, results, suggestions = [], suggestionsLabel = 'Suggested', onInput, onSelect, onClose }: Props = $props();
 
   let showingSuggestions = $derived(query.length < 2 && suggestions.length > 0);
   let displayResults = $derived(showingSuggestions ? suggestions : results);
@@ -55,7 +56,7 @@
       <div class="flex-1 overflow-y-auto px-5 pb-6" style="-webkit-overflow-scrolling: touch;">
         {#if displayResults.length > 0}
           {#if showingSuggestions}
-            <p class="text-xs text-neutral-500 mb-2 px-1">Suggested — same muscle group</p>
+            <p class="text-xs text-neutral-500 mb-2 px-1">{suggestionsLabel}</p>
           {/if}
           <div class="space-y-0.5">
             {#each displayResults as result}
