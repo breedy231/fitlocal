@@ -116,7 +116,11 @@
         onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.stopPropagation(); vibrate(); onEditRest(); } }}
         class="min-h-[36px] text-xs px-3 py-1.5 rounded-full bg-neutral-800 text-neutral-400 hover:text-neutral-200 shrink-0 touch-manipulation inline-flex items-center"
         title="Edit rest time"
-      >{(ex.restSeconds ?? 60) >= 60 ? `${Math.round((ex.restSeconds ?? 60) / 60)}m` : `${ex.restSeconds}s`}</span>
+      >{(ex.restSeconds ?? 60) >= 60
+          ? (ex.restSeconds ?? 60) % 60 === 0
+            ? `${(ex.restSeconds ?? 60) / 60}m`
+            : `${Math.floor((ex.restSeconds ?? 60) / 60)}m ${(ex.restSeconds ?? 60) % 60}s`
+          : `${ex.restSeconds}s`}</span>
     {/if}
   </div>
   <div class="flex items-center shrink-0 ml-2">
@@ -133,7 +137,7 @@
       <button
         onclick={() => { vibrate(); onUpdateRestSeconds(sec); }}
         class="min-h-[44px] min-w-[60px] px-4 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation {(ex.restSeconds ?? 60) === sec ? 'bg-green-500/20 text-green-400' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'}"
-      >{sec >= 60 ? `${sec / 60}m` : `${sec}s`}</button>
+      >{sec >= 60 ? (sec % 60 === 0 ? `${sec / 60}m` : `${Math.floor(sec / 60)}m ${sec % 60}s`) : `${sec}s`}</button>
     {/each}
   </div>
 {/if}
