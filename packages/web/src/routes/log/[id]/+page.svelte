@@ -54,17 +54,40 @@
     } catch { /* suggestions won't show, search still works */ }
   }
 
+  // Name-based muscle group inference for swap suggestions (since primaryMuscles is empty in DB)
+  const SWAP_GROUPS: { label: string; pattern: RegExp }[] = [
+    { label: 'back',      pattern: /row|pull.?up|pulldown|lat pull|face pull/i },
+    { label: 'biceps',    pattern: /curl|bicep/i },
+    { label: 'triceps',   pattern: /tricep|skull.?crush|overhead.*ext|pushdown|dip|kickback/i },
+    { label: 'chest',     pattern: /bench|chest fly|push.?up/i },
+    { label: 'shoulders', pattern: /shoulder press|lateral raise|overhead press|rear delt|upright row/i },
+    { label: 'quads',     pattern: /squat|lunge|leg press|leg extension|bulgarian/i },
+    { label: 'hamstrings',pattern: /deadlift|leg curl|hamstring|rdl/i },
+    { label: 'glutes',    pattern: /hip thrust|glute bridge/i },
+    { label: 'calves',    pattern: /calf|calves/i },
+    { label: 'core',      pattern: /crunch|plank|dead bug|windshield|russian twist|knee raise|ab rollout|hollow/i },
+    { label: 'cardio',    pattern: /elliptical|treadmill|cycling|stationary bike|rowing machine|stairmaster/i },
+  ];
+
+  function inferSwapGroup(name: string): string | null {
+    for (const g of SWAP_GROUPS) {
+      if (g.pattern.test(name)) return g.label;
+    }
+    return null;
+  }
+
   type SwapSuggestionResult = { exercises: ExerciseRecord[]; label: string };
   let swapSuggestionResult = $derived.by((): SwapSuggestionResult => {
     if (!swappingExercise || allExercises.length === 0) return { exercises: [], label: '' };
     const swappingId = swappingExercise.exerciseId;
+    const swappingName = swappingExercise.exercise?.name ?? '';
     let targetMuscles = swappingExercise.exercise?.primaryMuscles ?? [];
     if (typeof targetMuscles === 'string') {
       try { targetMuscles = JSON.parse(targetMuscles); } catch { targetMuscles = []; }
     }
     const muscleSet = new Set((targetMuscles as string[]).map((m: string) => m.toLowerCase()));
 
-    // Primary: match by muscle group
+    // Primary: match by muscle group data (if populated)
     if (muscleSet.size > 0) {
       const byMuscle = allExercises.filter(e => {
         if (e.id === swappingId) return false;
@@ -75,16 +98,14 @@
       if (byMuscle.length > 0) return { exercises: byMuscle.slice(0, 6), label: 'Suggested — same muscle group' };
     }
 
-    // Fallback: exercises with no muscle data (other cardio / uncategorised) excluding self
-    const noMuscle = allExercises.filter(e => {
-      if (e.id === swappingId) return false;
-      let pm = e.primaryMuscles ?? [];
-      if (typeof pm === 'string') { try { pm = JSON.parse(pm); } catch { pm = []; } }
-      return (pm as string[]).length === 0;
-    });
-    if (noMuscle.length > 0) return { exercises: noMuscle.slice(0, 6), label: 'Suggested' };
+    // Fallback: name-based inference
+    const swapGroup = inferSwapGroup(swappingName);
+    if (swapGroup) {
+      const byName = allExercises.filter(e => e.id !== swappingId && inferSwapGroup(e.name ?? '') === swapGroup);
+      if (byName.length > 0) return { exercises: byName.slice(0, 6), label: `Suggested — ${swapGroup}` };
+    }
 
-    // Last resort: first 6 exercises
+    // Last resort: first 6 excluding self
     return { exercises: allExercises.filter(e => e.id !== swappingId).slice(0, 6), label: 'Suggested' };
   });
   let swapSuggestions = $derived(swapSuggestionResult.exercises);
