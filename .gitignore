@@ -3,16 +3,21 @@ dist/
 build/
 .svelte-kit/
 *.db
+*.db-shm
+*.db-wal
 .env
 .DS_Store
-fitlocal.db-shm
-fitlocal.db-wal
-packages/api/fitlocal.db-shm
-packages/api/fitlocal.db-wal
 certs/
+# Test screenshots dumped at repo root during Playwright runs
+/*.png
+/*.jpg
 # Manual DB recovery scratch area — raw file copies created during incident
 # recovery land here. Never commit: can contain corrupted state or full user data.
 db-backups/
 # Corrupted DBs quarantined during recovery (e.g. fitlocal.db.CORRUPT.YYYYMMDD-HHMMSS).
 # The plain *.db rule above only matches files ending in `.db`, so they need this.
 fitlocal.db.CORRUPT.*
+# Local Claude Code settings (contain machine-specific tool permissions)
+.claude/settings.local.json
+# Playwright MCP output directory
+.playwright-mcp/

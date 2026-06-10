@@ -4,6 +4,7 @@ import { db, schema } from '../db.js';
 import { generateWorkout, generateFromProgram, DAY_TYPE_MUSCLES, type ProgramExerciseInput } from '../lib/generator.js';
 import { computeProgressionBatch } from '../lib/progression.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
+import { CARDIO_PATTERN } from 'fitlocal-shared';
 
 // Resolve equipment filter: profileId takes priority, then legacy equipment param
 function resolveEquipment(profileId?: string, equipment?: string): string[] | null {
@@ -94,6 +95,7 @@ export async function generateRoutes(app: FastifyInstance) {
             for (const ex of workout.exercises) {
               ex.suggestedSets = Math.max(2, Math.round(ex.suggestedSets * volumeMultiplier));
             }
+            workout.volumeReductionPct = Math.round((1.0 - volumeMultiplier) * 100);
           }
         }
 
@@ -128,7 +130,7 @@ export async function generateRoutes(app: FastifyInstance) {
     }
 
     const originalName = original[0].name;
-    const CARDIO_KEYWORDS = /\b(treadmill|elliptical|cycling|rowing\s+machine|stationary\s+bike|stair\s*climber|air\s+bike|assault\s+bike|rower|bike|rowing|jogging|sprinting)\b/i;
+    const CARDIO_KEYWORDS = CARDIO_PATTERN;
     const isCardio = CARDIO_KEYWORDS.test(originalName);
 
     let targetMuscles = getMusclesForExercise(originalName);

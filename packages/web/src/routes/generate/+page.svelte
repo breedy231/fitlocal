@@ -14,6 +14,7 @@
     RoutineDetail,
     EquipmentProfile,
   } from 'fitlocal-shared';
+  import { CARDIO_PATTERN } from 'fitlocal-shared';
   import { onMount } from 'svelte';
 
   let detailExerciseId: number | null = $state(null);
@@ -107,6 +108,15 @@
   let loading = $state(false);
   let starting = $state(false);
   let quickStarting = $state(false);
+
+  // Estimated total cardio minutes from generated workout
+  let estimatedCardioMin = $derived.by(() => {
+    if (!workout) return 0;
+    return workout.exercises
+      .filter(ex => CARDIO_PATTERN.test(ex.name))
+      .reduce((sum, ex) => sum + (ex.suggestedDurationSec ?? 0), 0) / 60;
+  });
+  let cardioWarning = $derived(workout !== null && !loading && estimatedCardioMin < 45);
 
   const DAY_TYPE_LABELS: Record<string, string> = {
     push: 'Push',
@@ -861,9 +871,32 @@
 
   <!-- Workout Result -->
   {#if workout && !loading}
-    {#if workout.isInCut}
+    {#if workout.volumeReductionPct}
+      <div class="mb-3 rounded-xl px-4 py-2.5 border border-amber-500/40" style="background-color: #78350f30;">
+        <span class="text-sm font-medium text-amber-400">Volume reduced {workout.volumeReductionPct}% — calorie deficit</span>
+      </div>
+    {:else if workout.isInCut}
       <div class="mb-3 rounded-xl px-4 py-2.5 border border-amber-500/30" style="background-color: #78350f20;">
         <span class="text-sm font-medium text-amber-400">Cut mode — maintaining weights, extra cardio</span>
+      </div>
+    {/if}
+
+    {#if cardioWarning}
+      <div class="mb-3 rounded-xl px-4 py-2.5 border border-yellow-500/40" style="background-color: #71350020;">
+        <span class="text-sm font-medium text-yellow-400">
+          Cardio: ~{Math.round(estimatedCardioMin)} min — below 45 min target
+        </span>
+        <button
+          onclick={() => {
+            if (!workout) return;
+            workout.exercises = [...workout.exercises, {
+              id: 0, name: 'Treadmill', suggestedSets: 1, suggestedReps: 1,
+              suggestedWeightKg: 0, lastPerformedDaysAgo: 0, isFocus: false,
+              isCardio: true, suggestedDurationSec: 2700, restSeconds: 0,
+            }];
+          }}
+          class="ml-3 text-xs px-2 py-0.5 rounded-lg bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30 transition-colors"
+        >+ Add cardio</button>
       </div>
     {/if}
 
