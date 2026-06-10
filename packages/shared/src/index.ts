@@ -9,3 +9,4 @@ export * from './health.js';
 export * from './challenges.js';
 export * from './generation.js';
 export * from './equipment-profiles.js';
+export * from './cardio.js';

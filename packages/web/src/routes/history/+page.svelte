@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import CalendarHeatmap from '$lib/CalendarHeatmap.svelte';
   import type { WorkoutListItem, WorkoutDetail, CalendarReport } from 'fitlocal-shared';
+  import { CARDIO_PATTERN } from 'fitlocal-shared';
 
   // Workouts start as list items, optionally enriched with full detail after lazy fetch.
   type Workout = WorkoutListItem & Partial<Pick<WorkoutDetail, 'exercises'>>;
@@ -51,7 +52,6 @@
     return Math.round((kg * KG_TO_LBS) / 2.5) * 2.5;
   }
 
-  const CARDIO_PATTERN = /\b(treadmill|elliptical|cycling|rowing\s+machine|stationary\s+bike|stair\s*climber|air\s+bike|assault\s+bike|rower|bike|rowing|walking)\b/i;
   function isCardio(name: string): boolean {
     return CARDIO_PATTERN.test(name);
   }

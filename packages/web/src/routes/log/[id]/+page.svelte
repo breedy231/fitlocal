@@ -8,6 +8,7 @@
   import { cachedGet } from '$lib/api-cache.svelte';
   import { showToast } from '$lib/toast';
   import type { NutritionData, LastPerformance, ExerciseProgressionReport } from 'fitlocal-shared';
+  import { CARDIO_PATTERN } from 'fitlocal-shared';
 
   import RestTimer from '$lib/workout/RestTimer.svelte';
   import ExerciseCard, { type WorkoutExerciseLike } from '$lib/workout/ExerciseCard.svelte';
@@ -254,9 +255,6 @@
 
   const SUPERSET_REST_SECONDS = 30;
 
-  // Matches cardio machine exercises. "Cycling" and "Rowing" as standalone names refer to cardio
-  // machines; barbell/cable rows use "Row" not "Rowing" so the word boundary is generally safe.
-  const CARDIO_PATTERN = /\b(treadmill|elliptical|rowing\s+machine|stationary\s+bike|stair\s*climber|air\s+bike|assault\s+bike|cycling|rower|bike|rowing)\b/i;
   const TREADMILL_PATTERN = /treadmill|walking/i;
 
   function isCardio(ex: WorkoutExercise): boolean {
