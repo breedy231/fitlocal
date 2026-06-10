@@ -3,6 +3,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type * as schemaTypes from '../schema/index.js';
 import { getMusclesForExercise, getGlobalRecoveryModifier } from './recovery.js';
 import { computeProgressionBatch, type ProgressionDirective, type RepRange } from './progression.js';
+import { CARDIO_PATTERN } from 'fitlocal-shared';
 
 type DB = BetterSQLite3Database<typeof schemaTypes>;
 
@@ -97,7 +98,7 @@ function getExerciseFamily(name: string): string | null {
 }
 
 const CORE_KEYWORDS = /crunch|plank|dead.?bug|windshield.?wiper|reverse.?crunch|cable.?crunch|exercise.?ball.?crunch|russian.?twist|toe.?toucher|vertical.?knee.?raise/i;
-const CARDIO_KEYWORDS = /treadmill|elliptical|cycling|rowing/i;
+const CARDIO_KEYWORDS = CARDIO_PATTERN;
 
 const TRAVEL_KEYWORDS = /dumbbell|bodyweight|band|trx|cardio/i;
 
@@ -181,6 +182,7 @@ export interface GeneratedWorkout {
   dayType: string;
   globalModifier: number;
   isInCut: boolean;
+  volumeReductionPct?: number;
   programDriven?: boolean;
   exercises: GeneratedExercise[];
 }

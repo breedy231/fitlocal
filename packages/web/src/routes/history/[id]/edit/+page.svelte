@@ -5,6 +5,7 @@
   import { onMount } from 'svelte';
   import ExerciseSearch from '$lib/ExerciseSearch.svelte';
   import { showToast } from '$lib/toast';
+  import { CARDIO_PATTERN } from 'fitlocal-shared';
 
   interface SetData {
     id: number;
@@ -25,7 +26,6 @@
     sets: SetData[];
   }
 
-  const CARDIO_PATTERN = /\b(treadmill|elliptical|cycling|rowing\s+machine|stationary\s+bike|stair\s*climber|air\s+bike|assault\s+bike|rower|bike|rowing)\b/i;
   function isCardio(we: WorkoutExercise): boolean {
     return CARDIO_PATTERN.test(we.exercise?.name ?? '');
   }

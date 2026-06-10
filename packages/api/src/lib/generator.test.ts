@@ -213,3 +213,30 @@ describe('generateFromProgram', () => {
     expect(workout.isInCut).toBe(true);
   });
 });
+
+// ----------------------------------------------------------------------------
+// volumeReductionPct formula (computed in generate route)
+// ----------------------------------------------------------------------------
+describe('volumeReductionPct formula', () => {
+  function computeVolumeReductionPct(maintenance: number, actualCalories: number): number | undefined {
+    const deficitPct = (maintenance - actualCalories) / maintenance;
+    if (deficitPct <= 0.10) return undefined;
+    const volumeMultiplier = 1.0 - Math.min((deficitPct - 0.10) / 0.20, 1.0) * 0.20;
+    return Math.round((1.0 - volumeMultiplier) * 100);
+  }
+
+  it('returns undefined when deficit <= 10%', () => {
+    expect(computeVolumeReductionPct(2200, 2000)).toBeUndefined(); // ~9% deficit
+  });
+
+  it('returns a reduction at 20% deficit', () => {
+    const pct = computeVolumeReductionPct(2200, 1760); // 20% deficit
+    expect(pct).toBeGreaterThan(0);
+    expect(pct).toBeLessThanOrEqual(20);
+  });
+
+  it('caps at 20% reduction at >= 30% deficit', () => {
+    const pct = computeVolumeReductionPct(2200, 1100); // 50% deficit — capped
+    expect(pct).toBe(20);
+  });
+});
