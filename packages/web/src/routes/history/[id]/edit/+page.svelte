@@ -25,7 +25,7 @@
     sets: SetData[];
   }
 
-  const CARDIO_PATTERN = /treadmill|elliptical|cycling|rowing|bike|run/i;
+  const CARDIO_PATTERN = /\b(treadmill|elliptical|cycling|rowing\s+machine|stationary\s+bike|stair\s*climber|air\s+bike|assault\s+bike|rower|bike|rowing)\b/i;
   function isCardio(we: WorkoutExercise): boolean {
     return CARDIO_PATTERN.test(we.exercise?.name ?? '');
   }

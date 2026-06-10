@@ -51,7 +51,7 @@
     return Math.round((kg * KG_TO_LBS) / 2.5) * 2.5;
   }
 
-  const CARDIO_PATTERN = /treadmill|elliptical|cycling|rowing|bike|run|walk/i;
+  const CARDIO_PATTERN = /\b(treadmill|elliptical|cycling|rowing\s+machine|stationary\s+bike|stair\s*climber|air\s+bike|assault\s+bike|rower|bike|rowing|walking)\b/i;
   function isCardio(name: string): boolean {
     return CARDIO_PATTERN.test(name);
   }
