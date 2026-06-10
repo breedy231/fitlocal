@@ -128,7 +128,7 @@ export async function generateRoutes(app: FastifyInstance) {
     }
 
     const originalName = original[0].name;
-    const CARDIO_KEYWORDS = /treadmill|elliptical|cycling|rowing|stair|bike|run|jog|sprint|cardio/i;
+    const CARDIO_KEYWORDS = /\b(treadmill|elliptical|cycling|rowing\s+machine|stationary\s+bike|stair\s*climber|air\s+bike|assault\s+bike|rower|bike|rowing|jogging|sprinting)\b/i;
     const isCardio = CARDIO_KEYWORDS.test(originalName);
 
     let targetMuscles = getMusclesForExercise(originalName);
