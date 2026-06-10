@@ -84,25 +84,25 @@ describe('generateWorkout', () => {
   afterEach(() => ctx.cleanup());
 
   it('pull day contains no chest-primary exercises', () => {
-    const workout = generateWorkout('pull', 'gym', ctx.db, { supersets: false });
+    const workout = generateWorkout('pull', null, ctx.db, { supersets: false });
     const chestEx = workout.exercises.filter(e => !e.isCardio && /bench|fly|crossover|pec/i.test(e.name));
     expect(chestEx).toHaveLength(0);
   });
 
   it('30-min profile produces <= 5 total non-cardio exercises (4 strength + 1 core)', () => {
     // DURATION_PROFILES[30] = { maxStrength: 4, coreCount: 1 } — core is counted separately
-    const workout = generateWorkout('push', 'gym', ctx.db, { durationMinutes: 30, supersets: false });
+    const workout = generateWorkout('push', null, ctx.db, { durationMinutes: 30, supersets: false });
     const nonCardio = workout.exercises.filter(e => !e.isCardio);
     expect(nonCardio.length).toBeLessThanOrEqual(5);
   });
 
   it('60-min default produces at least 4 exercises', () => {
-    const workout = generateWorkout('push', 'gym', ctx.db, { supersets: false });
+    const workout = generateWorkout('push', null, ctx.db, { supersets: false });
     expect(workout.exercises.length).toBeGreaterThanOrEqual(4);
   });
 
   it('cut mode: adds second cardio block', () => {
-    const workout = generateWorkout('push', 'gym', ctx.db, { isInCut: true, supersets: false });
+    const workout = generateWorkout('push', null, ctx.db, { isInCut: true, supersets: false });
     const cardio = workout.exercises.filter(e => e.isCardio);
     expect(cardio.length).toBeGreaterThanOrEqual(2);
   });
@@ -114,20 +114,20 @@ describe('generateWorkout', () => {
       { daysAgo: 1, sets: [{ reps: 6, weightKg: 100 }, { reps: 6, weightKg: 100 }] },
       { daysAgo: 7, sets: [{ reps: 6, weightKg: 100 }, { reps: 6, weightKg: 100 }] },
     ]);
-    const workout = generateWorkout('push', 'gym', ctx.db, { isInCut: true, supersets: false });
+    const workout = generateWorkout('push', null, ctx.db, { isInCut: true, supersets: false });
     const upDirectives = workout.exercises.filter(e => e.progression === 'up');
     expect(upDirectives).toHaveLength(0);
     expect(workout.isInCut).toBe(true);
   });
 
   it('supersets: assigns supersetGroup when enabled', () => {
-    const workout = generateWorkout('upper', 'gym', ctx.db, { supersets: true });
+    const workout = generateWorkout('upper', null, ctx.db, { supersets: true });
     const grouped = workout.exercises.filter(e => e.supersetGroup !== undefined);
     expect(grouped.length).toBeGreaterThan(0);
   });
 
   it('supersets disabled: no supersetGroup on any exercise', () => {
-    const workout = generateWorkout('upper', 'gym', ctx.db, { supersets: false });
+    const workout = generateWorkout('upper', null, ctx.db, { supersets: false });
     const grouped = workout.exercises.filter(e => e.supersetGroup !== undefined);
     expect(grouped).toHaveLength(0);
   });
@@ -135,7 +135,7 @@ describe('generateWorkout', () => {
   it('REGRESSION: EXERCISE_FAMILIES dedup — no two curl variants in same session', () => {
     // All three curl types in the library: Barbell Curl, Dumbbell Hammer Curl, Preacher Curl
     // pull day should only pick ONE curl family
-    const workout = generateWorkout('pull', 'gym', ctx.db, { supersets: false });
+    const workout = generateWorkout('pull', null, ctx.db, { supersets: false });
     const curls = workout.exercises.filter(e => /curl/i.test(e.name) && !e.isCardio);
     // They may have different family labels (curl / hammer / preacher) — check no dup family
     const families = new Set(curls.map(e => {

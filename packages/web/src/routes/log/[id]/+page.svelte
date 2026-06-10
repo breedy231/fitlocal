@@ -7,7 +7,7 @@
   import PlateCalculator from '$lib/PlateCalculator.svelte';
   import { cachedGet } from '$lib/api-cache.svelte';
   import { showToast } from '$lib/toast';
-  import type { NutritionData, LastPerformance, ExerciseProgressionReport } from 'fitlocal-shared';
+  import type { NutritionData, LastPerformance, ExerciseProgressionReport, GeneratedAlternative } from 'fitlocal-shared';
   import { CARDIO_PATTERN } from 'fitlocal-shared';
 
   import RestTimer from '$lib/workout/RestTimer.svelte';
@@ -35,82 +35,46 @@
 
   let detailExerciseId: number | null = $state(null);
 
-  // Exercise search for swap/add
+  // Exercise search for add
   let searchQuery = $state('');
   let searchResults: { id: number; name: string; primaryMuscles?: string[]; equipment?: string[] }[] = $state([]);
-  let swappingExercise: WorkoutExercise | null = $state(null);
   let addingExercise = $state(false);
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // All exercises — lazy-loaded once for swap suggestions
-  type ExerciseRecord = { id: number; name: string; primaryMuscles?: string[]; equipment?: string[] };
-  let allExercises: ExerciseRecord[] = $state([]);
-  let allExercisesLoaded = false;
+  // Inline swap UX state
+  let swapInlineExercise: WorkoutExercise | null = $state(null);
+  let swapReason: 'equipment' | 'variation' | null = $state(null);
+  let swapCandidates: Record<number, GeneratedAlternative[] | 'loading'> = $state({});
 
-  async function ensureAllExercises() {
-    if (allExercisesLoaded) return;
-    try {
-      allExercises = await api<ExerciseRecord[]>('/exercises');
-      allExercisesLoaded = true;
-    } catch { /* suggestions won't show, search still works */ }
+  async function prefetchSwapCandidates(w: Workout) {
+    await Promise.all(w.exercises.map(async (ex) => {
+      try {
+        swapCandidates[ex.exerciseId] = 'loading';
+        swapCandidates = { ...swapCandidates };
+        const excludeIds = w.exercises
+          .filter(e => e.exerciseId !== ex.exerciseId)
+          .map(e => e.exerciseId)
+          .join(',');
+        const res = await api<{ alternatives: GeneratedAlternative[] }>(
+          `/generate-workout/replace?exerciseId=${ex.exerciseId}${excludeIds ? `&excludeIds=${excludeIds}` : ''}`
+        );
+        swapCandidates[ex.exerciseId] = res.alternatives.slice(0, 3);
+      } catch {
+        swapCandidates[ex.exerciseId] = [];
+      }
+      swapCandidates = { ...swapCandidates };
+    }));
   }
 
-  // Name-based muscle group inference for swap suggestions (since primaryMuscles is empty in DB)
-  const SWAP_GROUPS: { label: string; pattern: RegExp }[] = [
-    { label: 'back',      pattern: /row|pull.?up|pulldown|lat pull|face pull/i },
-    { label: 'biceps',    pattern: /curl|bicep/i },
-    { label: 'triceps',   pattern: /tricep|skull.?crush|overhead.*ext|pushdown|dip|kickback/i },
-    { label: 'chest',     pattern: /bench|chest fly|push.?up/i },
-    { label: 'shoulders', pattern: /shoulder press|lateral raise|overhead press|rear delt|upright row/i },
-    { label: 'quads',     pattern: /squat|lunge|leg press|leg extension|bulgarian/i },
-    { label: 'hamstrings',pattern: /deadlift|leg curl|hamstring|rdl/i },
-    { label: 'glutes',    pattern: /hip thrust|glute bridge/i },
-    { label: 'calves',    pattern: /calf|calves/i },
-    { label: 'core',      pattern: /crunch|plank|dead bug|windshield|russian twist|knee raise|ab rollout|hollow/i },
-    { label: 'cardio',    pattern: /elliptical|treadmill|cycling|stationary bike|rowing machine|stairmaster/i },
-  ];
-
-  function inferSwapGroup(name: string): string | null {
-    for (const g of SWAP_GROUPS) {
-      if (g.pattern.test(name)) return g.label;
-    }
-    return null;
+  function openInlineSwap(ex: WorkoutExercise) {
+    swapInlineExercise = ex;
+    swapReason = null;
   }
 
-  type SwapSuggestionResult = { exercises: ExerciseRecord[]; label: string };
-  let swapSuggestionResult = $derived.by((): SwapSuggestionResult => {
-    if (!swappingExercise || allExercises.length === 0) return { exercises: [], label: '' };
-    const swappingId = swappingExercise.exerciseId;
-    const swappingName = swappingExercise.exercise?.name ?? '';
-    let targetMuscles = swappingExercise.exercise?.primaryMuscles ?? [];
-    if (typeof targetMuscles === 'string') {
-      try { targetMuscles = JSON.parse(targetMuscles); } catch { targetMuscles = []; }
-    }
-    const muscleSet = new Set((targetMuscles as string[]).map((m: string) => m.toLowerCase()));
-
-    // Primary: match by muscle group data (if populated)
-    if (muscleSet.size > 0) {
-      const byMuscle = allExercises.filter(e => {
-        if (e.id === swappingId) return false;
-        let pm = e.primaryMuscles ?? [];
-        if (typeof pm === 'string') { try { pm = JSON.parse(pm); } catch { pm = []; } }
-        return (pm as string[]).some((m: string) => muscleSet.has(m.toLowerCase()));
-      });
-      if (byMuscle.length > 0) return { exercises: byMuscle.slice(0, 6), label: 'Suggested — same muscle group' };
-    }
-
-    // Fallback: name-based inference
-    const swapGroup = inferSwapGroup(swappingName);
-    if (swapGroup) {
-      const byName = allExercises.filter(e => e.id !== swappingId && inferSwapGroup(e.name ?? '') === swapGroup);
-      if (byName.length > 0) return { exercises: byName.slice(0, 6), label: `Suggested — ${swapGroup}` };
-    }
-
-    // Last resort: first 6 excluding self
-    return { exercises: allExercises.filter(e => e.id !== swappingId).slice(0, 6), label: 'Suggested' };
-  });
-  let swapSuggestions = $derived(swapSuggestionResult.exercises);
-  let swapSuggestionsLabel = $derived(swapSuggestionResult.label);
+  function closeInlineSwap() {
+    swapInlineExercise = null;
+    swapReason = null;
+  }
 
   // Rest timer editor
   let editingRestExercise: WorkoutExercise | null = $state(null);
@@ -378,6 +342,8 @@
         initWorkout(workout);
         // Fetch last performance for each exercise (runs in parallel, non-blocking)
         loadAllLastPerformance(workout, parseInt(id));
+        // Pre-fetch swap candidates for all exercises so inline swap is instant
+        prefetchSwapCandidates(workout);
         const muscles = getWorkoutMuscles();
         const stretchList = await loadStretches(muscles);
         beginStretchPhase('warmup', stretchList);
@@ -556,14 +522,13 @@
   }
 
   function closeSearchSheet() {
-    swappingExercise = null;
     addingExercise = false;
     searchQuery = '';
     searchResults = [];
   }
 
-  async function swapExercise(newExerciseId: number, newExerciseName: string) {
-    if (!swappingExercise || !workout) return;
+  async function swapExercise(ex: WorkoutExercise, newExerciseId: number, newExerciseName: string, reason?: string) {
+    if (!workout) return;
     try {
       // Fetch last performance for the new exercise to populate weights
       let lastPerf: { sets: { reps: number; weightKg: number }[] } = { sets: [] };
@@ -578,14 +543,15 @@
         method: 'POST',
         body: JSON.stringify({
           exerciseId: newExerciseId,
-          displayOrder: swappingExercise.sets.length > 0 ? workout.exercises.indexOf(swappingExercise) : 0,
-          supersetGroup: swappingExercise.supersetGroup,
+          displayOrder: ex.sets.length > 0 ? workout.exercises.indexOf(ex) : 0,
+          supersetGroup: ex.supersetGroup,
+          swapReason: reason ?? null,
         }),
       });
       // Create sets matching the old exercise's set count, using last-performance weights when available
       const newSets: SetData[] = [];
-      for (let i = 0; i < swappingExercise.sets.length; i++) {
-        const oldSet = swappingExercise.sets[i];
+      for (let i = 0; i < ex.sets.length; i++) {
+        const oldSet = ex.sets[i];
         const histSet = lastPerf.sets[i];
         const reps = histSet?.reps ?? oldSet.reps;
         const weightKg = histSet?.weightKg ?? 0;
@@ -597,9 +563,9 @@
         newSets.push(s);
       }
       // Remove old exercise
-      await api(`/workout-exercises/${swappingExercise.id}`, { method: 'DELETE' });
+      await api(`/workout-exercises/${ex.id}`, { method: 'DELETE' });
       // Replace in local state
-      const idx = workout.exercises.indexOf(swappingExercise);
+      const idx = workout.exercises.indexOf(ex);
       workout.exercises[idx] = {
         id: newWe.id,
         exerciseId: newExerciseId,
@@ -607,10 +573,10 @@
         sets: newSets,
         restSeconds: 60,
         expanded: true,
-        supersetGroup: swappingExercise.supersetGroup,
+        supersetGroup: ex.supersetGroup,
       };
       workout.exercises = [...workout.exercises]; // trigger reactivity
-      closeSearchSheet();
+      closeInlineSwap();
       showToast('Exercise swapped', 'info');
     } catch {
       showToast('Failed to swap exercise', 'error');
@@ -796,6 +762,68 @@
       <span class="text-sm text-neutral-500">{new Date(workout.date + 'T12:00:00').toLocaleDateString()}</span>
     </div>
 
+    {#snippet inlineSwapPanel(ex: WorkoutExercise)}
+      {#if swapInlineExercise === ex}
+        <div class="border-t border-neutral-700 bg-neutral-900/80">
+          {#if swapReason === null}
+            <!-- Step 1: reason picker -->
+            <div class="px-4 py-3">
+              <p class="text-xs text-neutral-400 mb-2 uppercase tracking-wider">Why are you swapping?</p>
+              <div class="flex gap-2">
+                <button
+                  onclick={() => swapReason = 'equipment'}
+                  class="flex-1 min-h-[44px] rounded-lg text-sm font-medium text-white bg-neutral-700 active:bg-neutral-600 touch-manipulation"
+                >
+                  Equipment taken
+                </button>
+                <button
+                  onclick={() => swapReason = 'variation'}
+                  class="flex-1 min-h-[44px] rounded-lg text-sm font-medium text-white bg-neutral-700 active:bg-neutral-600 touch-manipulation"
+                >
+                  Want a variation
+                </button>
+              </div>
+              <button
+                onclick={closeInlineSwap}
+                class="mt-2 w-full min-h-[36px] text-xs text-neutral-500 touch-manipulation"
+              >Cancel</button>
+            </div>
+          {:else}
+            <!-- Step 2: alternative cards -->
+            <div class="px-4 py-3">
+              <p class="text-xs text-neutral-400 mb-2 uppercase tracking-wider">Choose alternative</p>
+              {#if swapCandidates[ex.exerciseId] === 'loading' || swapCandidates[ex.exerciseId] === undefined}
+                <div class="text-sm text-neutral-400 py-2 text-center">Loading…</div>
+              {:else if (swapCandidates[ex.exerciseId] as GeneratedAlternative[]).length === 0}
+                <div class="text-sm text-neutral-400 py-2 text-center">No alternatives found</div>
+              {:else}
+                <div class="space-y-2">
+                  {#each (swapCandidates[ex.exerciseId] as GeneratedAlternative[]) as alt}
+                    <button
+                      onclick={() => swapExercise(ex, alt.id, alt.name, swapReason!)}
+                      class="w-full text-left px-3 py-3 min-h-[56px] rounded-lg bg-neutral-800 active:bg-neutral-700 touch-manipulation"
+                    >
+                      <div class="font-medium text-sm text-white leading-tight">{alt.name}</div>
+                      <div class="text-xs text-neutral-400 mt-0.5">
+                        {alt.lastPerformedDaysAgo === 0 ? 'Done recently' : `${alt.lastPerformedDaysAgo}d ago`}
+                        {#if alt.suggestedWeightKg > 0}
+                          · {Math.round(alt.suggestedWeightKg * 2.20462 / 2.5) * 2.5} lbs
+                        {/if}
+                      </div>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+              <button
+                onclick={closeInlineSwap}
+                class="mt-2 w-full min-h-[36px] text-xs text-neutral-500 touch-manipulation"
+              >Cancel</button>
+            </div>
+          {/if}
+        </div>
+      {/if}
+    {/snippet}
+
     {#snippet exerciseCard(ex: WorkoutExercise)}
       <ExerciseCard
         {ex}
@@ -815,7 +843,7 @@
         onUpdateRestSeconds={(sec) => updateRestSeconds(ex, sec)}
         onOpenPlateCalc={(set) => { plateCalcWeightLbs = kgToLbs(set.weightKg); plateCalcSet = set; }}
         onToggleHistory={() => toggleHistory(ex.exerciseId)}
-        onSwap={() => { swappingExercise = ex; searchQuery = ''; searchResults = []; ensureAllExercises(); }}
+        onSwap={() => openInlineSwap(ex)}
         onRemove={() => removeExercise(ex)}
         onAddSet={(isWarmup) => addSet(ex, isWarmup)}
         onDeleteSet={(setId) => deleteSet(ex, setId)}
@@ -836,6 +864,7 @@
               {#each group.exercises as ex, gIdx}
                 <div id="exercise-{ex.id}" class="{gIdx > 0 ? 'border-t border-neutral-800' : ''}">
                   {@render exerciseCard(ex)}
+                  {@render inlineSwapPanel(ex)}
                 </div>
               {/each}
             </div>
@@ -844,6 +873,7 @@
           {#each group.exercises as ex}
             <div id="exercise-{ex.id}" class="rounded-xl overflow-hidden" style="background-color: #1a1a1a;">
               {@render exerciseCard(ex)}
+              {@render inlineSwapPanel(ex)}
             </div>
           {/each}
         {/if}
@@ -877,14 +907,14 @@
 </div>
 
 <ExerciseSearchSheet
-  open={swappingExercise !== null || addingExercise}
-  title={swappingExercise ? `Replace ${swappingExercise.exercise?.name}` : 'Add Exercise'}
+  open={addingExercise}
+  title="Add Exercise"
   query={searchQuery}
   results={searchResults}
-  suggestions={swappingExercise ? swapSuggestions : []}
-  suggestionsLabel={swapSuggestionsLabel}
+  suggestions={[]}
+  suggestionsLabel=""
   onInput={onSearchInput}
-  onSelect={(r) => swappingExercise ? swapExercise(r.id, r.name) : addExerciseToWorkout(r.id, r.name)}
+  onSelect={(r) => addExerciseToWorkout(r.id, r.name)}
   onClose={closeSearchSheet}
 />
 

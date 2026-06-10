@@ -309,14 +309,14 @@ export async function workoutRoutes(app: FastifyInstance) {
   );
 
   // Add exercise to existing workout
-  app.post<{ Params: { id: string }; Body: { exerciseId: number; displayOrder?: number; supersetGroup?: number | null } }>(
+  app.post<{ Params: { id: string }; Body: { exerciseId: number; displayOrder?: number; supersetGroup?: number | null; swapReason?: string } }>(
     '/workouts/:id/exercises',
     async (req, reply) => {
       const workoutId = parseInt(req.params.id);
-      const { exerciseId, displayOrder = 0, supersetGroup } = req.body;
+      const { exerciseId, displayOrder = 0, supersetGroup, swapReason } = req.body;
       const result = db
         .insert(schema.workoutExercises)
-        .values({ workoutId, exerciseId, displayOrder, supersetGroup: supersetGroup ?? null })
+        .values({ workoutId, exerciseId, displayOrder, supersetGroup: supersetGroup ?? null, swapReason: swapReason ?? null })
         .returning()
         .get();
       return reply.status(201).send(result);
