@@ -279,5 +279,8 @@ sqlite.exec(`
   WHERE id = 74 AND name = 'Cable Face Pull';
 `);
 
+// Swap reason: log why user swapped an exercise (future training signal)
+try { sqlite.exec('ALTER TABLE workout_exercises ADD COLUMN swap_reason TEXT'); } catch { /* exists */ }
+
 console.log('Database migrated successfully');
 sqlite.close();

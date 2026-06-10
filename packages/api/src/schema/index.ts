@@ -28,6 +28,7 @@ export const workoutExercises = sqliteTable('workout_exercises', {
   exerciseId: integer('exercise_id').notNull().references(() => exercises.id),
   displayOrder: integer('display_order').notNull().default(0),
   supersetGroup: integer('superset_group'),
+  swapReason: text('swap_reason'),
 });
 
 export const sets = sqliteTable('sets', {
