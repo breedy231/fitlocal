@@ -25,6 +25,8 @@ export interface GeneratedWorkout {
   dayType: string;
   globalModifier: number;
   isInCut: boolean;
+  /** Present when calorie deficit caused volume reduction. Value 0–20 (percentage points). */
+  volumeReductionPct?: number;
   programDriven?: boolean;
   exercises: GeneratedExercise[];
 }
