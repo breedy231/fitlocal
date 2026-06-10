@@ -14,6 +14,7 @@ npm run dev:web          # SvelteKit on :5173 (vite dev)
 
 # Build
 npm run build            # Builds API (tsc) then web (vite build)
+npm run deploy           # Build + kill old server + restart production on :3001
 
 # Tests (API package only — Vitest)
 npm test -w packages/api          # Watch mode
@@ -62,6 +63,8 @@ These commands live in `.claude/commands/` and should be invoked automatically w
 | `/project:cut-status` | "how's my cut", "cut trending", "weight trend", "I weighed X lbs" | Fetches `/api/health-snapshots`, computes trend; logs today's weight if user provides one |
 | `/project:workout` | "last workout", "what should I do next", "next session", "what did I do yesterday" | Last workout recap + next PPL session with suggested weights |
 | `/project:playwright-test` | "test this", "screenshot it", "show me it works", "run playwright" | Runs Playwright at 430×932, walks the affected flow, takes screenshots, posts them to the open PR |
+| `/project:deploy` | "deploy", "ship it", "push to prod", "rebuild production", "restart the server" | Builds API + web, restarts production server on :3001, verifies it's up |
+| `/project:gym-swap` | "swap X", "substitute for X", "don't have X", "what can I do instead of X" | Suggests substitute exercises for the same muscle group, with Obsidian-ready output |
 
 **PPL rotation:** Push → Pull → Legs → repeat. The rotation is inferred from the `notes` field on recent workouts ("push day" / "pull day" / "legs day").
 
@@ -71,9 +74,33 @@ These commands live in `.claude/commands/` and should be invoked automatically w
 - **IMPORTANT: Mobile-first UI.** All UI changes MUST target iPhone 15 Pro Max (430x932). Use 44px minimum tap targets (iOS HIG). Test with Playwright at that viewport before shipping.
 - **IMPORTANT: PWA/iOS quirks.** `beforeunload` does NOT fire on iOS PWA swipe-kill. Always persist state on `visibilitychange` → hidden. Service workers can be evicted after ~2 days idle.
 - **Units:** Database stores kg and meters. UI displays lbs and miles. Convert at the boundary.
-- **Cardio classification:** Exercise names are matched against a regex pattern in `log/[id]/+page.svelte` to determine cardio vs. strength UI. If adding new cardio exercises, update `CARDIO_PATTERN`.
+- **Cardio classification:** Exercise names are matched against a regex to determine cardio vs. strength UI. **The pattern is duplicated in 5 places — any change must update all of them:**
+  1. `packages/web/src/routes/log/[id]/+page.svelte` — active workout UI (`CARDIO_PATTERN`)
+  2. `packages/web/src/routes/history/+page.svelte` — history list display (`CARDIO_PATTERN`)
+  3. `packages/web/src/routes/history/[id]/edit/+page.svelte` — history edit UI (`CARDIO_PATTERN`)
+  4. `packages/api/src/lib/generator.ts` — workout generator (`CARDIO_KEYWORDS`)
+  5. `packages/api/src/routes/generate.ts` — swap suggestions (`CARDIO_KEYWORDS`)
+  
+  **Critical footgun:** patterns without `\b` word boundaries will match substrings — e.g. `run` matches inside `c**run**ch`, causing crunch exercises to render as cardio. Always use `\b` word boundaries. Use `grep -rn "CARDIO_PATTERN\|CARDIO_KEYWORDS" packages/` to find all instances before editing.
 - **After every change:** curl the dev URL to verify the API responds. For UI changes, run `/project:playwright-test` — it handles viewport, screenshots, and posting them to the PR.
 - **Terse prompts expected.** User often gives short prompts from mobile mid-workout. Infer intent from context; prefer the most likely workout-related interpretation before asking clarifying questions.
+
+## Fitness goals (current as of June 2026)
+
+- **Cut targets:** 1800 cal/day — 170g protein / 55g fat / 148g carbs
+- **Goal pace:** ~1 lb/week loss
+- **Cardio:** 45–60 min minimum per gym session
+- **Workout format:** Output all gym plans in Obsidian format (see below)
+- **Steps:** 10k/day target
+
+### Obsidian workout format
+
+```
+Exercise Name
+[warmup reps] reps x [warmup weight] lbs        ← only if warmup set exists
+[sets] sets x [reps] reps x [weight] lbs
+[N] reps in reserve                              ← omit for bodyweight or cardio
+```
 
 ## Database
 
