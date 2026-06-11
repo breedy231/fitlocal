@@ -8,7 +8,7 @@ import * as schema from './schema/index.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, '../../../fitlocal.db');
+const dbPath = process.env.DATABASE_PATH ?? path.join(__dirname, '../../../fitlocal.db');
 const sqlite: Database.Database = new Database(dbPath);
 sqlite.pragma('journal_mode = WAL');
 sqlite.pragma('foreign_keys = ON');
