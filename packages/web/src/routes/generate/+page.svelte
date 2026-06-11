@@ -3,6 +3,7 @@
   import { cachedGet } from '$lib/api-cache.svelte';
   import { goto } from '$app/navigation';
   import ExerciseDetail from '$lib/ExerciseDetail.svelte';
+  import ExerciseSearchSheet from '$lib/workout/ExerciseSearchSheet.svelte';
   import { showToast } from '$lib/toast';
   import type {
     GeneratedExercise,
@@ -46,7 +47,6 @@
   let addExerciseOpen = $state(false);
   let addExerciseSearch = $state('');
   let addExerciseResults: { id: number; name: string }[] = $state([]);
-  let addExerciseLoading = $state(false);
   let addSearchTimer: ReturnType<typeof setTimeout> | undefined;
 
   let filteredAlternatives = $derived(
@@ -299,8 +299,7 @@
     }
   }
 
-  function onAddExerciseInput(e: Event) {
-    const q = (e.target as HTMLInputElement).value;
+  function onAddExerciseInput(q: string) {
     addExerciseSearch = q;
     clearTimeout(addSearchTimer);
     addSearchTimer = setTimeout(() => searchExercisesForAdd(q), 250);
@@ -1011,54 +1010,15 @@
   {/if}
 
   <!-- Add Exercise Sheet (program mode) -->
-  {#if addExerciseOpen}
-    <div class="fixed inset-0 z-50 flex items-end justify-center">
-      <button class="absolute inset-0 bg-black/60" onclick={closeAddExercise} aria-label="Close"></button>
-      <div class="relative w-full max-w-lg bg-neutral-900 rounded-t-2xl p-4 pb-8 max-h-[70vh] flex flex-col">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-bold">Add Exercise</h2>
-          <button onclick={closeAddExercise} class="w-8 h-8 rounded-lg flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-800" aria-label="Close">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
-          </button>
-        </div>
-
-        <div class="relative mb-3">
-          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"></path>
-          </svg>
-          <input
-            type="text"
-            placeholder="Search exercises..."
-            value={addExerciseSearch}
-            oninput={onAddExerciseInput}
-            class="w-full pl-9 pr-3 py-2 rounded-lg bg-neutral-800 text-white text-sm placeholder-neutral-500 border border-neutral-700 focus:outline-none focus:border-green-500"
-          />
-        </div>
-
-        {#if addExerciseLoading}
-          <div class="flex justify-center py-12">
-            <div class="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        {:else if addExerciseSearch && addExerciseResults.length === 0}
-          <p class="text-neutral-400 text-center py-8">No exercises found</p>
-        {:else}
-          <div class="overflow-y-auto space-y-2">
-            {#each addExerciseResults as exercise}
-              <button
-                onclick={() => pickExerciseToAdd(exercise)}
-                class="w-full text-left rounded-xl p-3 hover:bg-neutral-700 transition-colors"
-                style="background-color: #1a1a1a;"
-              >
-                <div class="font-medium">{exercise.name}</div>
-              </button>
-            {/each}
-          </div>
-        {/if}
-      </div>
-    </div>
-  {/if}
+  <ExerciseSearchSheet
+    open={addExerciseOpen}
+    title="Add Exercise"
+    query={addExerciseSearch}
+    results={addExerciseResults}
+    onInput={onAddExerciseInput}
+    onSelect={pickExerciseToAdd}
+    onClose={closeAddExercise}
+  />
 
   {#if !activeProgram}
     <p class="text-center text-sm text-neutral-600 mt-6">
