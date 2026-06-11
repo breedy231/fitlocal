@@ -1,3 +1,6 @@
+// Query strategy: Drizzle ORM is used for schema definition and type generation
+// only. All queries are raw SQL via db.all()/db.get()/db.run() for explicitness
+// and SQLite-specific idiom support. This is intentional — not a migration-in-progress.
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema/index.js';

@@ -20,6 +20,67 @@ function resolveEquipment(profileId?: string, equipment?: string): string[] | nu
   return null; // 'full' or default = no restriction
 }
 
+function detectCutPhase(today: string): boolean {
+  const cutGoals = db.all<{ cut_start_date: string | null; cut_end_date: string | null }>(
+    sql`SELECT cut_start_date, cut_end_date FROM user_goals LIMIT 1`
+  );
+  return cutGoals.length > 0
+    && cutGoals[0].cut_start_date != null
+    && cutGoals[0].cut_end_date != null
+    && today >= cutGoals[0].cut_start_date
+    && today <= cutGoals[0].cut_end_date;
+}
+
+function loadActiveProgramExercises(dayType: string): ProgramExerciseInput[] | null {
+  const activeRow = db.all<{ program_id: number; current_day_index: number }>(
+    sql`SELECT program_id, current_day_index FROM active_program LIMIT 1`
+  );
+  if (activeRow.length === 0) return null;
+
+  const active = activeRow[0];
+  const days = db.all<{ id: number; name: string; day_order: number }>(
+    sql`SELECT id, name, day_order FROM program_days WHERE program_id = ${active.program_id} ORDER BY day_order`
+  );
+  const currentDay = days[active.current_day_index % days.length];
+  if (!currentDay || !currentDay.name.toLowerCase().includes(dayType.toLowerCase())) return null;
+
+  const rows = db.all<{ exercise_id: number | null; exercise_name: string; target_sets: number | null; target_reps: string | null; rest_seconds: number | null }>(
+    sql`SELECT exercise_id, exercise_name, target_sets, target_reps, rest_seconds FROM program_exercises WHERE program_day_id = ${currentDay.id} ORDER BY display_order`
+  );
+  if (rows.length === 0) return null;
+
+  return rows.map(r => ({
+    exerciseId: r.exercise_id,
+    exerciseName: r.exercise_name,
+    targetSets: r.target_sets,
+    targetReps: r.target_reps,
+    restSeconds: r.rest_seconds,
+  }));
+}
+
+function applyNutritionVolumeReduction(workout: ReturnType<typeof generateWorkout>, today: string): void {
+  const goals = db.all<{ maintenance_calories: number | null }>(
+    sql`SELECT maintenance_calories FROM user_goals LIMIT 1`
+  );
+  const maintenance = goals.length > 0 && goals[0].maintenance_calories
+    ? goals[0].maintenance_calories
+    : (Number(process.env.MAINTENANCE_CALORIES) || 2200);
+  const snapshot = db.all<{ calories: number | null }>(
+    sql`SELECT calories FROM health_snapshots WHERE date = ${today} LIMIT 1`
+  );
+  if (snapshot.length > 0 && snapshot[0].calories && snapshot[0].calories > 0) {
+    const deficitPct = (maintenance - snapshot[0].calories) / maintenance;
+    // Graduated: no reduction below 10%, linear up to 20% reduction at 30%+ deficit
+    if (deficitPct > 0.10) {
+      const volumeMultiplier = 1.0 - Math.min((deficitPct - 0.10) / 0.20, 1.0) * 0.20;
+      for (const ex of workout.exercises) {
+        ex.suggestedSets = Math.max(2, Math.round(ex.suggestedSets * volumeMultiplier));
+      }
+      workout.volumeReductionPct = Math.round((1.0 - volumeMultiplier) * 100);
+    }
+  }
+}
+
 export async function generateRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { dayType: string; equipment?: string; profileId?: string; supersets?: string; duration?: string } }>(
     '/generate-workout',
@@ -30,46 +91,10 @@ export async function generateRoutes(app: FastifyInstance) {
       }
       const supersets = supersetsParam !== 'false';
       const durationMinutes = durationParam ? parseInt(durationParam) : undefined;
-
-      // Detect cut phase from user_goals dates
       const today = new Date().toISOString().slice(0, 10);
-      const cutGoals = db.all<{ cut_start_date: string | null; cut_end_date: string | null }>(
-        sql`SELECT cut_start_date, cut_end_date FROM user_goals LIMIT 1`
-      );
-      const isInCut = cutGoals.length > 0
-        && cutGoals[0].cut_start_date != null
-        && cutGoals[0].cut_end_date != null
-        && today >= cutGoals[0].cut_start_date
-        && today <= cutGoals[0].cut_end_date;
 
-      // Check for active program with a matching day
-      const activeRow = db.all<{ program_id: number; current_day_index: number }>(
-        sql`SELECT program_id, current_day_index FROM active_program LIMIT 1`
-      );
-      let programExercises: ProgramExerciseInput[] | null = null;
-
-      if (activeRow.length > 0) {
-        const active = activeRow[0];
-        const days = db.all<{ id: number; name: string; day_order: number }>(
-          sql`SELECT id, name, day_order FROM program_days WHERE program_id = ${active.program_id} ORDER BY day_order`
-        );
-        const currentDay = days[active.current_day_index % days.length];
-
-        if (currentDay && currentDay.name.toLowerCase().includes(dayType.toLowerCase())) {
-          const rows = db.all<{ exercise_id: number | null; exercise_name: string; target_sets: number | null; target_reps: string | null; rest_seconds: number | null }>(
-            sql`SELECT exercise_id, exercise_name, target_sets, target_reps, rest_seconds FROM program_exercises WHERE program_day_id = ${currentDay.id} ORDER BY display_order`
-          );
-          if (rows.length > 0) {
-            programExercises = rows.map(r => ({
-              exerciseId: r.exercise_id,
-              exerciseName: r.exercise_name,
-              targetSets: r.target_sets,
-              targetReps: r.target_reps,
-              restSeconds: r.rest_seconds,
-            }));
-          }
-        }
-      }
+      const isInCut = detectCutPhase(today);
+      const programExercises = loadActiveProgramExercises(dayType);
 
       try {
         const equipmentList = resolveEquipment(profileId, equipment);
@@ -77,27 +102,7 @@ export async function generateRoutes(app: FastifyInstance) {
           ? generateFromProgram(dayType, programExercises, db, { supersets, isInCut })
           : generateWorkout(dayType, equipmentList, db, { supersets, durationMinutes, isInCut });
 
-        // Nutrition integration: graduated volume reduction based on deficit magnitude
-        const goals = db.all<{ maintenance_calories: number | null }>(
-          sql`SELECT maintenance_calories FROM user_goals LIMIT 1`
-        );
-        const maintenance = goals.length > 0 && goals[0].maintenance_calories
-          ? goals[0].maintenance_calories
-          : (Number(process.env.MAINTENANCE_CALORIES) || 2200);
-        const snapshot = db.all<{ calories: number | null }>(
-          sql`SELECT calories FROM health_snapshots WHERE date = ${today} LIMIT 1`
-        );
-        if (snapshot.length > 0 && snapshot[0].calories && snapshot[0].calories > 0) {
-          const deficitPct = (maintenance - snapshot[0].calories) / maintenance;
-          // Graduated: no reduction below 10%, linear up to 20% reduction at 30%+ deficit
-          if (deficitPct > 0.10) {
-            const volumeMultiplier = 1.0 - Math.min((deficitPct - 0.10) / 0.20, 1.0) * 0.20;
-            for (const ex of workout.exercises) {
-              ex.suggestedSets = Math.max(2, Math.round(ex.suggestedSets * volumeMultiplier));
-            }
-            workout.volumeReductionPct = Math.round((1.0 - volumeMultiplier) * 100);
-          }
-        }
+        applyNutritionVolumeReduction(workout, today);
 
         return workout;
       } catch (err: any) {
