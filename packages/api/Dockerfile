@@ -22,9 +22,9 @@ FROM node:22-slim
 
 WORKDIR /app
 
-# Install Litestream (amd64 — Railway runs linux/amd64)
-ARG LITESTREAM_VERSION=0.3.13
-ADD https://github.com/benbjohnson/litestream/releases/download/v${LITESTREAM_VERSION}/litestream-v${LITESTREAM_VERSION}-linux-amd64.tar.gz /tmp/litestream.tar.gz
+# Install Litestream (x86_64 — Railway runs linux/amd64)
+ARG LITESTREAM_VERSION=0.5.12
+ADD https://github.com/benbjohnson/litestream/releases/download/v${LITESTREAM_VERSION}/litestream-${LITESTREAM_VERSION}-linux-x86_64.tar.gz /tmp/litestream.tar.gz
 RUN tar -xzf /tmp/litestream.tar.gz -C /usr/local/bin litestream && rm /tmp/litestream.tar.gz
 
 # Copy built artifacts from builder

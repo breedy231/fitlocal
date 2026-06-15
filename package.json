@@ -9,7 +9,7 @@
     "dev:api": "npm run dev -w packages/api",
     "dev:web": "npm run dev -w packages/web",
     "dev": "npm run backup && (npm run dev:api & npm run dev:web)",
-    "build": "npm run build -w packages/api && npm run build -w packages/web",
+    "build": "npm run build -w packages/shared && npm run build -w packages/api && npm run build -w packages/web",
     "deploy": "bash scripts/deploy.sh"
   }
 }
