@@ -13,8 +13,13 @@ npm run dev:api          # Fastify API on :3001 (tsx watch)
 npm run dev:web          # SvelteKit on :5173 (vite dev)
 
 # Build
-npm run build            # Builds API (tsc) then web (vite build)
-npm run deploy           # Build + kill old server + restart production on :3001
+npm run build            # Builds shared → API (tsc) → web (vite build)
+
+# Deploy (production is Fly.io)
+fly deploy               # Build Docker image + deploy to Fly.io
+fly logs --app fitlocal-app          # Stream live logs
+fly status --app fitlocal-app        # Machine health + check status
+fly deploy --app fitlocal-app        # Deploy from any directory
 
 # Tests (API package only — Vitest)
 npm test -w packages/api          # Watch mode
@@ -33,9 +38,11 @@ Monorepo with npm workspaces — three packages:
 - **`packages/web`** — SvelteKit 2 + Svelte 5 (runes). Static adapter — builds to a SPA served by the API in production. Tailwind CSS. Pages under `src/routes/`: home, generate, log/[id] (active workout), history, programs, routines, reports, settings.
 - **`packages/shared`** — TypeScript types shared between API and web (imported as `fitlocal-shared`). Workout, Set, Exercise types live here.
 
-**Data flow:** Web SPA → Fastify API (:3001) → SQLite file (`packages/fitlocal.db`). In production, the API serves the built SPA via `@fastify/static`. In dev, they run on separate ports.
+**Data flow:** Web SPA → Fastify API (:3001) → SQLite file. In production, the API serves the built SPA via `@fastify/static`. In dev, they run on separate ports.
 
-**IMPORTANT: API route prefix.** Production (`node dist/server.js`) mounts all routes under `/api` (e.g., `/api/workouts`). Dev mode (`tsx watch`) has NO prefix (e.g., `/workouts`). The running server is almost always production. Check `ps` or the process command if unsure — `dist/server.js` = prod, `src/server.ts` = dev.
+**Production server:** Fly.io at `https://fitlocal-app.fly.dev`. Single `shared-cpu-1x` machine (ord region). DB is at `/app/fitlocal.db` inside the container, continuously replicated to Cloudflare R2 (`fitlocal-db` bucket) via Litestream. On cold start, Litestream restores from R2 before Node starts. Local dev DB lives at `fitlocal.db` in the project root (not `packages/fitlocal.db`).
+
+**IMPORTANT: API route prefix.** Production (`NODE_ENV=production`) mounts all routes under `/api` (e.g., `/api/workouts`). Dev mode (`tsx watch`) has NO prefix (e.g., `/workouts`). Production = `https://fitlocal-app.fly.dev/api/...`. Dev = `http://localhost:3001/...`.
 
 **Workout logging flow:** `generate` page creates a workout via POST → redirects to `log/[id]` → sets are saved individually via PATCH as the user works out → workout state is also cached to localStorage for offline resilience.
 
@@ -104,7 +111,8 @@ Exercise Name
 
 ## Database
 
-- SQLite with WAL mode, foreign keys ON. Single file at `packages/fitlocal.db`.
+- SQLite with WAL mode, foreign keys ON. Dev DB at `fitlocal.db` (project root). Prod DB at `/app/fitlocal.db` inside the Fly.io container, set via `DATABASE_PATH` env var.
 - Migrations in `packages/api/src/migrate.ts` — idempotent ALTER TABLE wrapped in try/catch. Always check existing migrations before adding new ones.
-- Hourly automated backups via launchd (`scripts/backup-db.sh`). Tiered retention policy (`scripts/prune-backups.py`).
+- **Production replication:** Litestream streams WAL changes to Cloudflare R2 (`fitlocal-db` bucket) every second. On Fly.io redeploy/restart, `scripts/docker-entrypoint.sh` restores from R2 before starting Node. Config in `litestream.yml`.
+- Local dev: hourly automated backups via launchd (`scripts/backup-db.sh`). Tiered retention policy (`scripts/prune-backups.py`).
 - Never modify the DB file directly — always go through the API.
