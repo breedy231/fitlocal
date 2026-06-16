@@ -5,6 +5,8 @@ build/
 *.db
 *.db-shm
 *.db-wal
+# Litestream local staging/temp directories
+*.db-litestream/
 .env
 .DS_Store
 certs/

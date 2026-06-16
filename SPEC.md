@@ -1,73 +1,37 @@
 # FitLocal — Strategic Spec v2 (June 2026)
 
 > Revised after technical review. Pass individual phases to subagents — each phase section is self-contained with context, steps, and acceptance criteria.
-> Confirmed: persistent AI chat history, Oracle Cloud account to be created, public repo at breedy231/fitlocal.
+> Confirmed: persistent AI chat history, hosting on Fly.io, public repo at breedy231/fitlocal.
 
 ## Critical findings driving this revision
 
 1. **`fitlocal.db-shm` and `fitlocal.db-wal` are tracked in git at repo root** (verify: `git ls-files | grep db`). The WAL file contains personal health data as readable SQLite pages. Must be purged from history before the repo goes public. This is the single most important item in the plan.
 2. **The original DB transfer step (rsync the bare `.db`) would silently lose data** — WAL-mode DBs must be snapshotted with `sqlite3 .backup` first (the existing `scripts/backup-db.sh` already does this correctly).
 3. **The assistant as originally specced (read-only Q&A) does not replace Claude Code** — Claude Code at the gym *acts* (logs weight, swaps exercises). The assistant needs tool use.
-4. **PWA requires a secure context** — service workers don't run over plain `http://`. The new host needs Tailscale HTTPS, same as the current Macbook setup.
+4. **PWA requires a secure context** — service workers don't run over plain `http://`. Fly.io serves the app over HTTPS by default (`force_https` in `fly.toml`), which satisfies this.
 5. **CARDIO_PATTERN consolidation was sequenced last but is a prerequisite** for the phases that touch `generate.ts` and `log/[id]` — moved ahead of them.
 6. **README + CI belong at repo-public time**, not at the end — a public portfolio repo without them defeats the purpose.
 
 ---
 
-## Phase 1 — Hosting Migration: Oracle Cloud Free Tier
+## Phase 1 — Hosting (done)
 
-**Goal:** Move off the Macbook Pro to a persistent, always-on host at zero cost. App reachable via Tailscale HTTPS from the phone, with off-VM backups and downtime alerts.
+The app runs on **Fly.io**: a Docker image built from `packages/api/Dockerfile`
+(config in `fly.toml`), single `shared-cpu-1x` machine. The SQLite DB lives at
+`/app/fitlocal.db` and is continuously replicated to Cloudflare R2 via Litestream
+(`litestream.yml`); on cold start `scripts/docker-entrypoint.sh` restores from R2
+before Node boots. HTTPS (`force_https`), health checks (`/api/health`), and machine
+auto-start/stop are handled by Fly. Deploy commands and environment variables
+(`DATABASE_PATH`, `PORT`, `FITLOCAL_API_KEY`, `NODE_ENV`, plus Litestream/R2
+secrets) live in `README.md`.
 
-**Target platform:** Oracle Cloud Always Free — ARM Ampere VM (`VM.Standard.A1.Flex`), up to 4 OCPU / 24 GB RAM total. Access stays Tailscale-only — no public ingress.
+The WAL-safety lesson from finding #2 still applies to any manual DB move: snapshot
+with `scripts/backup-db.sh` (a `sqlite3 .backup`), never copy a live `.db` without
+its `-wal` sidecar.
 
-### Known OCI gotchas (context for whoever executes this)
-
-- **Capacity famine:** A1.Flex Always-Free provisioning routinely fails with "out of host capacity" for free-tier accounts. **Mitigation: upgrade the account to Pay-As-You-Go** (Always-Free shapes still cost $0) — PAYG accounts get provisioning priority.
-- **Home region is immutable after signup.** Choose deliberately (us-ashburn-1 and us-phoenix-1 are high-demand; a smaller region may provision faster).
-- **Idle reclamation:** Oracle reclaims Always-Free instances it deems idle (CPU/network thresholds). A single-user app will look idle. PAYG upgrade also exempts you from reclamation. Off-VM backups are mandatory regardless.
-- **OCI Ubuntu images ship restrictive iptables rules baked into the image** — separate from (and in addition to) VCN security lists. Tailscale generally works via DERP relay anyway, but if direct connections fail, this is why.
-
-### Steps
-
-1. Create Oracle Cloud account at cloud.oracle.com. **Then upgrade to Pay-As-You-Go** (Billing → Upgrade). Set a budget alert at $1 as a tripwire.
-2. Provision ARM VM: Ubuntu 24.04 LTS, `VM.Standard.A1.Flex`, 2 OCPU / 12 GB RAM (free tier allows up to 4/24; leave headroom for a second experiment VM). If provisioning fails with "out of host capacity," retry across availability domains / use a retry script.
-3. Attach + mount 50 GB block volume at `/data/fitlocal/`. Add to `/etc/fstab` with `_netdev,nofail` and note the mount unit name for step 8.
-4. Install Node.js 22 LTS via **NodeSource apt repo — NOT nvm** (nvm-installed node is not on systemd's PATH). Also `apt install build-essential python3` (node-gyp fallback for better-sqlite3 if arm64 prebuilds are unavailable for a future version).
-5. Install Tailscale, join Brendan's tailnet. Enable **`tailscale serve`** to front the app with HTTPS on the tailnet (`tailscale serve --bg https / http://localhost:3001`). PWA service workers require a secure context — plain `http://<ip>:3001` breaks PWA install and offline behavior.
-6. Clone repo (private at this point — set up an SSH **deploy key** on the VM with read access), `npm install`, `npm run build`.
-7. **Transfer the DB safely** — never rsync a live WAL-mode `.db` alone (loses everything in the `-wal` sidecar):
-   ```bash
-   # On the Macbook:
-   ./scripts/backup-db.sh                      # produces a WAL-safe .backup snapshot
-   rsync <latest-backup>.db oracle:/data/fitlocal/fitlocal.db
-   ```
-8. Create `/etc/systemd/system/fitlocal.service`:
-   - `ExecStart=/usr/bin/node /home/ubuntu/fitlocal/packages/api/dist/server.js`
-   - `Restart=always`, `RestartSec=5`
-   - **`RequiresMountsFor=/data/fitlocal`** — without this, if the block volume races at boot, the API starts against a missing path and better-sqlite3 silently creates a fresh empty DB.
-   - Additionally: a pre-start guard (`ExecStartPre=/usr/bin/test -f /data/fitlocal/fitlocal.db`) so the service fails loudly instead of running on an empty DB.
-   - Secrets via **`EnvironmentFile=/etc/fitlocal/env` with `chmod 600`** — unit files in `/etc/systemd/system/` are world-readable; never inline `ANTHROPIC_API_KEY` there.
-9. Env vars in `/etc/fitlocal/env`:
-   ```
-   DATABASE_PATH=/data/fitlocal/fitlocal.db
-   PORT=3001
-   ANTHROPIC_API_KEY=<added in Phase 3>
-   ```
-   Note: `MAINTENANCE_CALORIES` is **not** an env var — it's user data and lives in the DB (`user_goals`). See Phase 3.
-10. Backups — two layers, both required:
-    - Hourly cron running the existing `scripts/backup-db.sh` → `/data/fitlocal/backups/`, with the existing tiered retention (`scripts/prune-backups.py`).
-    - **Daily `rclone` sync of the backups dir to Google Drive.** Not optional — until this exists, the VM is the only copy of the health data, and Oracle reclaims free instances.
-11. Monitoring: the VM pings healthchecks.io (or ntfy) every 5 min via cron hitting `GET /api/workouts`; missed pings → push notification to phone. Given the reclamation risk you need to *know* when the box dies.
-12. Update `scripts/deploy.sh` with a `--remote` flag: SSH to VM → git pull → `npm install` → `npm run build` → `sudo systemctl restart fitlocal`.
-13. **Cutover (ordered — do not skip):**
-    a. Stop the Macbook API (prevents post-snapshot writes).
-    b. Run final backup + rsync (step 7).
-    c. Start fitlocal.service on the VM; verify data present (latest workout visible).
-    d. **Repoint the HealthKit iOS Shortcut** (runs 8:30 AM + 10 PM, posts to the old Tailscale URL) to the new host.
-    e. Re-add the PWA to the iPhone home screen from the new HTTPS URL.
-    f. Keep the Macbook copy untouched for 1 week as rollback.
-
-**Definition of done:** `curl https://<vm-tailnet-name>.ts.net/api/workouts` returns 200 with real data from the phone; PWA installed from new URL; HealthKit sync lands on the VM; a backup file exists in Google Drive; killing the node process triggers a phone notification within 10 min.
+> Historical note: an earlier draft of this phase planned an Oracle Cloud
+> Always-Free ARM VM fronted by Tailscale + systemd. That path was dropped in favor
+> of Fly.io; the OCI provisioning and cutover detail has been removed.
 
 ---
 
@@ -83,18 +47,18 @@
    ```
    (One filter-repo pass for both DB files and screenshots. Exempt `packages/web/static/*.png` app icons and `.github/test-screenshots/` if those should survive — use explicit `--path` rules accordingly.)
    Add `fitlocal.db*`, `*.db`, `*.db-shm`, `*.db-wal`, and root-level `*.png` to `.gitignore`.
-   **Note:** filter-repo rewrites all history — every existing clone (including the Phase 1 VM clone) must be re-cloned afterward, and the remote needs a force push.
+   **Note:** filter-repo rewrites all history — every existing clone must be re-cloned afterward, and the remote needs a force push.
 2. **History-wide secret/personal-data scan** — grepping the working tree is not enough; old commits may contain values the current tree doesn't:
    ```bash
    gitleaks detect --source . --log-opts="--all"
-   git log -p --all | grep -inE "brendan|bren\.reed|protonmail|anthropic.*key|sk-ant" | head -50
+   git log -p --all | grep -inE "<your-name>|<your-email>|anthropic.*key|sk-ant" | head -50
    ```
-3. **Working-tree grep for hardcoded personal values** (`2200|1800|170|brendan|bren|reed` in `*.ts`/`*.svelte`). Anything found moves to the DB (`user_goals`) — not env vars; personal data in env vars fights the public-repo goal too.
+3. **Working-tree grep for hardcoded personal values** (calorie/macro numbers, your name, your email in `*.ts`/`*.svelte`). Anything found moves to the DB (`user_goals`) — not env vars; personal data in env vars fights the public-repo goal too.
 4. **Audit `.claude/`**: commands are fine to keep; check `settings.json` for local paths/secrets.
 5. **Add `.env.example`** (`DATABASE_PATH`, `ANTHROPIC_API_KEY`, `PORT` — no personal values).
-6. **Write `README.md`** — what it is (1 para), tech stack, ASCII architecture diagram, self-hosting instructions (link Phase 1 steps), explicit "single-user, no multi-tenancy" note.
+6. **Write `README.md`** — what it is (1 para), tech stack, ASCII architecture diagram, self-hosting instructions (Fly.io deploy), explicit "single-user, no multi-tenancy" note.
 7. **Add CI**: one GitHub Actions workflow — `npm ci`, `npm run build`, `npm run test:run -w packages/api`. A portfolio repo with a green checkmark beats any amount of refactoring.
-8. Flip repo to public. Re-clone on the VM (history was rewritten in step 1).
+8. Flip repo to public. Re-clone anywhere the repo is checked out (history was rewritten in step 1).
 
 **Definition of done:** `git log --all -- 'fitlocal.db*' '*.png'` is empty; gitleaks clean; README renders on GitHub; CI green on main; repo is public.
 
@@ -236,9 +200,9 @@ Use tools to log data or look up history beyond what's shown. Be concise — the
 
 | Phase | Description | Effort | Why this order |
 |---|---|---|---|
-| **1** | Oracle Cloud hosting migration | High | Riskiest change — do it while the Macbook fallback exists |
+| **1** | Hosting on Fly.io | Done | Resolved before the public flip |
 | **2** | Data purge, README, CI, repo public | Medium | DB-files-in-history is the critical blocker; repo must be presentable the day it flips |
-| **3** | AI assistant with tools | High | Headline feature; needs Phase 1's `ANTHROPIC_API_KEY` on the VM |
+| **3** | AI assistant with tools | High | Headline feature; needs `ANTHROPIC_API_KEY` set as a Fly secret |
 | **4** | CARDIO consolidation + generate UI | Medium | Consolidation must precede edits to its host files |
 | **5** | Swap UX | Medium | Touches `log/[id]` — after Phase 4's shared module exists |
 | **6** | generate.ts refactor + components | Low–Med | Pure polish; safe to do last |

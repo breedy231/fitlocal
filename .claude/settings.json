@@ -20,6 +20,13 @@
       "Bash(gh issue *)",
       "Bash(npx playwright *)",
       "Bash(todoist *)",
+      "Bash(fly logs *)",
+      "Bash(fly status*)",
+      "Bash(tailscale status*)",
+      "mcp__claude_ai_Todoist__find-tasks",
+      "mcp__claude_ai_Todoist__find-projects",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_snapshot",
       "Edit",
       "Write"
     ],

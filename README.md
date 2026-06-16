@@ -1,42 +1,43 @@
 # FitLocal
 
-Self-hosted workout tracker PWA — a Fitbod replacement you own. No subscriptions, no cloud lock-in. Runs on your Mac, accessible from your iPhone via local WiFi or Tailscale.
+Self-hosted workout tracker PWA — a Fitbod replacement you own. No subscriptions, no cloud lock-in. Single-user by design (no multi-tenancy). Production runs on Fly.io with the SQLite database continuously replicated to object storage, but it self-hosts anywhere that runs a Node process.
 
 ## Architecture
 
 ```
-                                    ┌─────────────────────────────────────────────────┐
-                                    │              Mac (always-on)                     │
-                                    │                                                 │
-┌──────────────┐   HTTPS/Tailscale  │  ┌─────────────────────────────────────────┐    │
-│              │◄──────────────────► │  │         Fastify Server (:3001)          │    │
-│   iPhone     │                    │  │                                         │    │
-│   (PWA)      │   Service Worker   │  │  ┌──────────┐    ┌──────────────────┐   │    │
-│              │   • cache-first    │  │  │ Static   │    │   API Routes     │   │    │
-│  ┌────────┐  │     static assets  │  │  │ SvelteKit│    │                  │   │    │
-│  │SvelteKit│ │   • network-first  │  │  │ Build    │    │  /workouts       │   │    │
-│  │  PWA    │ │     API (3s timeout│  │  │ (/*)     │    │  /exercises      │   │    │
-│  └────────┘  │     → cache)       │  │  └──────────┘    │  /generate       │   │    │
-│  ┌────────┐  │                    │  │                  │  /recovery       │   │    │
-│  │Offline │  │   IndexedDB queue  │  │                  │  /reports        │   │    │
-│  │ Queue  │  │   for mutations    │  │                  │  /programs       │   │    │
-│  └────────┘  │   when offline     │  │                  │  /health         │   │    │
-└──────────────┘                    │  │                  └────────┬─────────┘   │    │
-                                    │  │                           │             │    │
-┌──────────────┐                    │  │                  ┌────────▼─────────┐   │    │
-│  iOS         │   POST /health/    │  │                  │    Drizzle ORM   │   │    │
-│  Shortcut    │──── sync ─────────►│  │                  │                  │   │    │
-│  (daily 6AM) │                    │  │                  │  ┌────────────┐  │   │    │
-└──────────────┘                    │  │                  │  │ SQLite     │  │   │    │
-                                    │  │                  │  │ (WAL mode) │  │   │    │
-┌──────────────┐                    │  │                  │  │            │  │   │    │
-│  Apple Health│  HealthKit XML     │  │                  │  │ fitlocal.db│  │   │    │
-│  Export      │──── import ───────►│  │                  │  └────────────┘  │   │    │
-└──────────────┘                    │  │                  └──────────────────┘   │    │
-                                    │  └─────────────────────────────────────────┘    │
-                                    │                                                 │
-                                    │  LaunchAgent: auto-start, keep-alive, logging   │
-                                    └─────────────────────────────────────────────────┘
+                                  ┌──────────────────────────────────────────────────┐
+                                  │            Fly.io machine (container)             │
+                                  │                                                  │
+┌──────────────┐      HTTPS       │  ┌──────────────────────────────────────────┐    │
+│              │◄───────────────► │  │      Fastify Server (:3001, /api/*)      │    │
+│   iPhone     │                  │  │                                          │    │
+│   (PWA)      │   Service Worker │  │  ┌──────────┐    ┌──────────────────┐    │    │
+│              │   • cache-first  │  │  │ Static   │    │   API Routes     │    │    │
+│  ┌────────┐  │     static       │  │  │ SvelteKit│    │  /workouts       │    │    │
+│  │SvelteKit│ │   • network-     │  │  │ Build    │    │  /exercises      │    │    │
+│  │  PWA    │ │     first API    │  │  │ (/*)     │    │  /generate       │    │    │
+│  └────────┘  │     (3s → cache) │  │  └──────────┘    │  /recovery       │    │    │
+│  ┌────────┐  │                  │  │                  │  /reports        │    │    │
+│  │Offline │  │   IndexedDB      │  │                  │  /programs       │    │    │
+│  │ Queue  │  │   mutation queue │  │                  │  /health         │    │    │
+│  └────────┘  │   when offline   │  │                  └────────┬─────────┘    │    │
+└──────────────┘                  │  │                           │              │    │
+                                  │  │                  ┌────────▼─────────┐    │    │
+┌──────────────┐  POST /api/      │  │                  │  SQLite (WAL)    │    │    │
+│  iOS         │──health/sync────►│  │                  │  /app/fitlocal.db│    │    │
+│  Shortcut    │                  │  │                  └────────┬─────────┘    │    │
+└──────────────┘                  │  │                           │ WAL stream   │    │
+                                  │  │                  ┌────────▼─────────┐    │    │
+┌──────────────┐  HealthKit XML   │  │                  │   Litestream     │    │    │
+│  Apple Health│──import (zip)───►│  │                  └────────┬─────────┘    │    │
+│  Export      │  via Settings    │  └───────────────────────────┼─────────────┘    │
+└──────────────┘                  │                              │ replicate (1s)   │
+                                  └──────────────────────────────┼──────────────────┘
+                                                                 ▼
+                                                    ┌─────────────────────────┐
+                                                    │   Cloudflare R2 bucket   │
+                                                    │   (restore on cold start)│
+                                                    └─────────────────────────┘
 ```
 
 ### Data Flow
@@ -73,7 +74,7 @@ Generate Workout                          Log Workout                    Reports
 | **Database** | SQLite (better-sqlite3) with WAL mode |
 | **PWA** | Service worker, IndexedDB offline queue, manifest |
 | **Charts** | Hand-rolled SVG (no D3/Chart.js) |
-| **Deployment** | macOS LaunchAgent, Tailscale for remote access |
+| **Deployment** | Docker → Fly.io; Litestream replicating SQLite → Cloudflare R2 |
 
 ## Setup
 
@@ -89,26 +90,40 @@ npm run dev:api      # http://localhost:3001
 npm run dev:web      # http://localhost:5173
 ```
 
-### Production
+### Production (local build)
 
 ```bash
 npm run build
 NODE_ENV=production node packages/api/dist/server.js   # serves API + static web on :3001
 ```
 
-### LaunchAgent (auto-start on Mac boot)
+In production (`NODE_ENV=production`) all API routes are mounted under `/api`
+(e.g. `/api/workouts`). In dev there is **no** prefix (e.g. `/workouts`).
+
+### Environment
+
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_PATH` | Path to the SQLite file (e.g. `/app/fitlocal.db` in the container) |
+| `PORT` | Server port (default `3001`) |
+| `FITLOCAL_API_KEY` | Bearer token for API auth. When set, requests must send `Authorization: Bearer <token>`. Unset in dev = no auth. |
+| `NODE_ENV` | `production` enables the `/api` route prefix and static SPA serving |
+
+### Deployment (Fly.io)
+
+The container is built from `packages/api/Dockerfile` (config in `fly.toml`). On
+start, `scripts/docker-entrypoint.sh` restores the database from Cloudflare R2 via
+Litestream (`litestream.yml`) before Node boots, then Litestream streams WAL
+changes back to R2 every second.
 
 ```bash
-scripts/install-launchagent.sh    # builds, symlinks plist, loads agent
+fly deploy                    # build image + rolling deploy with health checks
+fly logs --app fitlocal-app   # stream logs
+fly status --app fitlocal-app # machine + health-check status
 ```
 
-Logs: `tail -f ~/Library/Logs/fitlocal.log`
-
-### Docker
-
-```bash
-docker compose up --build
-```
+Litestream and R2 credentials are supplied as Fly secrets (`fly secrets set ...`),
+never committed to the repo.
 
 ## Features
 
@@ -160,7 +175,7 @@ docker compose up --build
 - Configurable time range (30/90/365 days or all)
 
 ### Apple Health Integration
-- iOS Shortcut syncs daily at 6 AM: HRV, resting HR, sleep, steps, weight, calories, protein
+- iOS Shortcut syncs daily: HRV, resting HR, sleep, steps, weight, calories, protein
 - Apple Health XML export import (bulk backfill via zip upload)
 - Batch sync endpoint for historical data
 
@@ -225,10 +240,13 @@ fitlocal/
 │               ├── programs/           # Program list + detail
 │               └── settings/           # Equipment, import, health config
 ├── scripts/
-│   ├── build.sh                        # Production build
-│   └── install-launchagent.sh          # LaunchAgent setup
-├── com.fitlocal.server.plist           # macOS LaunchAgent config
-├── docker-compose.yml
+│   ├── docker-entrypoint.sh            # Litestream restore → start Node (container)
+│   ├── backup-db.sh                    # WAL-safe SQLite snapshot (npm run backup)
+│   ├── prune-backups.py                # Tiered backup retention
+│   └── scrape-jefit.mjs                # Exercise data enrichment pipeline
+├── packages/api/Dockerfile             # Production image
+├── fly.toml                            # Fly.io app config
+├── litestream.yml                      # SQLite → Cloudflare R2 replication
 └── HEALTHKIT.md                        # iOS Swift app contract
 ```
 
@@ -310,18 +328,21 @@ Upload a HealthKit export zip via the Settings page. Parses heart rate, HRV, sle
 | GET | /stretches?muscles= | Stretches for muscle groups |
 | GET | /health | Health check |
 
-## Apple Health iOS Shortcut
+## Apple Health Integration
 
-Create an iOS Shortcut for daily health sync:
+Bulk-import an Apple Health export from the **Settings** page (drag in the HealthKit
+export zip). For ongoing daily sync, create an iOS Shortcut that posts to the health
+endpoint:
 
 1. **Find Health Samples** — HRV (last 24h, latest, limit 1) → set `hrv`
 2. **Find Health Samples** — Resting Heart Rate (last 24h) → set `restingHr`
 3. **Find Health Samples** — Sleep Analysis (last 24h) → set `sleepHours` (duration in hours)
 4. **Get Contents of URL:**
-   - URL: `http://YOUR_TAILSCALE_IP:3001/health/sync`
-   - Method: POST, Content-Type: application/json
+   - URL: `https://<your-host>/api/health/sync`
+   - Method: POST, Headers: `Authorization: Bearer <FITLOCAL_API_KEY>`, Content-Type: application/json
    - Body: `{ "hrv": hrv, "restingHr": restingHr, "sleepHours": sleepHours }`
 
-Automate: Shortcuts → Automation → Time of Day → 6:00 AM → Daily → Run Immediately.
+Automate it on a daily schedule via Shortcuts → Automation → Time of Day.
 
-Get your Tailscale IP: `tailscale ip -4`
+See `HEALTHKIT.md` for the full bidirectional sync contract (including workout
+calorie write-back to Apple Health).

@@ -1,10 +1,7 @@
 Show the current cut status based on body weight data from the FitLocal API.
 
-Current targets (as of June 2026):
-- Calories: 1800/day
-- Protein: 170g | Fat: 55g | Carbs: 148g
-- Cardio: 45–60 min minimum per gym session
-- Goal pace: ~1 lb/week loss
+Targets (calories, macros, goal pace, per-session cardio minimum) are per-user
+data — read them from the user's configured goals rather than assuming defaults.
 
 Steps:
 

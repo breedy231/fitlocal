@@ -10,7 +10,7 @@ If `fitlocal.db` is misbehaving (server won't start, errors on open, unexpected
 row counts), the **first** action is to copy all three WAL-mode files aside:
 
 ```bash
-cd /Users/brendanreed/Projects/fitlocal
+cd /path/to/fitlocal
 TS=$(date +%Y%m%d-%H%M%S)
 mkdir -p db-backups
 cp fitlocal.db       db-backups/fitlocal.db.$TS
@@ -29,12 +29,9 @@ The `db-backups/` directory at repo root is gitignored — never commit it.
 
 ## Rule #2: Stop the server before diagnostics
 
-```bash
-launchctl bootout gui/$(id -u)/com.fitlocal.server 2>/dev/null || true
-```
-
-A running server holds locks, writes new pages, and can make the WAL-recovery
-problem worse. Stop it first.
+Stop whatever is running the API (the `npm run dev` process locally, or the
+production process/container). A running server holds locks, writes new pages,
+and can make the WAL-recovery problem worse. Stop it first.
 
 ## Order of operations on a suspect DB
 
@@ -61,11 +58,8 @@ problem worse. Stop it first.
    sqlite3 fitlocal.db "PRAGMA integrity_check;"
    sqlite3 fitlocal.db "SELECT COUNT(*) FROM workouts;"
    ```
-6. **Restart the server**:
-   ```bash
-   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.fitlocal.server.plist
-   tail -f ~/Library/Logs/fitlocal.log
-   ```
+6. **Restart the server** (`npm run dev` locally, or redeploy in production) and
+   watch the logs to confirm a clean boot.
 
 ## What's protecting the DB now
 
@@ -76,10 +70,14 @@ After Stream 5 and Stream 5b, there are five independent safety nets:
 | `wal_autocheckpoint = 100` (db.ts) | Merges WAL into main DB every ~400 KB of writes | Minutes of data |
 | Graceful shutdown checkpoint (server.ts) | `wal_checkpoint(TRUNCATE)` on SIGTERM/SIGINT | Only ungraceful kills bypass |
 | Pre-start backup (`npm run backup`) | Snapshot before every dev restart | — |
-| Hourly launchd backup (`com.fitlocal.backup`) | Online `.backup` to `~/fitlocal-backups/` | 1 hour |
+| Scheduled backup (`scripts/backup-db.sh`) | Online `.backup` to `~/fitlocal-backups/` | 1 hour |
 | Tiered retention (prune-backups.py) | 24 hourly + 14 daily + 8 weekly | — |
 
 If any one layer fails, another one covers you.
+
+In production, the primary safety net is **Litestream**, which streams WAL changes
+to Cloudflare R2 every second and restores on container start (see `litestream.yml`
+and `scripts/docker-entrypoint.sh`).
 
 ## Common failure modes
 

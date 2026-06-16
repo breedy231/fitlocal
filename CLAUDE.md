@@ -92,13 +92,15 @@ These commands live in `.claude/commands/` and should be invoked automatically w
 - **After every change:** curl the dev URL to verify the API responds. For UI changes, run `/project:playwright-test` — it handles viewport, screenshots, and posting them to the PR.
 - **Terse prompts expected.** User often gives short prompts from mobile mid-workout. Infer intent from context; prefer the most likely workout-related interpretation before asking clarifying questions.
 
-## Fitness goals (current as of June 2026)
+## Fitness goals
 
-- **Cut targets:** 1800 cal/day — 170g protein / 55g fat / 148g carbs
-- **Goal pace:** ~1 lb/week loss
-- **Cardio:** 45–60 min minimum per gym session
+Nutrition and pacing targets (calories, macros, goal weight, weekly pace) are
+per-user data and are **not** hardcoded here — they live in the database and are
+edited from the Settings page. When generating plans, read the user's configured
+targets rather than assuming defaults.
+
+- **Cardio:** target a per-session cardio minimum (user-configurable)
 - **Workout format:** Output all gym plans in Obsidian format (see below)
-- **Steps:** 10k/day target
 
 ### Obsidian workout format
 

@@ -10,6 +10,11 @@
 
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = join(SCRIPT_DIR, '..');
 
 const JEFIT_BASE = 'https://www.jefit.com';
 const DELAY_MS = 300; // polite delay between requests
@@ -152,7 +157,7 @@ async function fetchExerciseDetail(id, slug) {
 async function main() {
   // Get our exercises from SQLite
   const ourExercisesRaw = execSync(
-    'sqlite3 -json /Users/brendanreed/Projects/fitlocal/fitlocal.db "SELECT id, name, description, image_url FROM exercises ORDER BY id"'
+    `sqlite3 -json ${join(REPO_ROOT, 'fitlocal.db')} "SELECT id, name, description, image_url FROM exercises ORDER BY id"`
   ).toString();
   const ourExercises = JSON.parse(ourExercisesRaw);
   console.log(`Our exercises: ${ourExercises.length}`);
@@ -163,7 +168,7 @@ async function main() {
 
   // Save index for reference
   writeFileSync(
-    '/Users/brendanreed/Projects/fitlocal/scripts/jefit-index.json',
+    join(SCRIPT_DIR, 'jefit-index.json'),
     JSON.stringify(jefitExercises, null, 2)
   );
 
@@ -237,11 +242,11 @@ async function main() {
 
   // Write results
   writeFileSync(
-    '/Users/brendanreed/Projects/fitlocal/scripts/exercise-corrections.json',
+    join(SCRIPT_DIR, 'exercise-corrections.json'),
     JSON.stringify(corrections, null, 2)
   );
   writeFileSync(
-    '/Users/brendanreed/Projects/fitlocal/scripts/unmatched-exercises.json',
+    join(SCRIPT_DIR, 'unmatched-exercises.json'),
     JSON.stringify(unmatched, null, 2)
   );
 
