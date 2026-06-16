@@ -191,10 +191,26 @@
     loadExclusions();
   }
 
+  // API key
+  let apiKey = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('fitlocal_api_key') ?? '') : '');
+  let apiKeySaved = $state(false);
+
+  function saveApiKey() {
+    const trimmed = apiKey.trim();
+    if (trimmed) {
+      localStorage.setItem('fitlocal_api_key', trimmed);
+    } else {
+      localStorage.removeItem('fitlocal_api_key');
+    }
+    apiKeySaved = true;
+    setTimeout(() => apiKeySaved = false, 2000);
+  }
+
   // Apple Health sync
   let syncStatus = $state('');
   let syncing = $state(false);
   let copied = $state(false);
+  let copiedToken = $state(false);
   let showSteps = $state(false);
   let showBackfill = $state(false);
   let healthImporting = $state(false);
@@ -220,9 +236,13 @@
     healthImportResult = '';
     try {
       const buffer = await file.arrayBuffer();
+      const storedKey = typeof localStorage !== 'undefined' ? localStorage.getItem('fitlocal_api_key') : null;
       const res = await fetch(`${apiBase}/health/import-apple`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/zip' },
+        headers: {
+          'Content-Type': 'application/zip',
+          ...(storedKey ? { 'Authorization': `Bearer ${storedKey}` } : {}),
+        },
         body: buffer,
       });
       if (!res.ok) {
@@ -588,6 +608,9 @@ proteinG: <span class="text-green-400/80">protein</span> (number)</pre>
               <p>• URL: <code class="text-green-400/80 break-all">{syncUrl}</code></p>
               <p>• Method: <strong>POST</strong></p>
               <p>• Request Body: <strong>JSON</strong> → set to the Dictionary from step 3</p>
+              {#if apiKey.trim()}
+                <p>• Headers: add <code class="text-green-400/80">Authorization</code> = <code class="text-green-400/80 break-all">Bearer {apiKey.trim()}</code></p>
+              {/if}
             </div>
           </div>
 
@@ -673,6 +696,38 @@ proteinG: <span class="text-green-400/80">protein</span> (number)</pre>
             <label class="text-xs text-neutral-500 block mb-1">Import Endpoint</label>
             <code class="text-xs text-neutral-300 bg-neutral-800 rounded-lg px-3 py-2 break-all block">{importUrl}</code>
           </div>
+        </div>
+      {/if}
+    </div>
+
+    <!-- API Key -->
+    <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
+      <h2 class="font-medium mb-3">API Key</h2>
+      <p class="text-sm text-neutral-400 mb-3">Required to access the server. Set the same key here and in your iOS Shortcut's <code class="text-xs text-neutral-300">Authorization</code> header.</p>
+      <div class="flex gap-2">
+        <input
+          type="password"
+          bind:value={apiKey}
+          placeholder="Paste your API key…"
+          class="flex-1 px-3 py-2 rounded-lg bg-neutral-800 text-neutral-200 text-sm border-none outline-none"
+          autocomplete="off"
+        />
+        <button
+          onclick={saveApiKey}
+          class="px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-medium min-h-[44px] shrink-0"
+        >{apiKeySaved ? 'Saved!' : 'Save'}</button>
+      </div>
+      {#if apiKey.trim()}
+        <div class="mt-3">
+          <label class="text-xs text-neutral-500 block mb-1">Shortcut header value</label>
+          <div class="flex items-center gap-2">
+            <code class="flex-1 text-xs text-neutral-300 bg-neutral-800 rounded-lg px-3 py-2 break-all">Bearer {apiKey.trim()}</code>
+            <button
+              onclick={async () => { await navigator.clipboard.writeText(`Bearer ${apiKey.trim()}`); copiedToken = true; setTimeout(() => copiedToken = false, 2000); }}
+              class="px-3 py-2 rounded-lg bg-neutral-800 text-xs text-neutral-300 min-h-[36px] shrink-0"
+            >{copiedToken ? 'Copied!' : 'Copy'}</button>
+          </div>
+          <p class="text-xs text-neutral-600 mt-1.5">Add header <code class="text-neutral-500">Authorization</code> with this value to the "Get Contents of URL" action in your Shortcut.</p>
         </div>
       {/if}
     </div>
