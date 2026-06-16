@@ -33,9 +33,11 @@ COPY --from=builder /app/packages/web/build ./packages/web/build
 COPY --from=builder /app/packages/shared ./packages/shared
 
 # Install production API dependencies only
+# All three package.json files needed so npm can resolve the workspace graph
 COPY packages/api/package.json ./packages/api/
-COPY package.json package-lock.json ./
+COPY packages/web/package.json ./packages/web/
 COPY packages/shared/package.json ./packages/shared/
+COPY package.json package-lock.json ./
 RUN npm ci --workspace=packages/api --omit=dev
 
 # Config + entrypoint
