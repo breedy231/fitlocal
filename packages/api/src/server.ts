@@ -53,6 +53,28 @@ app.addContentTypeParser('application/zip', { parseAs: 'buffer' }, (_req, body, 
   done(null, body);
 });
 
+// Bearer token auth — only enforced when FITLOCAL_API_KEY is set (dev works without it)
+const apiKey = process.env.FITLOCAL_API_KEY;
+if (apiKey) {
+  app.addHook('onRequest', (req, reply, done) => {
+    // Skip auth for static assets and the health check endpoint
+    if (!req.url.startsWith('/api/') && req.url !== '/api') {
+      done();
+      return;
+    }
+    if (req.url === '/api/health') {
+      done();
+      return;
+    }
+    const auth = req.headers['authorization'];
+    if (auth === `Bearer ${apiKey}`) {
+      done();
+      return;
+    }
+    reply.code(401).send({ error: 'Unauthorized' });
+  });
+}
+
 // In production, mount API routes under /api prefix
 const apiPrefix = isProduction ? '/api' : '';
 

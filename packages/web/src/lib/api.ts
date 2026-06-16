@@ -15,6 +15,13 @@ function getApiBase(): string {
 
 const API_BASE = getApiBase();
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof localStorage === 'undefined') return {};
+  const key = localStorage.getItem('fitlocal_api_key');
+  if (!key) return {};
+  return { 'Authorization': `Bearer ${key}` };
+}
+
 function isNetworkError(err: unknown): boolean {
   return err instanceof TypeError && (err as TypeError).message.includes('fetch');
 }
@@ -28,8 +35,12 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const hasBody = options?.body != null;
   try {
     const res = await fetch(`${API_BASE}${path}`, {
-      headers: hasBody ? { 'Content-Type': 'application/json' } : {},
       ...options,
+      headers: {
+        ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+        ...getAuthHeaders(),
+        ...(options?.headers as Record<string, string> | undefined),
+      },
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     if (res.status === 204) {
@@ -54,7 +65,8 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
 // Replay queued requests when coming back online
 if (typeof window !== 'undefined') {
   window.addEventListener('online', async () => {
-    const count = await replayQueue(API_BASE);
+    const authToken = localStorage.getItem('fitlocal_api_key') ?? undefined;
+    const count = await replayQueue(API_BASE, authToken);
     if (count > 0) {
       showToast(`Synced ${count} offline change${count > 1 ? 's' : ''}`, 'success');
     }

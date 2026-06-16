@@ -80,7 +80,7 @@ export async function getQueueSize(): Promise<number> {
   }
 }
 
-export async function replayQueue(apiBase: string): Promise<number> {
+export async function replayQueue(apiBase: string, authToken?: string): Promise<number> {
   const db = await openDB();
   const items = await new Promise<QueuedRequest[]>((resolve) => {
     const tx = db.transaction(STORE_NAME, 'readonly');
@@ -94,9 +94,11 @@ export async function replayQueue(apiBase: string): Promise<number> {
   let replayed = 0;
   for (const item of items) {
     try {
+      const headers: Record<string, string> = item.body ? { 'Content-Type': 'application/json' } : {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
       const res = await fetch(`${apiBase}${item.path}`, {
         method: item.method,
-        headers: item.body ? { 'Content-Type': 'application/json' } : {},
+        headers,
         body: item.body,
       });
       if (res.ok || (res.status >= 400 && res.status < 500)) {
