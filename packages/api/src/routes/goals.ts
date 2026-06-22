@@ -1,8 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
-
-const KG_TO_LBS = 2.20462;
+import { KG_TO_LBS } from 'fitlocal-shared';
 
 export async function goalRoutes(app: FastifyInstance) {
   // GET /goals — returns current goals or empty defaults

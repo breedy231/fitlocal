@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 import { parseHealthExportZip } from '../lib/health-xml-parser.js';
+import { lbsToKg } from 'fitlocal-shared';
 
 export async function healthRoutes(app: FastifyInstance) {
   app.get('/health-snapshots', async () => {
@@ -47,7 +48,7 @@ export async function healthRoutes(app: FastifyInstance) {
     const steps = raw.steps || null;
     // Accept weight in lbs or kg — store as kg
     const bodyWeightKg = raw.bodyWeightLbs
-      ? Math.round(raw.bodyWeightLbs * 0.453592 * 100) / 100
+      ? Math.round(lbsToKg(raw.bodyWeightLbs) * 100) / 100
       : (raw.bodyWeightKg || null);
     const calories = raw.calories || null;
     const proteinG = raw.proteinG || null;

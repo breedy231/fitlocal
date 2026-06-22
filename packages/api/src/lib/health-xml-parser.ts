@@ -6,6 +6,7 @@ import { execSync } from 'child_process';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { lbsToKg } from 'fitlocal-shared';
 
 // HealthKit type identifiers we care about
 const TYPE_MAP: Record<string, string> = {
@@ -87,7 +88,7 @@ function parseRecordLine(line: string): RawSample | null {
   if (metricKey === 'bodyWeight') {
     const unitMatch = line.match(/unit="([^"]+)"/);
     if (unitMatch && unitMatch[1] === 'lb') {
-      finalValue = value * 0.453592; // lbs to kg
+      finalValue = lbsToKg(value); // lbs to kg
     }
   }
 

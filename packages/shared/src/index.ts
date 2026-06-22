@@ -12,3 +12,4 @@ export * from './equipment-profiles.js';
 export * from './cardio.js';
 export * from './obsidian-import.js';
 export * from './exercise-description.js';
+export * from './units.js';
