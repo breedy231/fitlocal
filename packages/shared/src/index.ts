@@ -10,3 +10,4 @@ export * from './challenges.js';
 export * from './generation.js';
 export * from './equipment-profiles.js';
 export * from './cardio.js';
+export * from './obsidian-import.js';
