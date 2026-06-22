@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { milesToMeters } from 'fitlocal-shared';
 import { importObsidianWorkout } from './obsidian-import-db.js';
 import { createTestDb } from './test-helpers.js';
 import * as schema from '../schema/index.js';
@@ -50,7 +51,7 @@ describe('importObsidianWorkout', () => {
     const distanceSet = allSets.find((s) => s.distanceMeters !== null);
 
     expect(durationSet?.durationSeconds).toBe(48 * 60); // 2880
-    expect(distanceSet?.distanceMeters).toBeCloseTo(4.45 * 1609.34, 2);
+    expect(distanceSet?.distanceMeters).toBeCloseTo(milesToMeters(4.45), 2);
     // cardio sets carry no weight/reps
     expect(durationSet?.weightKg).toBeNull();
     t.cleanup();

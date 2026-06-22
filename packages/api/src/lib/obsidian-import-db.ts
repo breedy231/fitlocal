@@ -12,12 +12,9 @@
  * here, at the boundary.
  */
 import { eq } from 'drizzle-orm';
-import { parseObsidianWorkout } from 'fitlocal-shared';
+import { parseObsidianWorkout, lbsToKg, milesToMeters } from 'fitlocal-shared';
 import * as schema from '../schema/index.js';
 import type { db } from '../db.js';
-
-const LBS_TO_KG = 0.453592;
-const MILES_TO_METERS = 1609.34;
 
 export interface ObsidianImportResult {
   workoutsCreated: number;
@@ -93,13 +90,13 @@ export function importObsidianWorkout(database: typeof db, text: string): Obsidi
           .values({
             workoutExerciseId: we.id,
             reps: set.reps ?? null,
-            weightKg: set.weightLbs !== undefined ? set.weightLbs * LBS_TO_KG : null,
+            weightKg: set.weightLbs !== undefined ? lbsToKg(set.weightLbs) : null,
             isWarmup: set.isWarmup ?? false,
             rpe: set.rir ?? null,
             durationSeconds:
               set.durationMin !== undefined ? Math.round(set.durationMin * 60) : null,
             distanceMeters:
-              set.distanceMi !== undefined ? set.distanceMi * MILES_TO_METERS : null,
+              set.distanceMi !== undefined ? milesToMeters(set.distanceMi) : null,
           })
           .run();
         setsCreated++;

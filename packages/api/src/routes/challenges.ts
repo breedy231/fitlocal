@@ -1,12 +1,11 @@
 import { FastifyInstance } from 'fastify';
 import { eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
+import { KG_TO_LBS } from 'fitlocal-shared';
 
 const CHALLENGE_TYPES = ['workouts', 'sets', 'volume'] as const;
 type ChallengeType = (typeof CHALLENGE_TYPES)[number];
 const STRETCH_FACTOR = 1.12;
-
-const KG_TO_LBS = 2.20462;
 
 function getCurrentMonth(): string {
   return new Date().toISOString().slice(0, 7); // '2026-04'
