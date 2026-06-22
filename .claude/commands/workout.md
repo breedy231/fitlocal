@@ -1,11 +1,17 @@
 Show the last workout and recommend the next one based on a Push / Pull / Legs rotation.
 
+**Production server (Fly.io).** All `/api/*` calls require a bearer token. Load it from `.env` first
+(it is gitignored — never hardcode it here):
+`export $(grep -E '^FITLOCAL_API_KEY=' .env | xargs)`
+Then pass `-H "Authorization: Bearer $FITLOCAL_API_KEY"` on every request. Base URL: `https://fitlocal-app.fly.dev/api`.
+
 Steps:
 
-1. Fetch recent workouts: `curl -s http://localhost:3001/api/workouts`
+1. Fetch recent workouts: `curl -s -H "Authorization: Bearer $FITLOCAL_API_KEY" https://fitlocal-app.fly.dev/api/workouts`
    Take the first result (most recent). Note its date, notes field, and id.
 
-2. Fetch the full workout detail: `curl -s http://localhost:3001/api/workouts/<id>`
+2. Fetch the full workout detail: `curl -s -H "Authorization: Bearer $FITLOCAL_API_KEY" https://fitlocal-app.fly.dev/api/workouts/<id>`
+   Exercise name is nested at `.exercises[].exercise.name`; sets are at `.exercises[].sets[]`.
    List every exercise with sets × reps × weight (convert kg to lbs). Mark warm-up sets if isWarmup=1. Skip cardio-only entries in the strength summary but mention them separately.
 
 3. Determine the PPL rotation position:

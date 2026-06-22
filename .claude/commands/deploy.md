@@ -4,8 +4,11 @@ Steps:
 
 1. Run `fly deploy --app fitlocal-app` from the project root. This builds the Docker image (shared → API → web), pushes to Fly, and does a rolling deploy with health checks.
 
-2. Verify the deploy succeeded:
-   `curl -s https://fitlocal-app.fly.dev/api/workouts | python3 -c "import json,sys; d=json.load(sys.stdin); print('Up — latest workout:', d[0]['date'])"`
+2. Verify the deploy succeeded. The health endpoint is unauthenticated:
+   `curl -s https://fitlocal-app.fly.dev/api/health`  → expect `{"status":"ok"}`
+   To also confirm the DB is serving real data, load the token from `.env` (gitignored) and hit an authed route:
+   `export $(grep -E '^FITLOCAL_API_KEY=' .env | xargs)`
+   `curl -s -H "Authorization: Bearer $FITLOCAL_API_KEY" https://fitlocal-app.fly.dev/api/workouts | python3 -c "import json,sys; d=json.load(sys.stdin); print('Up — latest workout:', d[0]['date'])"`
 
 3. If the health check fails or the deploy hangs:
    - Check logs: `fly logs --app fitlocal-app`
