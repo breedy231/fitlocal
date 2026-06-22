@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { parse } from 'csv-parse/sync';
 import { eq, and } from 'drizzle-orm';
 import { db, schema } from '../db.js';
+import { importObsidianWorkout } from '../lib/obsidian-import-db.js';
 
 interface FitbodRow {
   Date: string;
@@ -131,5 +132,23 @@ export async function importRoutes(app: FastifyInstance) {
       workoutsSkipped,
       setsCreated,
     });
+  });
+
+  app.post('/import/obsidian', async (req, reply) => {
+    const text = req.body as string;
+
+    let result;
+    try {
+      result = importObsidianWorkout(db, text);
+    } catch (err) {
+      if (err instanceof Error && err.message === 'NO_DATE') {
+        return reply
+          .status(400)
+          .send({ error: 'Workout block has no parseable date (expected YYYY-MM-DD).' });
+      }
+      throw err;
+    }
+
+    return reply.status(201).send({ message: 'Import complete', ...result });
   });
 }
