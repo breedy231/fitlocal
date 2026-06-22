@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { pickBestDescription } from 'fitlocal-shared';
 
 const sqlite = new Database('fitlocal.db');
 sqlite.pragma('journal_mode = WAL');
@@ -78,11 +79,14 @@ async function main() {
       continue;
     }
 
-    // Find English description (language 2 = English)
-    const englishTranslation = info.translations?.find((t) => t.language === 2);
-    const description = englishTranslation?.description
-      ? stripHtml(englishTranslation.description)
-      : null;
+    // Prefer the English language-2 translation, but fall back to scanning all
+    // translations — wger sometimes mislabels non-English text as English, and
+    // some entries only carry usable how-to text in another translation slot.
+    // pickBestDescription filters non-Latin text and prefers instructional copy.
+    const candidates = (info.translations ?? [])
+      .sort((a, b) => (a.language === 2 ? -1 : 0) - (b.language === 2 ? -1 : 0))
+      .map((t) => stripHtml(t.description));
+    const description = pickBestDescription(candidates);
 
     // Get image
     const imageUrl = `https://wger.de/api/v2/exerciseimage/?exercise_base=${baseId}&format=json`;
