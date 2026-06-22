@@ -85,7 +85,7 @@ async function main() {
     // pickBestDescription filters non-Latin text and prefers instructional copy.
     const candidates = (info.translations ?? [])
       .sort((a, b) => (a.language === 2 ? -1 : 0) - (b.language === 2 ? -1 : 0))
-      .map((t) => stripHtml(t.description));
+      .map((t) => stripHtml(t.description ?? ''));
     const description = pickBestDescription(candidates);
 
     // Get image
