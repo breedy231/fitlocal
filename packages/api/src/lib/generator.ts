@@ -3,6 +3,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type * as schemaTypes from '../schema/index.js';
 import { getMusclesForExercise, getGlobalRecoveryModifier } from './recovery.js';
 import { computeProgressionBatch, type ProgressionDirective, type RepRange } from './progression.js';
+import { matchesEquipment, normalizeAvailableEquipment } from './equipment-match.js';
 import { CARDIO_PATTERN } from 'fitlocal-shared';
 
 type DB = BetterSQLite3Database<typeof schemaTypes>;
@@ -100,14 +101,16 @@ function getExerciseFamily(name: string): string | null {
 const CORE_KEYWORDS = /crunch|plank|dead.?bug|windshield.?wiper|reverse.?crunch|cable.?crunch|exercise.?ball.?crunch|russian.?twist|toe.?toucher|vertical.?knee.?raise/i;
 const CARDIO_KEYWORDS = CARDIO_PATTERN;
 
-const TRAVEL_KEYWORDS = /dumbbell|bodyweight|band|trx|cardio/i;
-
-// Filter exercises by an equipment list. Returns true if the exercise name matches
-// any of the equipment keywords. Empty/null list means no filtering (all equipment).
-function matchesEquipment(exerciseName: string, equipment: string[] | null): boolean {
-  if (!equipment || equipment.length === 0) return true;
-  const pattern = new RegExp(equipment.join('|'), 'i');
-  return pattern.test(exerciseName);
+// Parse the JSON equipment-tag array stored on an exercise row. Tolerates null
+// and malformed values (treats them as "no equipment required").
+function parseEquip(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
 }
 
 interface DurationProfile {
@@ -160,6 +163,7 @@ interface ExerciseRow {
   id: number;
   name: string;
   rest_seconds: number | null;
+  equipment: string | null;
 }
 
 export interface GeneratedExercise {
@@ -314,7 +318,10 @@ export function generateWorkout(dayType: string, equipment: string[] | null, db:
     throw new Error(`Unknown day type: ${dayType}. Use upper, lower, or fullbody.`);
   }
 
-  const allExercises = db.all<ExerciseRow>(sql`SELECT id, name, rest_seconds FROM exercises`);
+  const allExercises = db.all<ExerciseRow>(sql`SELECT id, name, rest_seconds, equipment FROM exercises`);
+
+  // Normalize the location's available equipment once (expands legacy aliases).
+  const available = equipment && equipment.length > 0 ? normalizeAvailableEquipment(equipment) : null;
 
   // Filter to exercises matching target muscles (excluding core/cardio - those are added separately)
   let candidates = allExercises.filter(e => {
@@ -323,14 +330,15 @@ export function generateWorkout(dayType: string, equipment: string[] | null, db:
     return muscles.some(m => targetMuscles.includes(m));
   });
 
-  if (equipment && equipment.length > 0) {
-    candidates = candidates.filter(e => matchesEquipment(e.name, equipment));
+  if (available) {
+    candidates = candidates.filter(e => matchesEquipment(parseEquip(e.equipment), available));
   }
 
   let coreCandidates = allExercises.filter(e => CORE_KEYWORDS.test(e.name));
-  if (equipment && equipment.length > 0) {
-    // For core, always allow bodyweight exercises (crunches, planks, etc.)
-    coreCandidates = coreCandidates.filter(e => matchesEquipment(e.name, equipment) || /crunch|plank|dead.?bug|russian.?twist|toe.?toucher/i.test(e.name));
+  if (available) {
+    // Bodyweight core (crunches, planks, …) requires nothing and stays eligible;
+    // equipment-bound core (cable crunch, decline sit-up) respects availability.
+    coreCandidates = coreCandidates.filter(e => matchesEquipment(parseEquip(e.equipment), available));
   }
 
   let cardioCandidates = allExercises.filter(e => CARDIO_KEYWORDS.test(e.name));

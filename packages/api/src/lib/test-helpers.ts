@@ -82,10 +82,10 @@ export function createTestDb() {
 
   // --- Seed helpers ---
 
-  function seedExercise(name: string, restSeconds = 60): number {
+  function seedExercise(name: string, restSeconds = 60, equipment: string[] = []): number {
     const result = sqlite.prepare(
-      'INSERT OR IGNORE INTO exercises (name, rest_seconds) VALUES (?, ?) RETURNING id'
-    ).get(name, restSeconds) as { id: number } | undefined;
+      'INSERT OR IGNORE INTO exercises (name, rest_seconds, equipment) VALUES (?, ?, ?) RETURNING id'
+    ).get(name, restSeconds, JSON.stringify(equipment)) as { id: number } | undefined;
     if (result) return result.id;
     return (sqlite.prepare('SELECT id FROM exercises WHERE name = ?').get(name) as { id: number }).id;
   }

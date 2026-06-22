@@ -240,3 +240,36 @@ describe('volumeReductionPct formula', () => {
     expect(pct).toBe(20);
   });
 });
+
+describe('generateWorkout — equipment filtering (#33)', () => {
+  let ctx: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    ctx = createTestDb();
+    // Push-day library with explicit equipment tags (as the migration backfills them)
+    ctx.seedExercise('Barbell Bench Press', 60, ['barbell', 'flat-bench']);
+    ctx.seedExercise('Dumbbell Bench Press', 60, ['dumbbell', 'flat-bench']);
+    ctx.seedExercise('Dumbbell Incline Bench Press', 60, ['dumbbell', 'incline-bench']);
+    ctx.seedExercise('Dumbbell Shoulder Press', 60, ['dumbbell']);
+    ctx.seedExercise('Machine Fly', 60, ['machine']);
+    ctx.seedExercise('Push Up', 60, []); // bodyweight
+  });
+  afterEach(() => ctx.cleanup());
+
+  it("Mom's House (dumbbell+flat-bench) excludes barbell and incline movements", () => {
+    const available = ['dumbbell', 'flat-bench', 'bodyweight'];
+    const workout = generateWorkout('push', available, ctx.db, { supersets: false, durationMinutes: 120 });
+    const names = workout.exercises.map(e => e.name);
+    expect(names).not.toContain('Barbell Bench Press');
+    expect(names).not.toContain('Dumbbell Incline Bench Press');
+    expect(names).not.toContain('Machine Fly');
+    // dumbbell + bodyweight movements remain available
+    expect(names).toContain('Dumbbell Bench Press');
+  });
+
+  it('no equipment restriction (null) surfaces barbell/machine movements', () => {
+    const workout = generateWorkout('push', null, ctx.db, { supersets: false, durationMinutes: 120 });
+    const names = workout.exercises.map(e => e.name);
+    expect(names).toContain('Barbell Bench Press');
+  });
+});
