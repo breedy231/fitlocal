@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { classifyEquipment } from './lib/equipment-classifier.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = path.join(__dirname, '../../../fitlocal.db');
@@ -135,6 +136,27 @@ if (!restMigrationApplied) {
       updateStmt.run(rest, ex.id);
     }
     sqlite.prepare("INSERT INTO migrations (key) VALUES ('rest_defaults_v4')").run();
+  });
+  txn();
+}
+
+// Backfill structured equipment tags from exercise names (runs once). Exercises
+// were imported from Fitbod with no equipment metadata; the generator can now
+// match a location profile's available equipment against these tags instead of
+// the exercise name. See packages/api/src/lib/equipment-classifier.ts (GitHub #33).
+// Only fills rows that are still empty so any manual corrections are preserved.
+const equipMigrationApplied = sqlite.prepare("SELECT 1 FROM migrations WHERE key = 'equipment_tags_v1'").get();
+if (!equipMigrationApplied) {
+  const rows = sqlite.prepare("SELECT id, name, equipment FROM exercises").all() as { id: number; name: string; equipment: string | null }[];
+  const updateEquip = sqlite.prepare('UPDATE exercises SET equipment = ? WHERE id = ?');
+
+  const txn = sqlite.transaction(() => {
+    for (const ex of rows) {
+      const current = ex.equipment ? JSON.parse(ex.equipment) : [];
+      if (Array.isArray(current) && current.length > 0) continue; // keep manual edits
+      updateEquip.run(JSON.stringify(classifyEquipment(ex.name)), ex.id);
+    }
+    sqlite.prepare("INSERT INTO migrations (key) VALUES ('equipment_tags_v1')").run();
   });
   txn();
 }
