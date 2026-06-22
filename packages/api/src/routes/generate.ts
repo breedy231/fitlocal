@@ -4,6 +4,7 @@ import { db, schema } from '../db.js';
 import { generateWorkout, generateFromProgram, DAY_TYPE_MUSCLES, type ProgramExerciseInput } from '../lib/generator.js';
 import { computeProgressionBatch } from '../lib/progression.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
+import { matchesEquipment, normalizeAvailableEquipment } from '../lib/equipment-match.js';
 import { CARDIO_PATTERN } from 'fitlocal-shared';
 
 // Resolve equipment filter: profileId takes priority, then legacy equipment param
@@ -147,17 +148,22 @@ export async function generateRoutes(app: FastifyInstance) {
     }
 
     // Get all exercises and find alternatives with overlapping muscles
-    const allExercises = db.all<{ id: number; name: string; rest_seconds: number | null }>(
-      sql`SELECT id, name, rest_seconds FROM exercises`
+    const allExercises = db.all<{ id: number; name: string; rest_seconds: number | null; equipment: string | null }>(
+      sql`SELECT id, name, rest_seconds, equipment FROM exercises`
     );
 
     const excludeSet = new Set([exerciseId, ...excludeIds]);
 
-    // Equipment filter helper for this request
-    const matchesEquip = (name: string) => {
-      if (!equipmentList || equipmentList.length === 0) return true;
-      const pattern = new RegExp(equipmentList.join('|'), 'i');
-      return pattern.test(name);
+    // Equipment filter helper for this request: subset-match the exercise's
+    // required tags against the location's (normalized) available equipment.
+    const available = equipmentList && equipmentList.length > 0 ? normalizeAvailableEquipment(equipmentList) : null;
+    const matchesEquip = (equipment: string | null) => {
+      if (!available) return true;
+      let tags: string[] = [];
+      if (equipment) {
+        try { const v = JSON.parse(equipment); if (Array.isArray(v)) tags = v; } catch { /* treat as none */ }
+      }
+      return matchesEquipment(tags, available);
     };
 
     let candidates;
@@ -176,8 +182,8 @@ export async function generateRoutes(app: FastifyInstance) {
         return muscles.some(m => targetMuscles.includes(m));
       });
 
-      if (equipmentList && equipmentList.length > 0) {
-        candidates = candidates.filter(e => matchesEquip(e.name));
+      if (available) {
+        candidates = candidates.filter(e => matchesEquip(e.equipment));
       }
     }
 
@@ -187,7 +193,7 @@ export async function generateRoutes(app: FastifyInstance) {
         if (excludeSet.has(e.id)) return false;
         if (isCardio) return CARDIO_KEYWORDS.test(e.name);
         if (CARDIO_KEYWORDS.test(e.name)) return false;
-        if (!matchesEquip(e.name)) return false;
+        if (!matchesEquip(e.equipment)) return false;
         return true;
       });
     }
