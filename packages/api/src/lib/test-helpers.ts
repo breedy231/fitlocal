@@ -28,6 +28,8 @@ export function createTestDb() {
       equipment TEXT DEFAULT '[]',
       movement_type TEXT,
       description TEXT,
+      image_url TEXT,
+      wger_id INTEGER,
       rest_seconds INTEGER DEFAULT 60
     );
 
@@ -37,7 +39,7 @@ export function createTestDb() {
       exercise_id INTEGER NOT NULL REFERENCES exercises(id),
       display_order INTEGER NOT NULL DEFAULT 0,
       superset_group INTEGER,
-      rest_seconds INTEGER
+      swap_reason TEXT
     );
 
     CREATE TABLE IF NOT EXISTS sets (
@@ -49,7 +51,9 @@ export function createTestDb() {
       rpe REAL,
       multiplier REAL DEFAULT 1.0,
       completed INTEGER DEFAULT 0,
-      duration_seconds INTEGER
+      duration_seconds INTEGER,
+      distance_meters REAL,
+      resistance REAL
     );
 
     CREATE TABLE IF NOT EXISTS health_snapshots (
