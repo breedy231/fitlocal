@@ -81,14 +81,9 @@ These commands live in `.claude/commands/` and should be invoked automatically w
 - **IMPORTANT: Mobile-first UI.** All UI changes MUST target iPhone 15 Pro Max (430x932). Use 44px minimum tap targets (iOS HIG). Test with Playwright at that viewport before shipping.
 - **IMPORTANT: PWA/iOS quirks.** `beforeunload` does NOT fire on iOS PWA swipe-kill. Always persist state on `visibilitychange` → hidden. Service workers can be evicted after ~2 days idle.
 - **Units:** Database stores kg and meters. UI displays lbs and miles. Convert at the boundary.
-- **Cardio classification:** Exercise names are matched against a regex to determine cardio vs. strength UI. **The pattern is duplicated in 5 places — any change must update all of them:**
-  1. `packages/web/src/routes/log/[id]/+page.svelte` — active workout UI (`CARDIO_PATTERN`)
-  2. `packages/web/src/routes/history/+page.svelte` — history list display (`CARDIO_PATTERN`)
-  3. `packages/web/src/routes/history/[id]/edit/+page.svelte` — history edit UI (`CARDIO_PATTERN`)
-  4. `packages/api/src/lib/generator.ts` — workout generator (`CARDIO_KEYWORDS`)
-  5. `packages/api/src/routes/generate.ts` — swap suggestions (`CARDIO_KEYWORDS`)
-  
-  **Critical footgun:** patterns without `\b` word boundaries will match substrings — e.g. `run` matches inside `c**run**ch`, causing crunch exercises to render as cardio. Always use `\b` word boundaries. Use `grep -rn "CARDIO_PATTERN\|CARDIO_KEYWORDS" packages/` to find all instances before editing.
+- **Cardio classification:** Exercise names are matched against a regex to determine cardio vs. strength UI. **The canonical pattern is a single source of truth in `packages/shared/src/cardio.ts` (`CARDIO_PATTERN`)** — import it from `fitlocal-shared`, never redefine it. It's consumed by the active-workout UI, history list/edit pages, the workout generator (`generator.ts`), and swap suggestions (`generate.ts`).
+
+  **Critical footgun:** patterns without `\b` word boundaries will match substrings — e.g. `run` matches inside `c**run**ch`, causing crunch exercises to render as cardio. The shared pattern already uses `\b` boundaries; preserve them when editing it.
 - **After every change:** curl the dev URL to verify the API responds. For UI changes, run `/project:playwright-test` — it handles viewport, screenshots, and posting them to the PR.
 - **Terse prompts expected.** User often gives short prompts from mobile mid-workout. Infer intent from context; prefer the most likely workout-related interpretation before asking clarifying questions.
 
