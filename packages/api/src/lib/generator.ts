@@ -342,6 +342,11 @@ export function generateWorkout(dayType: string, equipment: string[] | null, db:
   }
 
   let cardioCandidates = allExercises.filter(e => CARDIO_KEYWORDS.test(e.name));
+  if (available) {
+    // Outdoor cardio (running, walking, …) requires nothing and stays eligible;
+    // machine cardio (treadmill, elliptical, …) needs that machine on hand.
+    cardioCandidates = cardioCandidates.filter(e => matchesEquipment(parseEquip(e.equipment), available));
+  }
 
   // Batch-fetch lastPerformed for ALL candidate exercises in one query
   const allCandidateIds = [

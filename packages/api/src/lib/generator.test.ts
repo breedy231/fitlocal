@@ -272,4 +272,20 @@ describe('generateWorkout — equipment filtering (#33)', () => {
     const names = workout.exercises.map(e => e.name);
     expect(names).toContain('Barbell Bench Press');
   });
+
+  it('excludes machine cardio at a no-machine profile but keeps outdoor cardio (#46)', () => {
+    ctx.seedExercise('Treadmill', 0, ['treadmill']);
+    ctx.seedExercise('Walking', 0, []); // outdoor — no equipment
+    const workout = generateWorkout('push', ['dumbbell', 'flat-bench', 'bodyweight'], ctx.db, { supersets: false, durationMinutes: 120 });
+    const cardio = workout.exercises.filter(e => e.isCardio).map(e => e.name);
+    expect(cardio).not.toContain('Treadmill');
+    expect(cardio).toContain('Walking'); // the only eligible cardio
+  });
+
+  it('includes machine cardio when the profile (via cardio alias) has it', () => {
+    ctx.seedExercise('Treadmill', 0, ['treadmill']);
+    const workout = generateWorkout('push', ['dumbbell', 'cardio'], ctx.db, { supersets: false, durationMinutes: 120 });
+    const cardio = workout.exercises.filter(e => e.isCardio).map(e => e.name);
+    expect(cardio).toContain('Treadmill');
+  });
 });
