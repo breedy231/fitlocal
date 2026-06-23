@@ -7,7 +7,7 @@
   import PlateCalculator from '$lib/PlateCalculator.svelte';
   import { cachedGet } from '$lib/api-cache.svelte';
   import { showToast } from '$lib/toast';
-  import type { NutritionData, LastPerformance, ExerciseProgressionReport, GeneratedAlternative } from 'fitlocal-shared';
+  import type { NutritionData, LastPerformance, ExerciseProgressionReport, GeneratedAlternative, WorkoutDetail } from 'fitlocal-shared';
   import { CARDIO_PATTERN } from 'fitlocal-shared';
 
   import RestTimer from '$lib/workout/RestTimer.svelte';
@@ -743,6 +743,7 @@
   {:else if showSummary && summaryData && workout}
     <WorkoutSummary
       summary={summaryData}
+      workout={workout as unknown as WorkoutDetail}
       workoutDate={workout.date}
       {nutritionData}
       {effortRating}
