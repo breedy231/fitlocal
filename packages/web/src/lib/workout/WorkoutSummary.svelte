@@ -1,6 +1,8 @@
 <script lang="ts">
   import NutritionCard from '$lib/NutritionCard.svelte';
-  import type { NutritionData } from 'fitlocal-shared';
+  import WorkoutCard from '$lib/workout/WorkoutCard.svelte';
+  import type { NutritionData, WorkoutDetail } from 'fitlocal-shared';
+  import { deriveWorkoutType, WORKOUT_THEMES } from 'fitlocal-shared';
 
   export interface ExerciseSummary {
     name: string;
@@ -23,6 +25,7 @@
 
   interface Props {
     summary: WorkoutSummaryData;
+    workout: WorkoutDetail;
     workoutDate: string;
     nutritionData: NutritionData | null;
     effortRating: number;
@@ -30,84 +33,110 @@
     onDone: () => void;
   }
 
-  let { summary, workoutDate, nutritionData, effortRating, onEffortChange, onDone }: Props = $props();
+  let { summary, workout, workoutDate, nutritionData, effortRating, onEffortChange, onDone }: Props = $props();
+
+  let theme = $derived(WORKOUT_THEMES[deriveWorkoutType(workout.exercises)]);
+
+  // Load the card's display + mono fonts so the canvas can draw with them. The
+  // @import in app.css only covers the DOM; canvas needs them registered via
+  // the FontFace API. Best-effort — falls back to system fonts if it fails.
+  async function ensureCardFonts(): Promise<{ display: string; mono: string }> {
+    const fallback = { display: 'Impact, sans-serif', mono: 'ui-monospace, monospace' };
+    if (typeof document === 'undefined' || !('fonts' in document)) return fallback;
+    try {
+      const bebas = new FontFace('Bebas Neue', 'url(https://fonts.gstatic.com/s/bebasneue/v14/JTUSjIg69CK48gW7PXoo9Wlhyw.woff2)');
+      const dmMono = new FontFace('DM Mono', 'url(https://fonts.gstatic.com/s/dmmono/v14/aFTU7PB1QTsUX8KYvumzIYSnbKX9Rlk.woff2)');
+      const loaded = await Promise.all([bebas.load(), dmMono.load()]);
+      for (const f of loaded) document.fonts.add(f);
+      return { display: "'Bebas Neue', Impact, sans-serif", mono: "'DM Mono', ui-monospace, monospace" };
+    } catch {
+      return fallback;
+    }
+  }
 
   async function generateShareCard() {
+    const { display, mono } = await ensureCardFonts();
+    const accent = theme.accent;
+    const secondary = theme.secondary;
+
     const canvas = document.createElement('canvas');
     canvas.width = 600;
     canvas.height = 800;
     const ctx = canvas.getContext('2d')!;
 
     // Background
-    ctx.fillStyle = '#0f0f0f';
+    ctx.fillStyle = '#0d0d0d';
     ctx.fillRect(0, 0, 600, 800);
 
-    // Header accent
-    ctx.fillStyle = '#22c55e';
-    ctx.fillRect(0, 0, 600, 4);
+    // Header accent gradient bar
+    const bar = ctx.createLinearGradient(0, 0, 600, 0);
+    bar.addColorStop(0, accent);
+    bar.addColorStop(1, secondary);
+    ctx.fillStyle = bar;
+    ctx.fillRect(0, 0, 600, 6);
 
-    // Date
+    // Date / location metadata
     ctx.fillStyle = '#6b7280';
-    ctx.font = '16px system-ui, -apple-system, sans-serif';
-    ctx.fillText(new Date(workoutDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }), 32, 48);
+    ctx.font = `16px ${mono}`;
+    ctx.fillText(new Date(workoutDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase(), 32, 56);
 
-    // Title
-    ctx.fillStyle = '#22c55e';
-    ctx.font = 'bold 32px system-ui, -apple-system, sans-serif';
-    ctx.fillText('Workout Complete', 32, 96);
+    // Title (display font)
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `64px ${display}`;
+    ctx.fillText('WORKOUT COMPLETE', 32, 116);
 
     // Stats grid
     const stats = [
-      { label: 'Sets', value: String(summary.totalSets) },
-      { label: 'Volume', value: `${summary.totalVolumeLbs.toLocaleString()} lbs` },
-      { label: 'Exercises', value: String(summary.exerciseCount) },
-      { label: 'Duration', value: `${summary.durationMin} min` },
+      { label: 'SETS', value: String(summary.totalSets) },
+      { label: 'VOLUME', value: `${summary.totalVolumeLbs.toLocaleString()} LB` },
+      { label: 'EXERCISES', value: String(summary.exerciseCount) },
+      { label: 'DURATION', value: `${summary.durationMin} MIN` },
     ];
 
-    let y = 140;
+    let y = 150;
     for (let i = 0; i < stats.length; i += 2) {
       for (let j = 0; j < 2; j++) {
         const s = stats[i + j];
         const x = 32 + j * 280;
         // Card bg
-        ctx.fillStyle = '#1a1a1a';
+        ctx.fillStyle = '#161616';
         ctx.beginPath();
-        ctx.roundRect(x, y, 256, 80, 12);
+        ctx.roundRect(x, y, 256, 84, 12);
         ctx.fill();
-        // Value
-        ctx.fillStyle = '#22c55e';
-        ctx.font = 'bold 28px system-ui, -apple-system, sans-serif';
-        ctx.fillText(s.value, x + 16, y + 40);
-        // Label
+        // Value (display font)
+        ctx.fillStyle = accent;
+        ctx.font = `40px ${display}`;
+        ctx.fillText(s.value, x + 18, y + 46);
+        // Label (mono)
         ctx.fillStyle = '#6b7280';
-        ctx.font = '14px system-ui, -apple-system, sans-serif';
-        ctx.fillText(s.label, x + 16, y + 64);
+        ctx.font = `13px ${mono}`;
+        ctx.fillText(s.label, x + 18, y + 68);
       }
-      y += 96;
+      y += 100;
     }
 
     // Exercises
-    y += 16;
-    ctx.fillStyle = '#6b7280';
-    ctx.font = '12px system-ui, -apple-system, sans-serif';
+    y += 20;
+    ctx.fillStyle = accent;
+    ctx.font = `13px ${mono}`;
     ctx.fillText('EXERCISES', 32, y);
-    y += 24;
+    y += 28;
 
     for (const ex of summary.exercises.slice(0, 8)) {
       ctx.fillStyle = '#e2e8f0';
-      ctx.font = '16px system-ui, -apple-system, sans-serif';
+      ctx.font = `16px ${mono}`;
       ctx.fillText(ex.name, 32, y);
       ctx.fillStyle = '#6b7280';
-      ctx.font = '14px system-ui, -apple-system, sans-serif';
-      const detail = `${ex.sets} sets @ ${ex.avgWeightLbs} lbs`;
+      ctx.font = `14px ${mono}`;
+      const detail = `${ex.sets} × ${ex.avgWeightLbs} lb`;
       ctx.fillText(detail, 600 - 32 - ctx.measureText(detail).width, y);
       y += 32;
     }
 
-    // Footer branding
-    ctx.fillStyle = '#374151';
-    ctx.font = '12px system-ui, -apple-system, sans-serif';
-    ctx.fillText('FitLocal', 32, 770);
+    // Footer branding (display font)
+    ctx.fillStyle = accent;
+    ctx.font = `28px ${display}`;
+    ctx.fillText('FITLOCAL', 32, 772);
 
     // Export
     canvas.toBlob(async (blob) => {
@@ -133,9 +162,14 @@
 </script>
 
 <div class="py-6">
-  <div class="text-center mb-8">
+  <div class="text-center mb-6">
     <div class="text-4xl mb-2">&#128170;</div>
     <h1 class="text-2xl font-bold text-green-400">Great Work!</h1>
+  </div>
+
+  <!-- Editorial workout card -->
+  <div class="mb-6">
+    <WorkoutCard {workout} />
   </div>
 
   <!-- PR callout -->

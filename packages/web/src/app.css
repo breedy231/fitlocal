@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,6 +10,9 @@
   --color-surface: #1a1a1a;
   --color-text: #f1f5f9;
   --color-muted: #94a3b8;
+  /* Workout-card typography (see lib/workout/WorkoutCard.svelte) */
+  --font-display: 'Bebas Neue', Impact, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, 'SF Mono', monospace;
 }
 
 html, body {

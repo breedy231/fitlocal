@@ -3,6 +3,7 @@
   import { cachedGet } from '$lib/api-cache.svelte';
   import { goto } from '$app/navigation';
   import CalendarHeatmap from '$lib/CalendarHeatmap.svelte';
+  import WorkoutCard from '$lib/workout/WorkoutCard.svelte';
   import type { WorkoutListItem, WorkoutDetail, CalendarReport } from 'fitlocal-shared';
   import { CARDIO_PATTERN } from 'fitlocal-shared';
 
@@ -13,6 +14,7 @@
   let workouts: Workout[] = $state([]);
   let loading = $derived(workoutCache.loading && workouts.length === 0);
   let expandedId: number | null = $state(null);
+  let cardView = $state(false);
   let deleteConfirmId: number | null = $state(null);
   let deleting = $state(false);
   let searchQuery = $state('');
@@ -275,8 +277,32 @@
 
           {#if !editMode && expandedId === workout.id}
             <div class="px-4 pb-4">
+              <!-- View toggle: detailed list vs. styled card -->
               {#if workout.exercises}
-                <div class="pt-2 pb-3 border-t border-neutral-800 space-y-3">
+                <div class="flex justify-end pt-2 pb-3 border-t border-neutral-800">
+                  <div class="inline-flex rounded-lg overflow-hidden border border-neutral-700 text-xs">
+                    <button
+                      onclick={() => (cardView = false)}
+                      class="px-3 py-1.5 font-medium {!cardView ? 'bg-neutral-700 text-white' : 'text-neutral-400'}"
+                    >
+                      List
+                    </button>
+                    <button
+                      onclick={() => (cardView = true)}
+                      class="px-3 py-1.5 font-medium {cardView ? 'bg-neutral-700 text-white' : 'text-neutral-400'}"
+                    >
+                      Card
+                    </button>
+                  </div>
+                </div>
+              {/if}
+
+              {#if cardView && workout.exercises}
+                <div class="pb-3">
+                  <WorkoutCard workout={workout as WorkoutDetail} />
+                </div>
+              {:else if workout.exercises}
+                <div class="pb-3 space-y-3">
                   {#each workout.exercises as we}
                     <div>
                       <div class="text-sm font-medium text-neutral-300 mb-1">
