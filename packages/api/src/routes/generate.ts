@@ -169,10 +169,11 @@ export async function generateRoutes(app: FastifyInstance) {
     let candidates;
 
     if (isCardio) {
-      // For cardio: only return other cardio exercises
+      // For cardio: only return other cardio exercises the location can do
+      // (matchesEquip is a no-op when no equipment restriction is set).
       candidates = allExercises.filter(e => {
         if (excludeSet.has(e.id)) return false;
-        return CARDIO_KEYWORDS.test(e.name);
+        return CARDIO_KEYWORDS.test(e.name) && matchesEquip(e.equipment);
       });
     } else {
       candidates = allExercises.filter(e => {
@@ -191,7 +192,7 @@ export async function generateRoutes(app: FastifyInstance) {
     if (candidates.length === 0) {
       candidates = allExercises.filter(e => {
         if (excludeSet.has(e.id)) return false;
-        if (isCardio) return CARDIO_KEYWORDS.test(e.name);
+        if (isCardio) return CARDIO_KEYWORDS.test(e.name) && matchesEquip(e.equipment);
         if (CARDIO_KEYWORDS.test(e.name)) return false;
         if (!matchesEquip(e.equipment)) return false;
         return true;
