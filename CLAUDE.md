@@ -9,7 +9,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev
 
 # Individual services
-npm run dev:api          # Fastify API on :3001 (tsx watch)
+npm run dev:api          # Fastify API on :3001 (tsx watch) — hits the REAL dev DB
+npm run dev:api:scratch  # Same API on :3001, but against a disposable copy of the DB
+                         # at /tmp/fitlocal-scratch.db. Use this for ANY write-testing
+                         # (manual taps, Playwright, curl, the AI assistant's tools) so
+                         # real workout data isn't polluted. Real fitlocal.db is read-only.
 npm run dev:web          # SvelteKit on :5173 (vite dev)
 
 # Build
@@ -115,3 +119,4 @@ Exercise Name
 - **Production replication:** Litestream streams WAL changes to Cloudflare R2 (`fitlocal-db` bucket) every second. On Fly.io redeploy/restart, `scripts/docker-entrypoint.sh` restores from R2 before starting Node. Config in `litestream.yml`.
 - Local dev: hourly automated backups via launchd (`scripts/backup-db.sh`). Tiered retention policy (`scripts/prune-backups.py`).
 - Never modify the DB file directly — always go through the API.
+- **Scratch DB for write-testing:** `npm run dev:api:scratch` (`scripts/scratch-db.sh`) copies the live `fitlocal.db` to `/tmp/fitlocal-scratch.db` via the SQLite online-backup API and runs the API with `DATABASE_PATH` pointed at that copy. The real DB is only ever read, so any mutating test (logging workouts, weigh-ins, the AI assistant's tools, Playwright/curl flows) is fully isolated. The scratch file is re-copied fresh from real data on every launch. This is the default for the `/project:playwright-test` and verify flows.
