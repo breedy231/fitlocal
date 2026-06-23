@@ -277,16 +277,17 @@
                 </div>
               {/each}
             {:else}
-              <!-- Strength layout: Set#, Reps, Weight -->
-              <div class="grid grid-cols-[1fr_70px_70px_36px] gap-2 text-xs text-neutral-500 px-1">
+              <!-- Strength layout: Set#, Reps, Weight, RIR -->
+              <div class="grid grid-cols-[1fr_60px_60px_56px_36px] gap-2 text-xs text-neutral-500 px-1">
                 <span>SET</span>
                 <span class="text-center">REPS</span>
                 <span class="text-center">LBS</span>
+                <span class="text-center">RIR</span>
                 <span></span>
               </div>
 
               {#each we.sets as set, idx}
-                <div class="grid grid-cols-[1fr_70px_70px_36px] gap-2 items-center">
+                <div class="grid grid-cols-[1fr_60px_60px_56px_36px] gap-2 items-center">
                   <span class="text-sm text-neutral-400 pl-1">{idx + 1}</span>
                   <input
                     type="number"
@@ -300,6 +301,20 @@
                     onchange={(e) => updateWeight(set, e.currentTarget.value)}
                     class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
                     step="2.5"
+                  />
+                  <input
+                    type="number"
+                    value={set.rpe != null ? 10 - set.rpe : ''}
+                    onchange={(e) => {
+                      const rir = parseFloat(e.currentTarget.value);
+                      set.rpe = isNaN(rir) ? null : Math.max(0, Math.min(10, 10 - rir));
+                      set.dirty = true;
+                    }}
+                    class="w-full text-center text-sm py-1.5 rounded bg-neutral-800 text-white border-none outline-none"
+                    placeholder="—"
+                    step="1"
+                    min="0"
+                    max="10"
                   />
                   <button
                     onclick={() => deleteSet(we, set.id)}
