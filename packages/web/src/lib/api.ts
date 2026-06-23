@@ -2,7 +2,7 @@ import { enqueue, replayQueue } from './offline-queue';
 import { showToast } from './toast';
 import { invalidateAfterMutation } from './api-cache.svelte';
 
-function getApiBase(): string {
+export function getApiBase(): string {
   if (typeof window === 'undefined') return 'http://localhost:3001';
   const { hostname, port, protocol } = window.location;
   if (port === '5173') {
@@ -15,7 +15,7 @@ function getApiBase(): string {
 
 const API_BASE = getApiBase();
 
-function getAuthHeaders(): Record<string, string> {
+export function getAuthHeaders(): Record<string, string> {
   if (typeof localStorage === 'undefined') return {};
   const key = localStorage.getItem('fitlocal_api_key');
   if (!key) return {};

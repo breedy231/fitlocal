@@ -304,5 +304,25 @@ sqlite.exec(`
 // Swap reason: log why user swapped an exercise (future training signal)
 try { sqlite.exec('ALTER TABLE workout_exercises ADD COLUMN swap_reason TEXT'); } catch { /* exists */ }
 
+// AI assistant (M3): persistent conversations + messages.
+// NOTE: nothing maintains updated_at automatically — every message insert must
+// explicitly UPDATE assistant_conversations.updated_at, otherwise "most recent
+// conversation" ordering breaks.
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS assistant_conversations (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS assistant_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL REFERENCES assistant_conversations(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_asst_msgs_conv ON assistant_messages(conversation_id);
+`);
+
 console.log('Database migrated successfully');
 sqlite.close();
