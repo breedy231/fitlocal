@@ -84,6 +84,8 @@ These commands live in `.claude/commands/` and should be invoked automatically w
 - **Cardio classification:** Exercise names are matched against a regex to determine cardio vs. strength UI. **The canonical pattern is a single source of truth in `packages/shared/src/cardio.ts` (`CARDIO_PATTERN`)** — import it from `fitlocal-shared`, never redefine it. It's consumed by the active-workout UI, history list/edit pages, the workout generator (`generator.ts`), and swap suggestions (`generate.ts`).
 
   **Critical footgun:** patterns without `\b` word boundaries will match substrings — e.g. `run` matches inside `c**run**ch`, causing crunch exercises to render as cardio. The shared pattern already uses `\b` boundaries; preserve them when editing it.
+
+  **Inverse footgun (hyphenated tags):** `\b` treats a hyphen as a word boundary, so `\bmachine\b` *matches inside* `smith-machine` (and `\bbar\b` inside `t-bar`, etc.). When matching against hyphenated equipment tags (see `packages/api/src/lib/equipment-classifier.ts`), strip/replace the compound token first or anchor differently — don't assume `\b...\b` isolates a whole hyphenated tag.
 - **After every change:** curl the dev URL to verify the API responds. For UI changes, run `/project:playwright-test` — it handles viewport, screenshots, and posting them to the PR.
 - **Terse prompts expected.** User often gives short prompts from mobile mid-workout. Infer intent from context; prefer the most likely workout-related interpretation before asking clarifying questions.
 
