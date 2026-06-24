@@ -100,6 +100,39 @@ These commands live in `.claude/commands/` and should be invoked automatically w
 - End commit message bodies with: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
 - End PR bodies with: `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
 
+#### Parallel sessions MUST use separate worktrees
+
+Brendan often runs **multiple top-level Claude Code sessions at once** on this
+repo. Top-level sessions do **not** auto-isolate — two sessions in the same
+checkout (`/Users/brendanreed/Projects/fitlocal`) share one working tree and
+`HEAD`. When one session runs `git checkout <branch>` it yanks the branch (and
+any uncommitted edits) out from under the other, and a `git commit` in the
+shared tree can sweep up the *other* session's unstaged changes into the wrong
+commit. (This actually happened: a timestamps migration got swept into PR #69.)
+
+**Rule:** never do branch work in the shared main checkout while another session
+may be active. Give each parallel task its own git worktree:
+
+```bash
+# one-time per task — separate dir, own branch, own HEAD
+git worktree add ../fitlocal-<task> -b feat/<task> origin/main
+cd ../fitlocal-<task> && claude        # run the session here
+# when the branch is merged:
+git worktree remove ../fitlocal-<task>
+```
+
+A worktree shares the repo's object store but has an independent working tree,
+so concurrent sessions can't clobber each other. The repo's root `node_modules`
+is npm-workspace-hoisted; symlink it into the worktree (`ln -s
+/Users/brendanreed/Projects/fitlocal/node_modules ./node_modules`, same for
+`packages/*/node_modules` and `.env`) so builds/tests resolve without a fresh
+install. If you (an agent) ever notice you're sharing a checkout with another
+session mid-task, stop and move to a worktree before committing.
+
+(Subagents spawned via the Agent tool isolate per-spawn with
+`isolation: "worktree"` — that path already works; this rule is about
+human-launched parallel sessions, which don't.)
+
 ## Fitness goals
 
 Nutrition and pacing targets (calories, macros, goal weight, weekly pace) are
