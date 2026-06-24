@@ -2,9 +2,15 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { classifyEquipment } from './lib/equipment-classifier.js';
+import { CARDIO_PATTERN } from 'fitlocal-shared';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, '../../../fitlocal.db');
+// Honor DATABASE_PATH so scratch mode (npm run dev:api:scratch) and prod both
+// migrate the SAME file db.ts opens. Without this, migrations always hit the
+// real fitlocal.db even when the server is pointed at a scratch copy — harmless
+// for idempotent ALTERs, but a data-writing migration (e.g. #63) could mutate
+// real workout data during "isolated" write-testing.
+const dbPath = process.env.DATABASE_PATH ?? path.join(__dirname, '../../../fitlocal.db');
 const sqlite = new Database(dbPath);
 sqlite.pragma('journal_mode = WAL');
 sqlite.pragma('foreign_keys = ON');
@@ -207,6 +213,17 @@ sqlite.exec(`
 // Add effort_rating to workouts (post-workout RPE, 1-10)
 try { sqlite.exec('ALTER TABLE workouts ADD COLUMN effort_rating INTEGER'); } catch { /* exists */ }
 
+// Add started_at / ended_at timestamps to workouts (ISO-8601 TEXT). Prereq for
+// HR-zone tracking (#68/#59): maps HR samples to a session window, and gives a
+// true session duration on its own. started_at is set on create; ended_at when
+// the user finishes or leaves the active-workout page.
+for (const col of [
+  'ALTER TABLE workouts ADD COLUMN started_at TEXT',
+  'ALTER TABLE workouts ADD COLUMN ended_at TEXT',
+]) {
+  try { sqlite.exec(col); } catch { /* exists */ }
+}
+
 // Add cardio_plan JSON column to programs
 try { sqlite.exec('ALTER TABLE programs ADD COLUMN cardio_plan TEXT'); } catch { /* exists */ }
 
@@ -323,6 +340,47 @@ sqlite.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_asst_msgs_conv ON assistant_messages(conversation_id);
 `);
+
+// Backfill legacy cardio distance stranded in weight_kg (GitHub #63).
+// Before the dedicated distance_meters column existed, the cardio UI overloaded
+// weight_kg to store distance. The only rows that actually hold a real distance
+// are rowing sets, where weight_kg is the meter count off the rower (e.g. ~2290).
+// Those large meter-scale values copy straight across (no unit conversion).
+//
+// The small fractional weight_kg values seen on some cardio rows (≈1–11) are NOT
+// distances — they're stray resistance/level noise (one even sits next to an
+// already-correct distance_meters), so a magnitude threshold separates them out.
+// CARDIO_PATTERN is matched in JS to resolve exercise IDs (never redefined in SQL).
+// Idempotent: a re-run finds distance_meters already set and updates nothing.
+const cardioDistanceMigrationApplied = sqlite
+  .prepare("SELECT 1 FROM migrations WHERE key = 'cardio_distance_backfill_v1'")
+  .get();
+if (!cardioDistanceMigrationApplied) {
+  const DISTANCE_MIN_METERS = 100; // floor that excludes resistance/level junk
+  const allExercises = sqlite.prepare('SELECT id, name FROM exercises').all() as { id: number; name: string }[];
+  const cardioIds = allExercises.filter((e) => CARDIO_PATTERN.test(e.name)).map((e) => e.id);
+
+  const txn = sqlite.transaction(() => {
+    let moved = 0;
+    if (cardioIds.length > 0) {
+      const placeholders = cardioIds.map(() => '?').join(',');
+      const updateStmt = sqlite.prepare(`
+        UPDATE sets
+        SET distance_meters = weight_kg, weight_kg = NULL
+        WHERE workout_exercise_id IN (
+          SELECT id FROM workout_exercises WHERE exercise_id IN (${placeholders})
+        )
+          AND distance_meters IS NULL
+          AND weight_kg IS NOT NULL
+          AND weight_kg >= ?
+      `);
+      moved = updateStmt.run(...cardioIds, DISTANCE_MIN_METERS).changes;
+    }
+    sqlite.prepare("INSERT INTO migrations (key) VALUES ('cardio_distance_backfill_v1')").run();
+    console.log(`Cardio distance backfill: moved ${moved} row(s) weight_kg → distance_meters`);
+  });
+  txn();
+}
 
 console.log('Database migrated successfully');
 sqlite.close();
