@@ -55,6 +55,7 @@ export interface ExerciseWithHistory {
   id: number;
   name: string;
   workoutCount: number;
+  recentCount: number;
 }
 export interface ExercisesWithHistoryReport {
   exercises: ExerciseWithHistory[];

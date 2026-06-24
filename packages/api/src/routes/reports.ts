@@ -1,11 +1,33 @@
 import { FastifyInstance } from 'fastify';
 import { eq, desc, sql } from 'drizzle-orm';
-import { CARDIO_PATTERN } from 'fitlocal-shared';
+import { CARDIO_PATTERN, MOBILITY_PATTERN } from 'fitlocal-shared';
 import { db, schema } from '../db.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
 
-// Reusable SQL fragment to exclude stretching/foam roll exercises
-const STRENGTH_ONLY = sql`e.name NOT LIKE '%stretch%' AND e.name NOT LIKE '%foam roll%'`;
+// Stretching / mobility / foam-rolling exercises are warm-up & cooldown
+// movements, not trained lifts — they carry no weight and would distort every
+// report (frequency, volume, muscle distribution, PRs, progression). Names are
+// the only reliable signal (these rows have no muscle tags / movement_type), so
+// we resolve MOBILITY_PATTERN (packages/shared/src/mobility.ts — single source
+// of truth) to IDs in JS and exclude them, rather than maintaining a pile of SQL
+// LIKEs. Cached for the process lifetime (the exercises table is static).
+let mobilityExerciseIdsCache: number[] | null = null;
+function mobilityExerciseIds(): number[] {
+  if (mobilityExerciseIdsCache === null) {
+    const rows = db.all(sql`SELECT id, name FROM exercises`) as { id: number; name: string }[];
+    mobilityExerciseIdsCache = rows.filter((r) => MOBILITY_PATTERN.test(r.name)).map((r) => r.id);
+  }
+  return mobilityExerciseIdsCache;
+}
+
+// Reusable SQL fragment excluding stretching/mobility exercises (call site joins
+// `exercises e`). Supersedes the old `name LIKE '%stretch%'` check — the pattern
+// covers stretch + foam roll + cat-cows, poses, circles, dead hangs, etc.
+function STRENGTH_ONLY() {
+  const ids = mobilityExerciseIds();
+  if (ids.length === 0) return sql`1=1`;
+  return sql.raw(`e.id NOT IN (${ids.join(',')})`);
+}
 
 // Cardio exercises (treadmill, rowing, etc.) are logged with distance/duration,
 // not weight. Legacy rows predating the dedicated distance_meters column stored
@@ -179,7 +201,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON e.id = we.exercise_id
       WHERE w.date >= date('now', '-84 days')
-        AND ${STRENGTH_ONLY}
+        AND ${STRENGTH_ONLY()}
         AND ${excludeFilter(excludeIds)}
       GROUP BY strftime('%Y-W%W', w.date)
       ORDER BY week ASC
@@ -205,7 +227,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON e.id = we.exercise_id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
-      WHERE ${STRENGTH_ONLY}
+      WHERE ${STRENGTH_ONLY()}
         AND ${strengthOnlyFilter(excludeIds)}
       GROUP BY w.id
       ORDER BY w.date DESC
@@ -228,7 +250,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN exercises e ON e.id = we.exercise_id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
       WHERE w.date >= date('now', '-30 days')
-        AND ${STRENGTH_ONLY}
+        AND ${STRENGTH_ONLY()}
         AND ${excludeFilter(excludeIds)}
       GROUP BY we.id
     `) as { exerciseName: string; workingSets: number }[];
@@ -264,7 +286,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workouts w ON w.id = we.workout_id
       WHERE s.is_warmup = 0
         AND s.weight_kg > 0
-        AND ${STRENGTH_ONLY}
+        AND ${STRENGTH_ONLY()}
         AND ${strengthOnlyFilter(excludeIds)}
         AND s.weight_kg = (
           SELECT MAX(s2.weight_kg)
@@ -311,7 +333,8 @@ export async function reportRoutes(app: FastifyInstance) {
 
       // Cardio has no meaningful weight progression (and legacy rows store
       // distance in weight_kg) — never render a weight series for it. See #57.
-      if (exercise && CARDIO_PATTERN.test(exercise.name)) {
+      // Stretching/mobility moves likewise have no weight progression.
+      if (exercise && (CARDIO_PATTERN.test(exercise.name) || MOBILITY_PATTERN.test(exercise.name))) {
         return { exerciseName: exercise.name, dataPoints: [] };
       }
 
@@ -338,16 +361,18 @@ export async function reportRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/exercises-with-history', async (req) => {
     const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const rows = db.all(sql`
-      SELECT DISTINCT e.id, e.name, COUNT(DISTINCT w.id) as workoutCount
+      SELECT DISTINCT e.id, e.name,
+        COUNT(DISTINCT w.id) as workoutCount,
+        COUNT(DISTINCT CASE WHEN w.date >= date('now','-56 days') THEN w.id END) as recentCount
       FROM exercises e
       JOIN workout_exercises we ON we.exercise_id = e.id
       JOIN workouts w ON w.id = we.workout_id
-      WHERE ${STRENGTH_ONLY}
+      WHERE ${STRENGTH_ONLY()}
         AND ${strengthOnlyFilter(excludeIds)}
       GROUP BY e.id
       HAVING workoutCount >= 2
-      ORDER BY workoutCount DESC
-    `) as { id: number; name: string; workoutCount: number }[];
+      ORDER BY recentCount DESC, workoutCount DESC
+    `) as { id: number; name: string; workoutCount: number; recentCount: number }[];
 
     return { exercises: rows };
   });
@@ -399,8 +424,9 @@ export async function reportRoutes(app: FastifyInstance) {
       .where(eq(schema.exercises.id, exerciseId))
       .get();
 
-    // Cardio has no weight-based 1RM (legacy rows store distance in weight_kg).
-    if (exercise && CARDIO_PATTERN.test(exercise.name)) {
+    // Cardio has no weight-based 1RM (legacy rows store distance in weight_kg);
+    // stretching/mobility moves likewise have no 1RM.
+    if (exercise && (CARDIO_PATTERN.test(exercise.name) || MOBILITY_PATTERN.test(exercise.name))) {
       return { exerciseName: exercise.name, dataPoints: [] };
     }
 
@@ -440,7 +466,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN exercises e ON e.id = we.exercise_id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
       WHERE w.date >= ${startDate} AND w.date <= ${endDate}
-        AND ${STRENGTH_ONLY}
+        AND ${STRENGTH_ONLY()}
       GROUP BY w.date
       ORDER BY w.date ASC
     `) as { date: string; workoutCount: number; muscleGroups: string; totalSets: number }[];
@@ -476,7 +502,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON e.id = we.exercise_id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
-      WHERE w.date >= ${sinceStr} AND ${STRENGTH_ONLY}
+      WHERE w.date >= ${sinceStr} AND ${STRENGTH_ONLY()}
       GROUP BY w.date, we.exercise_id
     `) as { date: string; exerciseName: string; workingSets: number }[];
 
@@ -544,7 +570,7 @@ export async function reportRoutes(app: FastifyInstance) {
       FROM sets s
       JOIN workout_exercises we ON we.id = s.workout_exercise_id
       JOIN exercises e ON e.id = we.exercise_id
-      WHERE s.is_warmup = 0 AND s.weight_kg > 0 AND ${STRENGTH_ONLY}
+      WHERE s.is_warmup = 0 AND s.weight_kg > 0 AND ${STRENGTH_ONLY()}
         AND ${strengthOnlyFilter()}
       GROUP BY e.id
     `) as { id: number; name: string; estimated1RmKg: number }[];
@@ -590,7 +616,7 @@ export async function reportRoutes(app: FastifyInstance) {
       FROM workouts w
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON e.id = we.exercise_id
-      WHERE ${STRENGTH_ONLY}
+      WHERE ${STRENGTH_ONLY()}
         AND ${excludeFilter(excludeIds)}
     `) as { count: number }[];
 
@@ -599,7 +625,7 @@ export async function reportRoutes(app: FastifyInstance) {
       FROM sets s
       JOIN workout_exercises we ON we.id = s.workout_exercise_id
       JOIN exercises e ON e.id = we.exercise_id
-      WHERE s.is_warmup = 0 AND ${STRENGTH_ONLY}
+      WHERE s.is_warmup = 0 AND ${STRENGTH_ONLY()}
         AND ${excludeFilter(excludeIds)}
     `) as { count: number }[];
 
@@ -610,7 +636,7 @@ export async function reportRoutes(app: FastifyInstance) {
       FROM sets s
       JOIN workout_exercises we ON we.id = s.workout_exercise_id
       JOIN exercises e ON e.id = we.exercise_id
-      WHERE s.is_warmup = 0 AND ${STRENGTH_ONLY}
+      WHERE s.is_warmup = 0 AND ${STRENGTH_ONLY()}
         AND ${strengthOnlyFilter(excludeIds)}
     `) as { total: number }[];
 
@@ -620,7 +646,7 @@ export async function reportRoutes(app: FastifyInstance) {
       FROM workouts w
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON e.id = we.exercise_id
-      WHERE ${STRENGTH_ONLY}
+      WHERE ${STRENGTH_ONLY()}
         AND ${excludeFilter(excludeIds)}
       ORDER BY w.date DESC
     `) as { date: string }[];
@@ -654,7 +680,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON e.id = we.exercise_id
       WHERE w.date >= date('now', 'weekday 0', '-7 days')
-        AND ${STRENGTH_ONLY}
+        AND ${STRENGTH_ONLY()}
         AND ${excludeFilter(excludeIds)}
     `) as { count: number }[];
 
@@ -665,7 +691,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON e.id = we.exercise_id
       WHERE w.date >= date('now', 'start of month')
-        AND ${STRENGTH_ONLY}
+        AND ${STRENGTH_ONLY()}
         AND ${excludeFilter(excludeIds)}
     `) as { count: number }[];
 

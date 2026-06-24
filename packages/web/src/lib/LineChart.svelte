@@ -4,12 +4,14 @@
     value: number | null;
   }
 
-  let { data, color = '#22c55e', height = 140, unit = '', showDots = true }: {
+  let { data, color = '#22c55e', height = 140, unit = '', showDots = true, minimal = false }: {
     data: DataPoint[];
     color?: string;
     height?: number;
     unit?: string;
     showDots?: boolean;
+    // Sparkline mode: line only, no axis ticks/labels — for small-multiple cards
+    minimal?: boolean;
   } = $props();
 
   function niceNumber(val: number): number {
@@ -59,8 +61,10 @@
     return t;
   });
 
-  let padding = 24;
-  let yAxisWidth = 36;
+  let padding = $derived(minimal ? 6 : 24);
+  let yAxisWidth = $derived(minimal ? 2 : 36);
+  // Vertical band reserved for x-axis labels below the plot (none in minimal mode)
+  let xLabelBand = $derived(minimal ? 4 : 20);
   let containerWidth = $state(300);
   let chartWidth = $derived(Math.max(containerWidth, 100));
 
@@ -121,13 +125,14 @@
     <svg
       bind:this={svgEl}
       width="100%"
-      viewBox="0 0 {chartWidth} {height + 20}"
+      viewBox="0 0 {chartWidth} {height + xLabelBand}"
       preserveAspectRatio="xMidYMid meet"
-      style="max-height: {height + 20}px; touch-action: pan-y;"
-      onpointermove={handlePointerMove}
-      onpointerleave={handlePointerLeave}
+      style="max-height: {height + xLabelBand}px; touch-action: pan-y;"
+      onpointermove={minimal ? undefined : handlePointerMove}
+      onpointerleave={minimal ? undefined : handlePointerLeave}
     >
       <!-- Grid lines with nice Y-axis labels -->
+      {#if !minimal}
       {#each tickArr as tick}
         {@const ty = y(tick)}
         <line
@@ -142,6 +147,7 @@
           {Number.isInteger(tick) ? tick : tick.toFixed(1)}{unit && tick === tickArr[tickArr.length - 1] ? unit : ''}
         </text>
       {/each}
+      {/if}
 
       <!-- Line -->
       {#if pathD}
@@ -170,6 +176,7 @@
       {/if}
 
       <!-- X labels -->
+      {#if !minimal}
       {#each filtered as point, i}
         {#if i % labelStep === 0 || i === filtered.length - 1}
           <text x={x(i)} y={height + 10} text-anchor="middle" fill="#525252" font-size="8">
@@ -177,6 +184,7 @@
           </text>
         {/if}
       {/each}
+      {/if}
     </svg>
 
     <!-- Tooltip -->
