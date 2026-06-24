@@ -1,10 +1,31 @@
 import { FastifyInstance } from 'fastify';
 import { eq, desc, sql } from 'drizzle-orm';
+import { CARDIO_PATTERN } from 'fitlocal-shared';
 import { db, schema } from '../db.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
 
 // Reusable SQL fragment to exclude stretching/foam roll exercises
 const STRENGTH_ONLY = sql`e.name NOT LIKE '%stretch%' AND e.name NOT LIKE '%foam roll%'`;
+
+// Cardio exercises (treadmill, rowing, etc.) are logged with distance/duration,
+// not weight. Legacy rows predating the dedicated distance_meters column stored
+// miles/meters in weight_kg, so any weight-based aggregation (PRs, 1RM,
+// progression, total volume) that includes them surfaces nonsense — e.g. a
+// "5,050 lb" rower (issue #57). CARDIO_PATTERN is the single source of truth for
+// the classification (packages/shared/src/cardio.ts); we resolve it to exercise
+// IDs in JS rather than redefining the regex in SQL, then exclude those IDs from
+// weight-based queries.
+//
+// Cached for the process lifetime: there's no runtime exercise-creation path, so
+// re-querying the (effectively static) exercises table per request is waste.
+let cardioExerciseIdsCache: number[] | null = null;
+function cardioExerciseIds(): number[] {
+  if (cardioExerciseIdsCache === null) {
+    const rows = db.all(sql`SELECT id, name FROM exercises`) as { id: number; name: string }[];
+    cardioExerciseIdsCache = rows.filter((r) => CARDIO_PATTERN.test(r.name)).map((r) => r.id);
+  }
+  return cardioExerciseIdsCache;
+}
 
 function parseExcludeIds(raw?: string): number[] {
   if (!raw) return [];
@@ -14,6 +35,14 @@ function parseExcludeIds(raw?: string): number[] {
 function excludeFilter(excludeIds: number[]) {
   if (excludeIds.length === 0) return sql`1=1`;
   return sql.raw(`e.id NOT IN (${excludeIds.join(',')})`);
+}
+
+// SQL fragment excluding cardio exercises — plus any user-supplied exclusions —
+// from weight-based stats. Use in place of excludeFilter() for weight queries.
+function strengthOnlyFilter(extraExcludeIds: number[] = []) {
+  const ids = [...new Set([...cardioExerciseIds(), ...extraExcludeIds])];
+  if (ids.length === 0) return sql`1=1`;
+  return sql.raw(`e.id NOT IN (${ids.join(',')})`);
 }
 
 // Benchmark categories with thresholds (1RM / bodyweight ratios)
@@ -177,7 +206,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN exercises e ON e.id = we.exercise_id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
       WHERE ${STRENGTH_ONLY}
-        AND ${excludeFilter(excludeIds)}
+        AND ${strengthOnlyFilter(excludeIds)}
       GROUP BY w.id
       ORDER BY w.date DESC
       LIMIT 30
@@ -236,7 +265,7 @@ export async function reportRoutes(app: FastifyInstance) {
       WHERE s.is_warmup = 0
         AND s.weight_kg > 0
         AND ${STRENGTH_ONLY}
-        AND ${excludeFilter(excludeIds)}
+        AND ${strengthOnlyFilter(excludeIds)}
         AND s.weight_kg = (
           SELECT MAX(s2.weight_kg)
           FROM sets s2
@@ -280,6 +309,12 @@ export async function reportRoutes(app: FastifyInstance) {
         .where(eq(schema.exercises.id, exerciseId))
         .get();
 
+      // Cardio has no meaningful weight progression (and legacy rows store
+      // distance in weight_kg) — never render a weight series for it. See #57.
+      if (exercise && CARDIO_PATTERN.test(exercise.name)) {
+        return { exerciseName: exercise.name, dataPoints: [] };
+      }
+
       const rows = db.all(sql`
         SELECT
           w.date,
@@ -308,7 +343,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workout_exercises we ON we.exercise_id = e.id
       JOIN workouts w ON w.id = we.workout_id
       WHERE ${STRENGTH_ONLY}
-        AND ${excludeFilter(excludeIds)}
+        AND ${strengthOnlyFilter(excludeIds)}
       GROUP BY e.id
       HAVING workoutCount >= 2
       ORDER BY workoutCount DESC
@@ -363,6 +398,11 @@ export async function reportRoutes(app: FastifyInstance) {
       .from(schema.exercises)
       .where(eq(schema.exercises.id, exerciseId))
       .get();
+
+    // Cardio has no weight-based 1RM (legacy rows store distance in weight_kg).
+    if (exercise && CARDIO_PATTERN.test(exercise.name)) {
+      return { exerciseName: exercise.name, dataPoints: [] };
+    }
 
     const rows = db.all(sql`
       SELECT
@@ -505,6 +545,7 @@ export async function reportRoutes(app: FastifyInstance) {
       JOIN workout_exercises we ON we.id = s.workout_exercise_id
       JOIN exercises e ON e.id = we.exercise_id
       WHERE s.is_warmup = 0 AND s.weight_kg > 0 AND ${STRENGTH_ONLY}
+        AND ${strengthOnlyFilter()}
       GROUP BY e.id
     `) as { id: number; name: string; estimated1RmKg: number }[];
 
@@ -562,13 +603,15 @@ export async function reportRoutes(app: FastifyInstance) {
         AND ${excludeFilter(excludeIds)}
     `) as { count: number }[];
 
+    // Volume is weight-based, so exclude cardio (legacy rows store distance in
+    // weight_kg and would massively inflate the lbs total — see #57).
     const totalVolume = db.all(sql`
       SELECT COALESCE(SUM(s.reps * s.weight_kg * s.multiplier), 0) as total
       FROM sets s
       JOIN workout_exercises we ON we.id = s.workout_exercise_id
       JOIN exercises e ON e.id = we.exercise_id
       WHERE s.is_warmup = 0 AND ${STRENGTH_ONLY}
-        AND ${excludeFilter(excludeIds)}
+        AND ${strengthOnlyFilter(excludeIds)}
     `) as { total: number }[];
 
     // Current streak (consecutive days with workouts, allowing 1-day gaps for rest)
