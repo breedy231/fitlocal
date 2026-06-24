@@ -93,6 +93,12 @@ These commands live in `.claude/commands/` and should be invoked automatically w
 - **After every change:** curl the dev URL to verify the API responds. For UI changes, run `/project:playwright-test` — it handles viewport, screenshots, and posting them to the PR.
 - **Terse prompts expected.** User often gives short prompts from mobile mid-workout. Infer intent from context; prefer the most likely workout-related interpretation before asking clarifying questions.
 
+### Git conventions
+
+- Branch off `main`; don't commit directly to it.
+- End commit message bodies with: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
+- End PR bodies with: `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
+
 ## Fitness goals
 
 Nutrition and pacing targets (calories, macros, goal weight, weekly pace) are
