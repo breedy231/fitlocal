@@ -370,6 +370,21 @@
     }
   }
 
+  // Stamp the session end time so HR samples can later be mapped to this
+  // workout's window (#68). Fired on finish and on visibilitychange→hidden;
+  // `keepalive` lets the PATCH survive a backgrounding / PWA swipe-kill (iOS
+  // never fires beforeunload for those). Re-firing just overwrites ended_at
+  // with the latest leave/finish time, which is the behavior we want.
+  function markEnded() {
+    const id = $page.params.id;
+    if (!id) return;
+    api(`/workouts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ endedAt: new Date().toISOString() }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
   let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   function debouncedSave() {
     if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
@@ -388,6 +403,7 @@
   function onVisibilityChange() {
     if (document.visibilityState === 'hidden') {
       saveWorkoutState();
+      markEnded();
     }
   }
 
@@ -697,7 +713,7 @@
       }
       await api(`/workouts/${workout.id}`, {
         method: 'PUT',
-        body: JSON.stringify({ notes: workout.notes || 'Completed' }),
+        body: JSON.stringify({ notes: workout.notes || 'Completed', endedAt: new Date().toISOString() }),
       });
 
       // Load stretches for cool-down

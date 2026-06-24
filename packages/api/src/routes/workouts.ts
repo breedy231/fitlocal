@@ -227,7 +227,9 @@ export async function workoutRoutes(app: FastifyInstance) {
   // Create workout
   app.post<{ Body: { date: string; locationProfile?: string; notes?: string } }>('/workouts', async (req, reply) => {
     const { date, locationProfile, notes } = req.body;
-    const result = db.insert(schema.workouts).values({ date, locationProfile, notes }).returning().get();
+    const result = db.insert(schema.workouts)
+      .values({ date, locationProfile, notes, startedAt: new Date().toISOString() })
+      .returning().get();
     return reply.status(201).send(result);
   });
 
@@ -253,7 +255,7 @@ export async function workoutRoutes(app: FastifyInstance) {
 
     const result = db.transaction((tx) => {
       const workout = tx.insert(schema.workouts)
-        .values({ date, notes, locationProfile })
+        .values({ date, notes, locationProfile, startedAt: new Date().toISOString() })
         .returning()
         .get();
 
@@ -287,7 +289,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   });
 
   // Update workout (PUT)
-  app.put<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string; effortRating?: number } }>(
+  app.put<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string; effortRating?: number; startedAt?: string; endedAt?: string } }>(
     '/workouts/:id',
     async (req, reply) => {
       const id = parseInt(req.params.id);
@@ -298,7 +300,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   );
 
   // Update workout (PATCH)
-  app.patch<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string; effortRating?: number } }>(
+  app.patch<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string; effortRating?: number; startedAt?: string; endedAt?: string } }>(
     '/workouts/:id',
     async (req, reply) => {
       const id = parseInt(req.params.id);
