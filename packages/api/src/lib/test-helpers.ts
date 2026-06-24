@@ -17,7 +17,9 @@ export function createTestDb() {
       date TEXT NOT NULL,
       location_profile TEXT,
       notes TEXT,
-      effort_rating INTEGER
+      effort_rating INTEGER,
+      started_at TEXT,
+      ended_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS exercises (
