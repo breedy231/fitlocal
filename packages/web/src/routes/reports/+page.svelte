@@ -216,14 +216,47 @@
       : exerciseOptions
   );
 
-  // Auto-load progression for first exercise once options are available
-  let autoLoadedProgression = $state(false);
+  // Small-multiples gallery of the most-logged lifts
+  let galleryCards = $state<{ id: number; name: string; points: ExerciseDataPoint[] }[]>([]);
+  let galleryLoading = $state(false);
+  let galleryLoaded = $state(false);
+
+  // Load the gallery once exercise options become available (runs once)
   $effect(() => {
-    if (exerciseOptions.length > 0 && !autoLoadedProgression && !selectedExerciseId) {
-      autoLoadedProgression = true;
-      loadExerciseProgression(exerciseOptions[0].id);
+    if (exerciseOptions.length > 0 && !galleryLoaded) {
+      galleryLoaded = true;
+      loadGallery();
     }
   });
+
+  async function loadGallery() {
+    const top = exerciseOptions.slice(0, 6);
+    galleryLoading = true;
+    try {
+      const results = await Promise.all(
+        top.map((ex: ExerciseOption) =>
+          api<import('fitlocal-shared').ExerciseProgressionReport>(
+            withExclusions(`/reports/exercise-progression?exerciseId=${ex.id}`)
+          )
+            .then((result) => ({ id: ex.id, name: result.exerciseName || ex.name, points: result.dataPoints }))
+            .catch(() => ({ id: ex.id, name: ex.name, points: [] as ExerciseDataPoint[] }))
+        )
+      );
+      galleryCards = results.filter((c) => c.points.length >= 2);
+    } finally {
+      galleryLoading = false;
+    }
+  }
+
+  // Trend direction comparing last vs first point's max weight
+  function trend(points: ExerciseDataPoint[]): 'up' | 'down' | 'flat' {
+    if (points.length < 2) return 'flat';
+    const first = points[0].maxWeight;
+    const last = points[points.length - 1].maxWeight;
+    if (last > first) return 'up';
+    if (last < first) return 'down';
+    return 'flat';
+  }
 
   async function loadExerciseProgression(exerciseId: number) {
     selectedExerciseId = exerciseId;
@@ -416,13 +449,77 @@
       <section class="mt-5 mb-5 rounded-xl p-4" style="background-color: #1a1a1a;">
         <h2 class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">Exercise Progression</h2>
         {#if exerciseOptions.length > 0}
-          <!-- Searchable exercise picker -->
-          <div class="relative mb-3">
+          <!-- Small-multiples gallery of top lifts -->
+          {#if galleryLoading}
+            <div class="grid grid-cols-2 gap-2">
+              {#each Array(4) as _}
+                <div class="rounded-lg p-3 min-h-[44px] animate-pulse" style="background-color: #222;">
+                  <div class="h-3 w-2/3 bg-neutral-700 rounded mb-3"></div>
+                  <div class="h-12 bg-neutral-700/60 rounded"></div>
+                </div>
+              {/each}
+            </div>
+          {:else if galleryCards.length > 0}
+            <div class="grid grid-cols-2 gap-2">
+              {#each galleryCards as card (card.id)}
+                {@const last = card.points[card.points.length - 1]}
+                {@const dir = trend(card.points)}
+                <button
+                  onclick={() => loadExerciseProgression(card.id)}
+                  class="rounded-lg p-3 min-h-[44px] text-left flex flex-col gap-1.5 border {card.id === selectedExerciseId ? 'border-green-500 ring-1 ring-green-500' : 'border-transparent'}"
+                  style="background-color: #222;"
+                >
+                  <span class="text-xs font-medium text-neutral-200 truncate">{card.name}</span>
+                  <LineChart
+                    data={card.points.map((d) => ({ label: shortDate(d.date), value: kgToLbs(d.maxWeight) }))}
+                    color="#3b82f6"
+                    height={64}
+                    unit=""
+                    showDots={false}
+                  />
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold text-neutral-100">{kgToLbs(last.maxWeight)} lb</span>
+                    <span class="text-sm {dir === 'up' ? 'text-green-400' : dir === 'down' ? 'text-red-400' : 'text-neutral-500'}">
+                      {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '–'}
+                    </span>
+                  </div>
+                </button>
+              {/each}
+            </div>
+          {/if}
+
+          <!-- Expanded detail for the selected lift -->
+          {#if selectedExerciseId && exerciseProgression.length > 0}
+            <div class="mt-4 pt-4 border-t border-neutral-800">
+              <h3 class="text-sm font-semibold text-neutral-200 mb-2 truncate">{exerciseProgressionName}</h3>
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-xs text-neutral-500">{show1RM ? 'Estimated 1RM per session' : 'Max weight per session'}</p>
+                <button
+                  onclick={() => show1RM = !show1RM}
+                  class="text-[10px] px-2 py-0.5 rounded-full border {show1RM ? 'border-blue-500 text-blue-400 bg-blue-500/10' : 'border-neutral-700 text-neutral-500'}"
+                >
+                  Est. 1RM
+                </button>
+              </div>
+              <LineChart
+                data={exerciseProgression.map((d) => ({
+                  label: shortDate(d.date),
+                  value: show1RM ? kgToLbs(d.estimated1RmKg) : kgToLbs(d.maxWeight),
+                }))}
+                color={show1RM ? '#f59e0b' : '#3b82f6'}
+                height={140}
+                unit="lb"
+              />
+            </div>
+          {/if}
+
+          <!-- Search all lifts (access lifts outside the top 6) -->
+          <div class="relative mt-4">
             <button
               onclick={() => { exerciseSearchOpen = !exerciseSearchOpen; exerciseSearchQuery = ''; }}
               class="w-full bg-neutral-800 text-neutral-200 rounded-lg px-3 py-2 text-sm border border-neutral-700 text-left flex items-center justify-between"
             >
-              <span class="truncate">{exerciseProgressionName || 'Select exercise'}</span>
+              <span class="truncate">Search all lifts</span>
               <svg class="w-4 h-4 shrink-0 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
               </svg>
@@ -454,29 +551,6 @@
               </div>
             {/if}
           </div>
-
-          {#if exerciseProgression.length > 0}
-            <div class="flex items-center justify-between mb-2">
-              <p class="text-xs text-neutral-500">{show1RM ? 'Estimated 1RM per session' : 'Max weight per session'}</p>
-              <button
-                onclick={() => show1RM = !show1RM}
-                class="text-[10px] px-2 py-0.5 rounded-full border {show1RM ? 'border-blue-500 text-blue-400 bg-blue-500/10' : 'border-neutral-700 text-neutral-500'}"
-              >
-                Est. 1RM
-              </button>
-            </div>
-            <LineChart
-              data={exerciseProgression.map((d) => ({
-                label: shortDate(d.date),
-                value: show1RM ? kgToLbs(d.estimated1RmKg) : kgToLbs(d.maxWeight),
-              }))}
-              color={show1RM ? '#f59e0b' : '#3b82f6'}
-              height={140}
-              unit="lb"
-            />
-          {:else}
-            <p class="text-neutral-500 text-sm text-center py-4">No progression data</p>
-          {/if}
         {:else}
           <p class="text-neutral-500 text-sm text-center py-4">Need 2+ sessions of an exercise to show progression</p>
         {/if}

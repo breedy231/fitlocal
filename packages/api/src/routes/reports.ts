@@ -338,7 +338,9 @@ export async function reportRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/exercises-with-history', async (req) => {
     const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const rows = db.all(sql`
-      SELECT DISTINCT e.id, e.name, COUNT(DISTINCT w.id) as workoutCount
+      SELECT DISTINCT e.id, e.name,
+        COUNT(DISTINCT w.id) as workoutCount,
+        COUNT(DISTINCT CASE WHEN w.date >= date('now','-56 days') THEN w.id END) as recentCount
       FROM exercises e
       JOIN workout_exercises we ON we.exercise_id = e.id
       JOIN workouts w ON w.id = we.workout_id
@@ -346,8 +348,8 @@ export async function reportRoutes(app: FastifyInstance) {
         AND ${strengthOnlyFilter(excludeIds)}
       GROUP BY e.id
       HAVING workoutCount >= 2
-      ORDER BY workoutCount DESC
-    `) as { id: number; name: string; workoutCount: number }[];
+      ORDER BY recentCount DESC, workoutCount DESC
+    `) as { id: number; name: string; workoutCount: number; recentCount: number }[];
 
     return { exercises: rows };
   });
