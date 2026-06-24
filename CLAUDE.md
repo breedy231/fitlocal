@@ -76,6 +76,7 @@ These commands live in `.claude/commands/` and should be invoked automatically w
 | `/project:playwright-test` | "test this", "screenshot it", "show me it works", "run playwright" | Runs Playwright at 430×932, walks the affected flow, takes screenshots, posts them to the open PR |
 | `/project:deploy` | "deploy", "ship it", "push to prod", "rebuild production", "restart the server" | Builds API + web, restarts production server on :3001, verifies it's up |
 | `/project:gym-swap` | "swap X", "substitute for X", "don't have X", "what can I do instead of X" | Suggests substitute exercises for the same muscle group, with Obsidian-ready output |
+| `/project:babysit-prs` | "babysit PRs", "check the PRs", "merge the green PRs", "poll open PRs", "nudge stuck CI" | Polls open PRs into `main`, applies a CI decision table, auto-nudges stuck CI (empty commit), proposes squash-merges confirm-first. Never deploys. `--dry-run` for report-only |
 
 **PPL rotation:** Push → Pull → Legs → repeat. The rotation is inferred from the `notes` field on recent workouts ("push day" / "pull day" / "legs day").
 
