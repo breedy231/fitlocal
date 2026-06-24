@@ -230,11 +230,13 @@
   });
 
   async function loadGallery() {
-    const top = exerciseOptions.slice(0, 6);
+    // Pull extra candidates so we can still fill 6 cards after dropping ones
+    // with no weight progression (bodyweight moves graph as a flat 0-lb line).
+    const candidates = exerciseOptions.slice(0, 12);
     galleryLoading = true;
     try {
       const results = await Promise.all(
-        top.map((ex: ExerciseOption) =>
+        candidates.map((ex: ExerciseOption) =>
           api<import('fitlocal-shared').ExerciseProgressionReport>(
             withExclusions(`/reports/exercise-progression?exerciseId=${ex.id}`)
           )
@@ -242,7 +244,9 @@
             .catch(() => ({ id: ex.id, name: ex.name, points: [] as ExerciseDataPoint[] }))
         )
       );
-      galleryCards = results.filter((c) => c.points.length >= 2);
+      galleryCards = results
+        .filter((c) => c.points.length >= 2 && c.points.some((p) => p.maxWeight > 0))
+        .slice(0, 6);
     } finally {
       galleryLoading = false;
     }
@@ -476,6 +480,7 @@
                     height={64}
                     unit=""
                     showDots={false}
+                    minimal
                   />
                   <div class="flex items-center justify-between">
                     <span class="text-sm font-semibold text-neutral-100">{kgToLbs(last.maxWeight)} lb</span>
