@@ -8,6 +8,10 @@ import { db, sqlite } from '../db.js';
 // (capped, so a dropout doesn't inflate a zone).
 const DOWNSAMPLE_MS = 10_000;
 const ZONE_GAP_CAP_MS = 30_000;
+// An in-progress workout (started_at set, ended_at still null) is treated as
+// open up to "now" so HR can be ingested before the user taps Finish — capped
+// so a stale/forgotten active workout doesn't swallow an entire day of samples.
+const MAX_ACTIVE_WINDOW_MS = 6 * 60 * 60_000;
 
 interface ParsedSample { ms: number; iso: string; bpm: number; }
 
@@ -76,12 +80,18 @@ export async function hrRoutes(app: FastifyInstance) {
     const rawWindows = db.all(sql`
       SELECT id, date, started_at AS startedAt, ended_at AS endedAt
       FROM workouts
-      WHERE started_at IS NOT NULL AND ended_at IS NOT NULL
+      WHERE started_at IS NOT NULL
         AND date >= ${loDate} AND date <= ${hiDate}
-    `) as { id: number; date: string; startedAt: string; endedAt: string }[];
+    `) as { id: number; date: string; startedAt: string; endedAt: string | null }[];
 
+    const now = Date.now();
     const windows: WorkoutWindow[] = rawWindows
-      .map((w) => ({ id: w.id, date: w.date, startMs: new Date(w.startedAt).getTime(), endMs: new Date(w.endedAt).getTime() }))
+      .map((w) => {
+        const startMs = new Date(w.startedAt).getTime();
+        // Active workout (no ended_at): open up to now, capped.
+        const endMs = w.endedAt ? new Date(w.endedAt).getTime() : Math.min(now, startMs + MAX_ACTIVE_WINDOW_MS);
+        return { id: w.id, date: w.date, startMs, endMs };
+      })
       .filter((w) => Number.isFinite(w.startMs) && Number.isFinite(w.endMs) && w.endMs >= w.startMs);
 
     const byWorkout = new Map<number, ParsedSample[]>();

@@ -20,6 +20,12 @@ let app: FastifyInstance;
 const WIN_START = '2026-06-25T10:00:00.000Z';
 const WIN_END = '2026-06-25T11:00:00.000Z';
 
+// An active workout that started 10 min ago (relative to real "now") — its
+// window is open up to now, so a sample 5 min ago must bucket into it.
+const ACTIVE_START = new Date(Date.now() - 10 * 60_000).toISOString();
+const TODAY = ACTIVE_START.slice(0, 10);
+const ACTIVE_SAMPLE = new Date(Date.now() - 5 * 60_000).toISOString();
+
 beforeAll(async () => {
   const seed = new Database(TMP_DB);
   seed.pragma('journal_mode = WAL');
@@ -50,7 +56,9 @@ beforeAll(async () => {
   seed.exec(`
     INSERT INTO workouts (id, date, started_at, ended_at) VALUES
       (1, '2026-06-25', '${WIN_START}', '${WIN_END}'),
-      (2, '2026-06-25', '2026-06-25T14:00:00.000Z', '2026-06-25T15:00:00.000Z');
+      (2, '2026-06-25', '2026-06-25T14:00:00.000Z', '2026-06-25T15:00:00.000Z'),
+      -- Active workout: started recently, no ended_at (window open up to now).
+      (3, '${TODAY}', '${ACTIVE_START}', NULL);
     INSERT INTO user_goals (id, max_hr) VALUES (1, 190);
   `);
   seed.close();
@@ -99,6 +107,17 @@ describe('POST /hr-samples', () => {
     await app.inject({ method: 'POST', url: '/hr-samples', payload: { samples: CSV } });
     const res = await app.inject({ method: 'GET', url: '/workouts/1/hr' });
     expect(res.json().sampleCount).toBe(4);
+  });
+
+  it('buckets into an active (un-finished) workout, treating its end as now', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/hr-samples',
+      payload: { samples: `${ACTIVE_SAMPLE},148` },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.unmatched).toBe(0);
+    expect(body.workouts).toEqual([{ workoutId: 3, date: TODAY, sampleCount: 1, avgHr: 148, maxHr: 148 }]);
   });
 
   it('rejects a payload with no valid samples', async () => {
