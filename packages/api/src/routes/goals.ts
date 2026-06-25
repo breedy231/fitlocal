@@ -15,6 +15,7 @@ export async function goalRoutes(app: FastifyInstance) {
         targetWeightKg: null,
         cutStartDate: null,
         cutEndDate: null,
+        maxHr: null,
       };
     }
     const g = row[0];
@@ -25,6 +26,7 @@ export async function goalRoutes(app: FastifyInstance) {
       targetWeightKg: g.target_weight_kg,
       cutStartDate: g.cut_start_date,
       cutEndDate: g.cut_end_date,
+      maxHr: g.max_hr,
     };
   });
 
@@ -37,16 +39,17 @@ export async function goalRoutes(app: FastifyInstance) {
       targetWeightKg?: number;
       cutStartDate?: string;
       cutEndDate?: string;
+      maxHr?: number;
     };
   }>('/goals', async (req) => {
-    const { maintenanceCalories, targetCalories, targetProteinG, targetWeightKg, cutStartDate, cutEndDate } = req.body;
+    const { maintenanceCalories, targetCalories, targetProteinG, targetWeightKg, cutStartDate, cutEndDate, maxHr } = req.body;
 
     const existing = db.all(sql`SELECT id FROM user_goals LIMIT 1`) as any[];
 
     if (existing.length === 0) {
       db.run(sql`
-        INSERT INTO user_goals (maintenance_calories, target_calories, target_protein_g, target_weight_kg, cut_start_date, cut_end_date, updated_at)
-        VALUES (${maintenanceCalories ?? null}, ${targetCalories ?? null}, ${targetProteinG ?? null}, ${targetWeightKg ?? null}, ${cutStartDate ?? null}, ${cutEndDate ?? null}, datetime('now'))
+        INSERT INTO user_goals (maintenance_calories, target_calories, target_protein_g, target_weight_kg, cut_start_date, cut_end_date, max_hr, updated_at)
+        VALUES (${maintenanceCalories ?? null}, ${targetCalories ?? null}, ${targetProteinG ?? null}, ${targetWeightKg ?? null}, ${cutStartDate ?? null}, ${cutEndDate ?? null}, ${maxHr ?? null}, datetime('now'))
       `);
     } else {
       db.run(sql`
@@ -57,6 +60,7 @@ export async function goalRoutes(app: FastifyInstance) {
           target_weight_kg = COALESCE(${targetWeightKg ?? null}, target_weight_kg),
           cut_start_date = COALESCE(${cutStartDate ?? null}, cut_start_date),
           cut_end_date = COALESCE(${cutEndDate ?? null}, cut_end_date),
+          max_hr = COALESCE(${maxHr ?? null}, max_hr),
           updated_at = datetime('now')
         WHERE id = ${existing[0].id}
       `);
@@ -72,6 +76,7 @@ export async function goalRoutes(app: FastifyInstance) {
       targetWeightKg: g.target_weight_kg,
       cutStartDate: g.cut_start_date,
       cutEndDate: g.cut_end_date,
+      maxHr: g.max_hr,
     };
   });
 
