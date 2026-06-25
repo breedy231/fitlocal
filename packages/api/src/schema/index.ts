@@ -143,5 +143,15 @@ export const userGoals = sqliteTable('user_goals', {
   targetWeightKg: real('target_weight_kg'),
   cutStartDate: text('cut_start_date'),
   cutEndDate: text('cut_end_date'),
+  maxHr: integer('max_hr'),
   updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+});
+
+// Per-workout Apple Watch heart-rate samples (#59), thinned to ~1/10s. Bucketed
+// to a workout by its [started_at, ended_at] window at ingest time.
+export const workoutHrSamples = sqliteTable('workout_hr_samples', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  workoutId: integer('workout_id').notNull().references(() => workouts.id, { onDelete: 'cascade' }),
+  t: text('t').notNull(),
+  bpm: integer('bpm').notNull(),
 });

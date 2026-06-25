@@ -267,6 +267,27 @@ sqlite.exec(`
   );
 `);
 
+// Configurable max heart rate for HR-zone derivation (#59). Null → fall back to
+// an age-based estimate or skip zones. Edited from Settings via user_goals.
+try { sqlite.exec('ALTER TABLE user_goals ADD COLUMN max_hr INTEGER'); } catch { /* exists */ }
+
+// Per-workout heart-rate samples (#59). Apple Watch HR is captured by an iOS
+// Shortcut and POSTed to /hr-samples; the server buckets each sample into the
+// workout whose [started_at, ended_at] window contains it (so capture needs no
+// knowledge of workout IDs), thins to ~1 sample / 10s, and stores it here.
+// avg/max + time-in-zone are derived on read. ON DELETE CASCADE so samples die
+// with their workout.
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS workout_hr_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workout_id INTEGER NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
+    t TEXT NOT NULL,
+    bpm INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_workout_hr_samples_workout_id
+    ON workout_hr_samples(workout_id);
+`);
+
 // Add duration_seconds column to sets (cardio tracking)
 try { sqlite.exec('ALTER TABLE sets ADD COLUMN duration_seconds INTEGER'); } catch { /* exists */ }
 
