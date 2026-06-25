@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { eq, desc, sql } from 'drizzle-orm';
-import { CARDIO_PATTERN, MOBILITY_PATTERN } from 'fitlocal-shared';
+import { CARDIO_PATTERN, MOBILITY_PATTERN, type ExerciseDataPoint } from 'fitlocal-shared';
 import { db, schema } from '../db.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
 
@@ -11,13 +11,20 @@ import { getMusclesForExercise } from '../lib/recovery.js';
 // we resolve MOBILITY_PATTERN (packages/shared/src/mobility.ts — single source
 // of truth) to IDs in JS and exclude them, rather than maintaining a pile of SQL
 // LIKEs. Cached for the process lifetime (the exercises table is static).
+// Both the mobility and cardio ID lists derive from the same `SELECT id, name
+// FROM exercises` scan, so resolve them together from a single fetch instead of
+// scanning the (static) table twice. Cached for the process lifetime.
 let mobilityExerciseIdsCache: number[] | null = null;
+let cardioExerciseIdsCache: number[] | null = null;
+function ensureClassifiedExerciseCaches(): void {
+  if (mobilityExerciseIdsCache !== null && cardioExerciseIdsCache !== null) return;
+  const rows = db.all(sql`SELECT id, name FROM exercises`) as { id: number; name: string }[];
+  mobilityExerciseIdsCache = rows.filter((r) => MOBILITY_PATTERN.test(r.name)).map((r) => r.id);
+  cardioExerciseIdsCache = rows.filter((r) => CARDIO_PATTERN.test(r.name)).map((r) => r.id);
+}
 function mobilityExerciseIds(): number[] {
-  if (mobilityExerciseIdsCache === null) {
-    const rows = db.all(sql`SELECT id, name FROM exercises`) as { id: number; name: string }[];
-    mobilityExerciseIdsCache = rows.filter((r) => MOBILITY_PATTERN.test(r.name)).map((r) => r.id);
-  }
-  return mobilityExerciseIdsCache;
+  ensureClassifiedExerciseCaches();
+  return mobilityExerciseIdsCache!;
 }
 
 // Reusable SQL fragment excluding stretching/mobility exercises (call site joins
@@ -40,13 +47,9 @@ function STRENGTH_ONLY() {
 //
 // Cached for the process lifetime: there's no runtime exercise-creation path, so
 // re-querying the (effectively static) exercises table per request is waste.
-let cardioExerciseIdsCache: number[] | null = null;
 function cardioExerciseIds(): number[] {
-  if (cardioExerciseIdsCache === null) {
-    const rows = db.all(sql`SELECT id, name FROM exercises`) as { id: number; name: string }[];
-    cardioExerciseIdsCache = rows.filter((r) => CARDIO_PATTERN.test(r.name)).map((r) => r.id);
-  }
-  return cardioExerciseIdsCache;
+  ensureClassifiedExerciseCaches();
+  return cardioExerciseIdsCache!;
 }
 
 function parseExcludeIds(raw?: string): number[] {
@@ -354,6 +357,61 @@ export async function reportRoutes(app: FastifyInstance) {
       `) as { date: string; maxWeight: number; maxReps: number; sessionVolume: number; estimated1RmKg: number }[];
 
       return { exerciseName: exercise?.name, dataPoints: rows };
+    }
+  );
+
+  // Batched progression — one GROUP-BY query for many lifts at once, so the
+  // Reports gallery loads its ~12 candidate cards in a single round-trip instead
+  // of firing a separate /reports/exercise-progression request per exercise
+  // (#71). Mirrors the single-exercise route's series; cardio/mobility lifts have
+  // no weight progression and resolve to empty dataPoints.
+  app.get<{ Querystring: { exerciseIds?: string } }>(
+    '/reports/exercise-progression-batch',
+    async (req) => {
+      const ids = parseExcludeIds(req.query.exerciseIds);
+      if (ids.length === 0) return { results: [] };
+
+      const named = db.all(sql`
+        SELECT id, name FROM exercises WHERE id IN (${sql.raw(ids.join(','))})
+      `) as { id: number; name: string }[];
+      const nameById = new Map(named.map((r) => [r.id, r.name]));
+
+      // Only weight-bearing lifts get a series (see #57 for the cardio rationale).
+      const weightIds = named
+        .filter((r) => !CARDIO_PATTERN.test(r.name) && !MOBILITY_PATTERN.test(r.name))
+        .map((r) => r.id);
+
+      const pointsByExercise = new Map<number, ExerciseDataPoint[]>();
+      if (weightIds.length > 0) {
+        const rows = db.all(sql`
+          SELECT
+            we.exercise_id as exerciseId,
+            w.date,
+            MAX(CASE WHEN s.is_warmup = 0 THEN s.weight_kg ELSE 0 END) as maxWeight,
+            MAX(CASE WHEN s.is_warmup = 0 THEN s.reps ELSE 0 END) as maxReps,
+            SUM(CASE WHEN s.is_warmup = 0 THEN s.reps * s.weight_kg * s.multiplier ELSE 0 END) as sessionVolume,
+            MAX(CASE WHEN s.is_warmup = 0 AND s.weight_kg > 0 THEN s.weight_kg * (1.0 + MIN(CAST(s.reps AS REAL), 12.0) / 30.0) ELSE 0 END) as estimated1RmKg
+          FROM workouts w
+          JOIN workout_exercises we ON we.workout_id = w.id
+          JOIN sets s ON s.workout_exercise_id = we.id
+          WHERE we.exercise_id IN (${sql.raw(weightIds.join(','))})
+          GROUP BY we.exercise_id, w.id
+          ORDER BY w.date ASC
+        `) as ({ exerciseId: number } & ExerciseDataPoint)[];
+        for (const { exerciseId, ...point } of rows) {
+          const list = pointsByExercise.get(exerciseId);
+          if (list) list.push(point);
+          else pointsByExercise.set(exerciseId, [point]);
+        }
+      }
+
+      // Preserve the requested order; unknown/cardio/mobility ids resolve empty.
+      const results = ids.map((id) => ({
+        exerciseId: id,
+        exerciseName: nameById.get(id) ?? null,
+        dataPoints: pointsByExercise.get(id) ?? [],
+      }));
+      return { results };
     }
   );
 

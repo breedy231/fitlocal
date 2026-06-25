@@ -232,31 +232,44 @@
   async function loadGallery() {
     // Pull extra candidates so we can still fill 6 cards after dropping ones
     // with no weight progression (bodyweight moves graph as a flat 0-lb line).
+    // One batched request collapses what used to be up to 12 parallel ones.
     const candidates = exerciseOptions.slice(0, 12);
+    if (candidates.length === 0) { galleryCards = []; return; }
     galleryLoading = true;
     try {
-      const results = await Promise.all(
-        candidates.map((ex: ExerciseOption) =>
-          api<import('fitlocal-shared').ExerciseProgressionReport>(
-            withExclusions(`/reports/exercise-progression?exerciseId=${ex.id}`)
-          )
-            .then((result) => ({ id: ex.id, name: result.exerciseName || ex.name, points: result.dataPoints }))
-            .catch(() => ({ id: ex.id, name: ex.name, points: [] as ExerciseDataPoint[] }))
-        )
+      const ids = candidates.map((ex: ExerciseOption) => ex.id).join(',');
+      const nameById = new Map(candidates.map((ex: ExerciseOption) => [ex.id, ex.name]));
+      const { results } = await api<import('fitlocal-shared').ExerciseProgressionBatchReport>(
+        `/reports/exercise-progression-batch?exerciseIds=${ids}`
       );
       galleryCards = results
+        .map((r) => ({ id: r.exerciseId, name: r.exerciseName || nameById.get(r.exerciseId) || '', points: r.dataPoints }))
         .filter((c) => c.points.length >= 2 && c.points.some((p) => p.maxWeight > 0))
         .slice(0, 6);
+    } catch {
+      galleryCards = [];
     } finally {
       galleryLoading = false;
     }
   }
 
-  // Trend direction comparing last vs first point's max weight
+  // The most-recent point with an actual load. A card admitted by the gallery
+  // filter always has at least one weighted point, but the *latest* session can
+  // be 0 lb (logged without weights, or a bodyweight deload) — keying the label
+  // and trend off it would read "0 lb ▼" for a normally-loaded lift.
+  function lastWeighted(points: ExerciseDataPoint[]): ExerciseDataPoint {
+    for (let i = points.length - 1; i >= 0; i--) {
+      if (points[i].maxWeight > 0) return points[i];
+    }
+    return points[points.length - 1];
+  }
+
+  // Trend direction comparing first vs last weighted point's max weight.
   function trend(points: ExerciseDataPoint[]): 'up' | 'down' | 'flat' {
-    if (points.length < 2) return 'flat';
-    const first = points[0].maxWeight;
-    const last = points[points.length - 1].maxWeight;
+    const weighted = points.filter((p) => p.maxWeight > 0);
+    if (weighted.length < 2) return 'flat';
+    const first = weighted[0].maxWeight;
+    const last = weighted[weighted.length - 1].maxWeight;
     if (last > first) return 'up';
     if (last < first) return 'down';
     return 'flat';
@@ -466,7 +479,7 @@
           {:else if galleryCards.length > 0}
             <div class="grid grid-cols-2 gap-2">
               {#each galleryCards as card (card.id)}
-                {@const last = card.points[card.points.length - 1]}
+                {@const last = lastWeighted(card.points)}
                 {@const dir = trend(card.points)}
                 <button
                   onclick={() => loadExerciseProgression(card.id)}
@@ -515,6 +528,10 @@
                 height={140}
                 unit="lb"
               />
+            </div>
+          {:else if selectedExerciseId}
+            <div class="mt-4 pt-4 border-t border-neutral-800">
+              <p class="text-sm text-neutral-500 text-center py-4">No progression data for this lift.</p>
             </div>
           {/if}
 
