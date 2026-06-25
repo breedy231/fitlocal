@@ -19,4 +19,4 @@
  *   - packages/api/src/routes/reports.ts
  */
 export const MOBILITY_PATTERN =
-  /stretch|foam roll|cat[\s-]?cow|child'?s pose|(?:up|down)(?:ward)? dog|cobra pose|\bpigeon\b|\bcrab pose\b|\bpose\b|\bcircle|leg swing|\binchworm\b|world'?s greatest|thread the needle|90\/90|\bscorpion\b|dead hang|hip flexor|bird dog(?!\s*row)/i;
+  /stretch|foam roll|cat[\s-]?cow|child'?s pose|(?:up|down)(?:ward)? dog|\bpigeon\b|\bpose\b|\bcircle|leg swing|\binchworm\b|world'?s greatest|thread the needle|90\/90|\bscorpion\b|dead hang|hip flexor|bird dog(?!\s*row)/i;

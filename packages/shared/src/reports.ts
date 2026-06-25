@@ -49,6 +49,14 @@ export interface ExerciseProgressionReport {
   exerciseName: string | null;
   dataPoints: ExerciseDataPoint[];
 }
+export interface ExerciseProgressionBatchEntry {
+  exerciseId: number;
+  exerciseName: string | null;
+  dataPoints: ExerciseDataPoint[];
+}
+export interface ExerciseProgressionBatchReport {
+  results: ExerciseProgressionBatchEntry[];
+}
 
 /** GET /reports/exercises-with-history */
 export interface ExerciseWithHistory {
