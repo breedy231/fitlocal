@@ -705,9 +705,12 @@
     try {
       for (const ex of workout.exercises) {
         for (const set of ex.sets) {
+          // Finishing marks every set completed (incl. cardio) so the workout
+          // doesn't read as "active" forever to the pre-deploy guard (#73).
+          set.completed = true;
           await api(`/sets/${set.id}`, {
             method: 'PUT',
-            body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, distanceMeters: set.distanceMeters, resistance: set.resistance }),
+            body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, distanceMeters: set.distanceMeters, resistance: set.resistance, completed: true }),
           });
         }
       }
