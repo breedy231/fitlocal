@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { eq, desc, like, sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
+import { startedAtForNewWorkout } from '../lib/session-window.js';
 
 export async function workoutRoutes(app: FastifyInstance) {
   // List all workouts with exercise/set counts
@@ -228,7 +229,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   app.post<{ Body: { date: string; locationProfile?: string; notes?: string } }>('/workouts', async (req, reply) => {
     const { date, locationProfile, notes } = req.body;
     const result = db.insert(schema.workouts)
-      .values({ date, locationProfile, notes, startedAt: new Date().toISOString() })
+      .values({ date, locationProfile, notes, startedAt: startedAtForNewWorkout(date) })
       .returning().get();
     return reply.status(201).send(result);
   });
@@ -255,7 +256,7 @@ export async function workoutRoutes(app: FastifyInstance) {
 
     const result = db.transaction((tx) => {
       const workout = tx.insert(schema.workouts)
-        .values({ date, notes, locationProfile, startedAt: new Date().toISOString() })
+        .values({ date, notes, locationProfile, startedAt: startedAtForNewWorkout(date) })
         .returning()
         .get();
 

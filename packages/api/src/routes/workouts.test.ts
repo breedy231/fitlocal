@@ -1,7 +1,8 @@
 // Hermetic tests for workout session timestamps (#68 — prereq for HR zones #59).
-// started_at must be stamped on create (both POST /workouts and POST
-// /workouts/start), and ended_at must persist when the active-workout page
-// PATCHes it on finish / visibilitychange. We point DATABASE_PATH at a throwaway
+// started_at is stamped on create for a *live* (today-dated) workout only (a
+// back-logged date gets null so it can't form a wrong-day HR window — see
+// session-window.test.ts), and ended_at must persist when the active-workout
+// page PATCHes it on finish / visibilitychange. We point DATABASE_PATH at a throwaway
 // DB BEFORE importing db.js, build the tables, then register workoutRoutes on a
 // Fastify instance and hit them via inject.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -18,6 +19,8 @@ const TMP_DB = path.join(os.tmpdir(), `fitlocal-workouts-${randomUUID()}.db`);
 let app: FastifyInstance;
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+// started_at is only stamped for a workout whose date is today (user's tz).
+const TODAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
 
 beforeAll(async () => {
   // db.ts opens the singleton at import time, so the file + tables must exist
@@ -66,7 +69,7 @@ describe('POST /workouts', () => {
   it('stamps started_at with an ISO-8601 timestamp and leaves ended_at null', async () => {
     const res = await app.inject({
       method: 'POST', url: '/workouts',
-      payload: { date: '2026-06-24', notes: 'push' },
+      payload: { date: TODAY, notes: 'push' },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
@@ -80,7 +83,7 @@ describe('POST /workouts/start', () => {
     const res = await app.inject({
       method: 'POST', url: '/workouts/start',
       payload: {
-        date: '2026-06-24', notes: 'push',
+        date: TODAY, notes: 'push',
         exercises: [
           { exerciseId: 1, displayOrder: 0, sets: [{ reps: 5, weightKg: 60 }] },
         ],
@@ -95,7 +98,7 @@ describe('PATCH /workouts/:id ended_at', () => {
   it('persists ended_at when the active-workout page stamps it', async () => {
     const created = (await app.inject({
       method: 'POST', url: '/workouts',
-      payload: { date: '2026-06-24' },
+      payload: { date: TODAY },
     })).json();
 
     const endedAt = new Date().toISOString();
