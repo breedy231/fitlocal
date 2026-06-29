@@ -15,10 +15,41 @@ const MAX_ACTIVE_WINDOW_MS = 6 * 60 * 60_000;
 
 interface ParsedSample { ms: number; iso: string; bpm: number; }
 
-// Accept the Shortcut-friendly CSV string ("<iso>,<bpm>\n…") or a JSON array of
-// { t, bpm }. Invalid / out-of-range rows are dropped rather than failing the
-// whole batch — a flaky sensor reading shouldn't reject a session.
+// Pull a bpm out of a number or a string that may carry units ("145 count/min",
+// "145 bpm", "145.0").
+function coerceBpm(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? Math.round(v) : null;
+  if (typeof v === 'string') {
+    const m = v.match(/-?[\d.]+/);
+    if (m) { const n = Math.round(parseFloat(m[0])); return Number.isFinite(n) ? n : null; }
+  }
+  return null;
+}
+
+// Accept ISO strings, localized date strings (new Date can parse many), or epoch
+// numbers in seconds or milliseconds.
+function coerceMs(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v > 1e12 ? v : v * 1000;
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (/^\d+$/.test(s)) { const n = parseInt(s, 10); return n > 1e12 ? n : n * 1000; }
+    const ms = new Date(s).getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  return null;
+}
+
+// Tolerant parser for the variety of shapes iOS Shortcuts can POST:
+//   • CSV string, one "<time>,<bpm>" per line (the recommended shape)
+//   • a JSON array of objects, with flexible key names
+//   • a { samples: <either of the above> } wrapper
+// Invalid / out-of-range rows are dropped rather than failing the whole batch.
 function parseSamples(input: unknown): ParsedSample[] {
+  // Unwrap { samples: … }.
+  if (input && typeof input === 'object' && !Array.isArray(input) && 'samples' in (input as any)) {
+    return parseSamples((input as any).samples);
+  }
+
   const rows: { t: unknown; bpm: unknown }[] = [];
   if (typeof input === 'string') {
     for (const line of input.split(/\r?\n/)) {
@@ -30,15 +61,25 @@ function parseSamples(input: unknown): ParsedSample[] {
     }
   } else if (Array.isArray(input)) {
     for (const s of input) {
-      if (s && typeof s === 'object') rows.push({ t: (s as any).t, bpm: (s as any).bpm });
+      if (s == null) continue;
+      if (typeof s === 'object') {
+        const o = s as Record<string, unknown>;
+        rows.push({
+          t: o.t ?? o.date ?? o.startDate ?? o.start ?? o.time ?? o.timestamp,
+          bpm: o.bpm ?? o.value ?? o.count ?? o.heartRate ?? o.hr,
+        });
+      } else if (typeof s === 'string') {
+        const comma = s.indexOf(',');
+        if (comma !== -1) rows.push({ t: s.slice(0, comma).trim(), bpm: s.slice(comma + 1).trim() });
+      }
     }
   }
 
   const out: ParsedSample[] = [];
   for (const r of rows) {
-    const ms = new Date(String(r.t)).getTime();
-    const bpm = Math.round(Number(r.bpm));
-    if (!Number.isFinite(ms) || !Number.isFinite(bpm) || bpm <= 0 || bpm > 300) continue;
+    const ms = coerceMs(r.t);
+    const bpm = coerceBpm(r.bpm);
+    if (ms == null || bpm == null || bpm <= 0 || bpm > 300) continue;
     out.push({ ms, iso: new Date(ms).toISOString(), bpm });
   }
   out.sort((a, b) => a.ms - b.ms);
@@ -65,10 +106,22 @@ export async function hrRoutes(app: FastifyInstance) {
   // with no workout knowledge; we bucket each into the workout whose
   // [started_at, ended_at] window contains it (#59). Re-posting is idempotent —
   // a workout's samples are replaced, not appended.
-  app.post<{ Body: { samples?: unknown } }>('/hr-samples', async (req, reply) => {
-    const samples = parseSamples(req.body?.samples);
+  app.post('/hr-samples', async (req, reply) => {
+    // parseSamples unwraps { samples: … } itself, so hand it the whole body —
+    // this also tolerates a bare CSV string or array posted as the body.
+    const body: any = req.body;
+    const samples = parseSamples(body);
     if (samples.length === 0) {
-      return reply.status(400).send({ error: 'No valid HR samples in payload' });
+      // Echo back what we actually received so a payload-shape mismatch is
+      // diagnosable from the response alone (no log-diving needed).
+      const debug = {
+        contentType: req.headers['content-type'] ?? null,
+        bodyType: Array.isArray(body) ? 'array' : typeof body,
+        topLevelKeys: body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body).slice(0, 10) : null,
+        preview: typeof body === 'string' ? body.slice(0, 200) : JSON.stringify(body ?? null).slice(0, 300),
+      };
+      req.log.warn(debug, 'hr-samples: no valid samples in payload');
+      return reply.status(400).send({ error: 'No valid HR samples in payload', debug });
     }
 
     const minMs = samples[0].ms;
