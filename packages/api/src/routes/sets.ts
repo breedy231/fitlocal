@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '../db.js';
+import { touchWorkoutEnd } from '../lib/session-window.js';
 
 export async function setRoutes(app: FastifyInstance) {
   // Add set to a workout exercise
@@ -8,6 +9,8 @@ export async function setRoutes(app: FastifyInstance) {
     Body: { workoutExerciseId: number; reps?: number; weightKg?: number; isWarmup?: boolean; rpe?: number };
   }>('/sets', async (req, reply) => {
     const result = db.insert(schema.sets).values(req.body).returning().get();
+    // Heartbeat: extend the workout's HR window to this activity (#59).
+    touchWorkoutEnd(result.workoutExerciseId);
     return reply.status(201).send(result);
   });
 
@@ -16,6 +19,7 @@ export async function setRoutes(app: FastifyInstance) {
     const id = parseInt(req.params.id);
     const result = db.update(schema.sets).set(req.body).where(eq(schema.sets.id, id)).returning().get();
     if (!result) return reply.status(404).send({ error: 'Not found' });
+    touchWorkoutEnd(result.workoutExerciseId);
     return result;
   });
 
@@ -24,6 +28,7 @@ export async function setRoutes(app: FastifyInstance) {
     const id = parseInt(req.params.id);
     const result = db.update(schema.sets).set(req.body).where(eq(schema.sets.id, id)).returning().get();
     if (!result) return reply.status(404).send({ error: 'Not found' });
+    touchWorkoutEnd(result.workoutExerciseId);
     return result;
   });
 
