@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyError, FastifyInstance } from 'fastify';
 
 // Consistent error shapes across the API (#82). Registered in server.ts and in
 // hermetic route tests (so error-shape assertions run against the real handler).
@@ -7,7 +7,7 @@ import type { FastifyInstance } from 'fastify';
 //   - other errors that already carry a 4xx status keep it (body-parse, 404s…)
 //   - everything else → opaque 500; full detail goes to the log, not the client
 export function applyErrorHandler(app: FastifyInstance) {
-  app.setErrorHandler((err, req, reply) => {
+  app.setErrorHandler((err: FastifyError, req, reply) => {
     if (err.validation) {
       return reply.status(400).send({
         error: 'Validation failed',
