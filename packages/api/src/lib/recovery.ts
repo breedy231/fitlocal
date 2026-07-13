@@ -25,7 +25,7 @@ const MUSCLE_KEYWORDS: Record<string, RegExp> = {
 const muscleCache = new Map<string, string[]>();
 
 export function getMusclesForExercise(exerciseName: string): string[] {
-  let cached = muscleCache.get(exerciseName);
+  const cached = muscleCache.get(exerciseName);
   if (cached) return cached;
 
   const muscles: string[] = [];

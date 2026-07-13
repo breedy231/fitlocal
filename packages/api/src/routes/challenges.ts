@@ -118,11 +118,12 @@ function generateChallenge(month: string) {
       description = `Hit ${target} working sets in ${monthName}`;
       unit = 'sets';
       break;
-    case 'volume':
+    case 'volume': {
       const lbs = Math.round(target * KG_TO_LBS);
       description = `Lift ${lbs.toLocaleString()} lbs in ${monthName}`;
       unit = 'lbs';
       break;
+    }
   }
 
   return db.insert(schema.challenges).values({
