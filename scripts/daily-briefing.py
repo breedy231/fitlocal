@@ -12,8 +12,11 @@ Fetches FitLocal over HTTPS with `curl` (subprocess) deliberately: the system
 Python's urllib has no CA bundle on this Mac and fails TLS verification (certifi
 gotcha), whereas curl uses the system trust store.
 
-NEXT UP (fitlocal#78): feed the recommendation the PPL rotation (which day is
-next) and running history so it's the full coach, not just recovery+load+cut.
+Part 1 (#78): infers the next PPL day from recent workout notes and calls
+/generate-workout to get suggested weights, rendered in Obsidian format.
+
+Part 2 (#78): sends a Web Push to all subscribed devices using pywebpush
+(optional — skipped with a log message if not installed or VAPID keys missing).
 """
 import json
 import os
@@ -30,10 +33,14 @@ BASE = "https://fitlocal-app.fly.dev/api"
 VAULT_REPO = "/Users/brendanreed/vault"
 VAULT_DIR = os.path.join(VAULT_REPO, "Notion/Notebook/Personal/Fitness")
 LB_PER_KG = 2.2046
+KG_TO_LBS = 2.20462
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen3:30b-a3b"   # MoE (3B active) — best speed/quality on this Intel CPU box
 OLLAMA_TIMEOUT = 200             # generous: slow on CPU, but this is an unattended background job
+
+# PPL rotation order
+PPL_ROTATION = ["push", "pull", "legs"]
 
 
 def git_sync(repo, filepath, message):
@@ -78,6 +85,108 @@ def get(path, key):
     except json.JSONDecodeError:
         print(f"WARN: fetch {path} returned non-JSON", file=sys.stderr)
         return None
+
+
+def infer_next_ppl_day(workouts_data):
+    """
+    Scan the `notes` field of recent workouts (newest-first) for push/pull/legs.
+    Return the next day in the rotation. Default to 'push' if no match found.
+    """
+    if not workouts_data:
+        return "push"
+    # workouts are returned newest-first by default
+    last_day = None
+    for w in workouts_data:
+        notes = (w.get("notes") or "").lower()
+        for day in PPL_ROTATION:
+            if re.search(rf"\b{day}\b", notes):
+                last_day = day
+                break
+        if last_day:
+            break
+    if last_day is None:
+        return "push"
+    idx = PPL_ROTATION.index(last_day)
+    return PPL_ROTATION[(idx + 1) % len(PPL_ROTATION)]
+
+
+def round_to_nearest(value, increment):
+    """Round value to the nearest multiple of increment."""
+    return round(round(value / increment) * increment, 10)
+
+
+CARDIO_PATTERN = re.compile(
+    r'\b(?:treadmill|elliptical|cycling|rowing|rower|stair\s*(?:stepper|climber|master)|bike|jog(?:ging)?|sprinting|running|swimming|hiking|walking(?!\s+lunge))\b',
+    re.IGNORECASE
+)
+
+
+def format_duration(seconds):
+    """Format duration in seconds to a human-readable string."""
+    if not seconds:
+        return "?"
+    m, s = divmod(int(seconds), 60)
+    if s == 0:
+        return f"{m} min"
+    return f"{m}:{s:02d}"
+
+
+def render_exercise_obsidian(ex):
+    """
+    Render a GeneratedExercise in Obsidian workout format:
+      Exercise Name
+      [warmup reps] reps x [warmup weight] lbs    <- if warmup set in payload
+      [sets] sets x [reps] reps x [weight] lbs
+      [N] reps in reserve                          <- omit for bodyweight/cardio
+
+    The /generate-workout response does NOT include a warmup set object — the
+    GeneratedExercise shape has suggestedSets/suggestedReps/suggestedWeightKg.
+    A warmup set isn't part of the payload, so we skip that line per spec.
+    """
+    name = ex.get("name", "Unknown")
+    is_cardio = ex.get("isCardio", False) or bool(CARDIO_PATTERN.search(name))
+    lines = [name]
+
+    if is_cardio:
+        duration_sec = ex.get("suggestedDurationSec")
+        lines.append(format_duration(duration_sec))
+    else:
+        sets = ex.get("suggestedSets", 3)
+        reps = ex.get("suggestedReps", 10)
+        weight_kg = ex.get("suggestedWeightKg", 0)
+        weight_lbs = weight_kg * KG_TO_LBS
+        # Round to nearest 2.5 lbs
+        weight_lbs_rounded = round_to_nearest(weight_lbs, 2.5)
+
+        if weight_kg > 0:
+            lines.append(f"{sets} sets x {reps} reps x {weight_lbs_rounded:.1f} lbs")
+        else:
+            # Bodyweight — no weight shown
+            lines.append(f"{sets} sets x {reps} reps")
+
+        rep_range = ex.get("repRange")
+        # Only show RIR for weighted non-cardio exercises
+        if weight_kg > 0 and rep_range:
+            # Approximate RIR from rep range (mid-point heuristic: 1-2 RIR)
+            lines.append("1-2 reps in reserve")
+
+    return "\n".join(lines)
+
+
+def build_session_section(generate_data, next_day):
+    """Build the 'Today's session' Markdown block from /generate-workout response."""
+    if not generate_data:
+        return None
+    exercises = generate_data.get("exercises", [])
+    if not exercises:
+        return None
+
+    day_label = next_day.capitalize()
+    blocks = [f"## Today's Session — {day_label} Day", ""]
+    for ex in exercises:
+        blocks.append(render_exercise_obsidian(ex))
+        blocks.append("")
+    return "\n".join(blocks).rstrip()
 
 
 def rule_based_recommendation(rec, dl):
@@ -154,6 +263,77 @@ def llm_recommendation(rec, dl, tl, cut_line):
     return text
 
 
+def send_push_notifications(key, title, body, url="/"):
+    """
+    Send a Web Push to all subscribed devices. Requires pywebpush + VAPID keys.
+    Silently skips if not available. Cleans up expired subscriptions (404/410).
+    """
+    try:
+        from pywebpush import webpush, WebPushException  # type: ignore
+    except ImportError:
+        print("push skipped: pywebpush not installed", file=sys.stderr)
+        return
+
+    vapid_private_key = os.environ.get("FITLOCAL_VAPID_PRIVATE_KEY")
+    vapid_subject = os.environ.get("FITLOCAL_VAPID_SUBJECT")
+    if not vapid_private_key or not vapid_subject:
+        print("push skipped: FITLOCAL_VAPID_PRIVATE_KEY or FITLOCAL_VAPID_SUBJECT not set", file=sys.stderr)
+        return
+
+    subs_data = get("/push-subscriptions", key)
+    if not subs_data:
+        print("push skipped: no subscriptions or fetch failed", file=sys.stderr)
+        return
+
+    payload = json.dumps({"title": title, "body": body, "url": url})
+    expired_endpoints = []
+
+    for sub in subs_data:
+        endpoint = sub.get("endpoint")
+        p256dh = sub.get("keys", {}).get("p256dh")
+        auth = sub.get("keys", {}).get("auth")
+        if not endpoint or not p256dh or not auth:
+            continue
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": endpoint,
+                    "keys": {"p256dh": p256dh, "auth": auth},
+                },
+                data=payload,
+                vapid_private_key=vapid_private_key,
+                vapid_claims={"sub": vapid_subject},
+            )
+            print(f"push sent: {endpoint[:60]}...")
+        except WebPushException as e:
+            status = getattr(e.response, "status_code", None) if hasattr(e, "response") else None
+            if status in (404, 410):
+                print(f"push: subscription expired ({status}), will remove: {endpoint[:60]}...", file=sys.stderr)
+                expired_endpoints.append(endpoint)
+            else:
+                print(f"WARN: push failed for {endpoint[:60]}...: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"WARN: push error for {endpoint[:60]}...: {e}", file=sys.stderr)
+
+    # Clean up expired subscriptions
+    for endpoint in expired_endpoints:
+        r = subprocess.run(
+            [
+                "curl", "-sS", "-m", "10",
+                "-X", "DELETE",
+                "-H", f"Authorization: Bearer {key}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps({"endpoint": endpoint}),
+                BASE + "/push-subscriptions",
+            ],
+            capture_output=True, text=True,
+        )
+        if r.returncode == 0:
+            print(f"push: removed expired subscription {endpoint[:60]}...")
+        else:
+            print(f"WARN: failed to remove expired subscription: {r.stderr.strip()}", file=sys.stderr)
+
+
 def main():
     key = read_key()
     g = get("/goals", key)
@@ -162,6 +342,17 @@ def main():
     rec_raw = get("/recovery-summary", key)
     dl = get("/deload-check", key)
     tl = get("/training-load", key)
+
+    # Fetch recent workouts to infer next PPL day
+    workouts_data = get("/workouts?limit=10", key)
+    next_day = infer_next_ppl_day(workouts_data)
+
+    # Fetch the generated workout plan for today's session
+    generate_data = None
+    try:
+        generate_data = get(f"/generate-workout?dayType={next_day}", key)
+    except Exception as e:
+        print(f"WARN: generate-workout fetch raised exception: {e}", file=sys.stderr)
 
     missing = [name for name, v in
                [("goals", g), ("nutrition", n), ("weights", snaps), ("recovery", rec_raw)]
@@ -219,6 +410,14 @@ def main():
             f"(maintenance {g['maintenanceCalories']}).{intake}", ""]
 
     lines += [f"**Weigh-in:** latest log is {weighin_ref} — weigh in this morning if you haven't yet.", ""]
+
+    # Today's session plan.
+    session_section = build_session_section(generate_data, next_day)
+    if session_section:
+        lines += [session_section, ""]
+    else:
+        lines += [f"**Session plan:** {next_day.capitalize()} day — plan unavailable (generate-workout call failed).", ""]
+
     if missing:
         lines += [f"> ⚠️ Some data was unavailable: {', '.join(missing)}.", ""]
     lines += [f"*Auto-generated from FitLocal prod. Recommendation: {rec_source}.*"]
@@ -230,6 +429,11 @@ def main():
     print(f"{datetime.datetime.now().isoformat(timespec='seconds')} wrote {path} [rec: {rec_source}]"
           + (f" (missing: {', '.join(missing)})" if missing else ""))
     git_sync(VAULT_REPO, path, f"Daily briefing {today.month}-{today.day}-{str(today.year)[2:]}")
+
+    # Part 2: Web Push — send after the note is committed so a push failure never blocks the note
+    push_body = rec_text or f"{next_day.capitalize()} day — check the briefing note."
+    push_title = f"Daily Briefing — {next_day.capitalize()} Day"
+    send_push_notifications(key, push_title, push_body, url="/")
 
 
 if __name__ == "__main__":

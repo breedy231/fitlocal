@@ -99,6 +99,45 @@ sw.addEventListener('fetch', (event) => {
   }
 });
 
+// Web Push events (#78) — daily briefing notifications from the sender script
+sw.addEventListener('push', (event) => {
+  let data: { title?: string; body?: string; url?: string } = {};
+  try {
+    data = event.data?.json() ?? {};
+  } catch {
+    data = { body: event.data?.text() ?? '' };
+  }
+  const title = data.title ?? 'FitLocal';
+  const body = data.body ?? '';
+  const url = data.url ?? '/';
+  event.waitUntil(
+    sw.registration.showNotification(title, {
+      body,
+      tag: 'daily-briefing',
+      renotify: true,
+      data: { url },
+    })
+  );
+});
+
+sw.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url: string = (event.notification.data as { url?: string })?.url ?? '/';
+  event.waitUntil(
+    sw.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      if (sw.clients.openWindow) {
+        return sw.clients.openWindow(url);
+      }
+    })
+  );
+});
+
 // Rest timer notification scheduling — fires reliably even when tab is backgrounded
 let restTimerId: ReturnType<typeof setTimeout> | null = null;
 
