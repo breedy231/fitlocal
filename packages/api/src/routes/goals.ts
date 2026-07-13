@@ -3,6 +3,22 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { KG_TO_LBS } from 'fitlocal-shared';
 
+// Runtime validation (#82) — see routes/sets.ts for the conventions.
+const updateGoalsBody = {
+  type: 'object',
+  additionalProperties: false,
+  minProperties: 1,
+  properties: {
+    maintenanceCalories: { type: ['number', 'null'] },
+    targetCalories: { type: ['number', 'null'] },
+    targetProteinG: { type: ['number', 'null'] },
+    targetWeightKg: { type: ['number', 'null'] },
+    cutStartDate: { type: ['string', 'null'] },
+    cutEndDate: { type: ['string', 'null'] },
+    maxHr: { type: ['number', 'null'] },
+  },
+} as const;
+
 export async function goalRoutes(app: FastifyInstance) {
   // GET /goals — returns current goals or empty defaults
   app.get('/goals', async () => {
@@ -41,7 +57,7 @@ export async function goalRoutes(app: FastifyInstance) {
       cutEndDate?: string;
       maxHr?: number;
     };
-  }>('/goals', async (req) => {
+  }>('/goals', { schema: { body: updateGoalsBody } }, async (req) => {
     const { maintenanceCalories, targetCalories, targetProteinG, targetWeightKg, cutStartDate, cutEndDate, maxHr } = req.body;
 
     const existing = db.all(sql`SELECT id FROM user_goals LIMIT 1`) as any[];
