@@ -11,6 +11,7 @@ import os from 'os';
 import path from 'path';
 import Database from 'better-sqlite3';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { applyErrorHandler } from '../lib/http.js';
 
 const TMP_DB = path.join(os.tmpdir(), `fitlocal-sets-${randomUUID()}.db`);
 
@@ -66,7 +67,18 @@ beforeAll(async () => {
   const { setRoutes } = await import('./sets.js');
 
   app = Fastify();
+  applyErrorHandler(app);
   await app.register(setRoutes);
+  // Synthetic throwers to exercise the error handler's non-validation paths
+  // without DB gymnastics (the test schema declares no FK constraints).
+  app.get('/boom-constraint', async () => {
+    const err = new Error('FOREIGN KEY constraint failed') as Error & { code: string };
+    err.code = 'SQLITE_CONSTRAINT_FOREIGNKEY';
+    throw err;
+  });
+  app.get('/boom-unhandled', async () => {
+    throw new Error('secret internal detail');
+  });
   await app.ready();
 });
 
@@ -124,5 +136,72 @@ describe('PUT /sets/:id', () => {
     });
     expect(putRes.statusCode).toBe(404);
     expect(putRes.json()).toEqual({ error: 'Not found' });
+  });
+});
+
+// Runtime validation + global error handler shapes (#82).
+describe('validation & error shapes', () => {
+  it('rejects POST /sets without workoutExerciseId as a 400 with details', async () => {
+    const res = await app.inject({ method: 'POST', url: '/sets', payload: { reps: 5 } });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error).toBe('Validation failed');
+    expect(body.details.join(' ')).toContain('workoutExerciseId');
+  });
+
+  it('rejects a wrong-typed field as a 400', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/sets',
+      payload: { workoutExerciseId: 1, reps: 'not-a-number' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('Validation failed');
+  });
+
+  it('strips unknown/protected keys instead of mass-assigning them', async () => {
+    const postRes = await app.inject({
+      method: 'POST', url: '/sets',
+      payload: { workoutExerciseId: 1, reps: 3 },
+    });
+    const set = postRes.json();
+
+    // Attempt to overwrite id / re-parent the set — both must be stripped.
+    const putRes = await app.inject({
+      method: 'PUT', url: `/sets/${set.id}`,
+      payload: { completed: true, id: 424242, workoutExerciseId: 424242 },
+    });
+    expect(putRes.statusCode).toBe(200);
+    const updated = putRes.json();
+    expect(updated.id).toBe(set.id);
+    expect(updated.workoutExerciseId).toBe(1);
+    expect(updated.completed).toBe(true);
+  });
+
+  it('rejects an update that strips down to an empty body', async () => {
+    const res = await app.inject({
+      method: 'PUT', url: '/sets/1',
+      payload: { id: 424242 }, // stripped → {} → minProperties fails
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('Validation failed');
+  });
+
+  it('rejects a non-numeric :id as a 400', async () => {
+    const res = await app.inject({ method: 'DELETE', url: '/sets/abc' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('Validation failed');
+  });
+
+  it('maps SQLITE_CONSTRAINT_* errors to 409', async () => {
+    const res = await app.inject({ method: 'GET', url: '/boom-constraint' });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: 'Constraint violation' });
+  });
+
+  it('maps unhandled errors to an opaque 500', async () => {
+    const res = await app.inject({ method: 'GET', url: '/boom-unhandled' });
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual({ error: 'Internal server error' });
+    expect(res.body).not.toContain('secret internal detail');
   });
 });
