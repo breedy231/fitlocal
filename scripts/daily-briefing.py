@@ -32,8 +32,8 @@ BASE = "https://fitlocal-app.fly.dev/api"
 # Kept OUTSIDE iCloud (~/vault, not ~/Documents) so git is the only sync mechanism.
 VAULT_REPO = "/Users/brendanreed/vault"
 VAULT_DIR = os.path.join(VAULT_REPO, "Notion/Notebook/Personal/Fitness")
-LB_PER_KG = 2.2046
-KG_TO_LBS = 2.20462
+LB_PER_KG = 2.20462
+KG_TO_LBS = LB_PER_KG  # alias — same conversion, both names used below
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen3:30b-a3b"   # MoE (3B active) — best speed/quality on this Intel CPU box
@@ -115,12 +115,6 @@ def round_to_nearest(value, increment):
     return round(round(value / increment) * increment, 10)
 
 
-CARDIO_PATTERN = re.compile(
-    r'\b(?:treadmill|elliptical|cycling|rowing|rower|stair\s*(?:stepper|climber|master)|bike|jog(?:ging)?|sprinting|running|swimming|hiking|walking(?!\s+lunge))\b',
-    re.IGNORECASE
-)
-
-
 def format_duration(seconds):
     """Format duration in seconds to a human-readable string."""
     if not seconds:
@@ -144,7 +138,10 @@ def render_exercise_obsidian(ex):
     A warmup set isn't part of the payload, so we skip that line per spec.
     """
     name = ex.get("name", "Unknown")
-    is_cardio = ex.get("isCardio", False) or bool(CARDIO_PATTERN.search(name))
+    # isCardio comes from the generator, which classifies with the canonical
+    # CARDIO_PATTERN in packages/shared/src/cardio.ts — do NOT re-derive it
+    # here (CLAUDE.md: single source of truth, never redefine).
+    is_cardio = ex.get("isCardio", False)
     lines = [name]
 
     if is_cardio:
@@ -159,7 +156,9 @@ def render_exercise_obsidian(ex):
         weight_lbs_rounded = round_to_nearest(weight_lbs, 2.5)
 
         if weight_kg > 0:
-            lines.append(f"{sets} sets x {reps} reps x {weight_lbs_rounded:.1f} lbs")
+            # 165 not 165.0, but keep 167.5
+            weight_str = f"{weight_lbs_rounded:g}"
+            lines.append(f"{sets} sets x {reps} reps x {weight_str} lbs")
         else:
             # Bodyweight — no weight shown
             lines.append(f"{sets} sets x {reps} reps")
@@ -430,8 +429,9 @@ def main():
           + (f" (missing: {', '.join(missing)})" if missing else ""))
     git_sync(VAULT_REPO, path, f"Daily briefing {today.month}-{today.day}-{str(today.year)[2:]}")
 
-    # Part 2: Web Push — send after the note is committed so a push failure never blocks the note
-    push_body = rec_text or f"{next_day.capitalize()} day — check the briefing note."
+    # Part 2: Web Push — send after the note is committed so a push failure never blocks the note.
+    # First line only, truncated: iOS clips notification bodies around ~150 chars.
+    push_body = (rec_text or f"{next_day.capitalize()} day — check the briefing note.").strip().splitlines()[0][:160]
     push_title = f"Daily Briefing — {next_day.capitalize()} Day"
     send_push_notifications(key, push_title, push_body, url="/")
 
