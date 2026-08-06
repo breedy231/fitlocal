@@ -20,6 +20,7 @@ import { routineRoutes } from './routes/routines.js';
 import { equipmentProfileRoutes } from './routes/equipment-profiles.js';
 import { assistantRoutes } from './routes/assistant.js';
 import { hrRoutes } from './routes/hr.js';
+import { applyErrorHandler } from './lib/http.js';
 import { sqlite } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -30,6 +31,8 @@ const port = Number(process.env.PORT) || 3001;
 await import('./migrate.js');
 
 const app = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024 }); // 10MB default
+
+applyErrorHandler(app); // consistent 400/409/500 shapes (#82)
 
 await app.register(cors, {
   origin: true, // allow all origins for local network use

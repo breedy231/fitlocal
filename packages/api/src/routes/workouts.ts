@@ -2,6 +2,116 @@ import { FastifyInstance } from 'fastify';
 import { eq, desc, like, sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 import { startedAtForNewWorkout } from '../lib/session-window.js';
+import { idParams } from '../lib/http.js';
+
+// Runtime validation (#82) — see routes/sets.ts for the conventions.
+// additionalProperties: false strips unknown keys (incl. id / parent ids).
+const createWorkoutBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['date'],
+  properties: {
+    date: { type: 'string' },
+    locationProfile: { type: ['string', 'null'] },
+    notes: { type: ['string', 'null'] },
+  },
+} as const;
+
+const startWorkoutBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['date', 'exercises'],
+  properties: {
+    date: { type: 'string' },
+    notes: { type: ['string', 'null'] },
+    locationProfile: { type: ['string', 'null'] },
+    exercises: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['exerciseId', 'displayOrder', 'sets'],
+        properties: {
+          exerciseId: { type: 'integer' },
+          displayOrder: { type: 'integer' },
+          supersetGroup: { type: ['integer', 'null'] },
+          sets: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['reps', 'weightKg'],
+              properties: {
+                reps: { type: 'integer' },
+                weightKg: { type: 'number' },
+                isWarmup: { type: ['boolean', 'null'] },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+// date stays non-null: the column is NOT NULL, so null must fail as a 400.
+const updateWorkoutBody = {
+  type: 'object',
+  additionalProperties: false,
+  minProperties: 1,
+  properties: {
+    date: { type: 'string' },
+    locationProfile: { type: ['string', 'null'] },
+    notes: { type: ['string', 'null'] },
+    effortRating: { type: ['integer', 'null'] },
+    startedAt: { type: ['string', 'null'] },
+    endedAt: { type: ['string', 'null'] },
+  },
+} as const;
+
+const addWorkoutExerciseBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['exerciseId'],
+  properties: {
+    exerciseId: { type: 'integer' },
+    displayOrder: { type: ['integer', 'null'] },
+    supersetGroup: { type: ['integer', 'null'] },
+    swapReason: { type: ['string', 'null'] },
+  },
+} as const;
+
+const bulkDeleteWorkoutsBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['ids'],
+  properties: {
+    ids: { type: 'array', minItems: 1, items: { type: 'integer' } },
+  },
+} as const;
+
+const createWorkoutExerciseBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['workoutId', 'exerciseId'],
+  properties: {
+    workoutId: { type: 'integer' },
+    exerciseId: { type: 'integer' },
+    displayOrder: { type: ['integer', 'null'] },
+    supersetGroup: { type: ['integer', 'null'] },
+  },
+} as const;
+
+const createSetForExerciseBody = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    reps: { type: ['integer', 'null'] },
+    weightKg: { type: ['number', 'null'] },
+    isWarmup: { type: ['boolean', 'null'] },
+    multiplier: { type: ['number', 'null'] },
+  },
+} as const;
 
 export async function workoutRoutes(app: FastifyInstance) {
   // List all workouts with exercise/set counts
@@ -226,7 +336,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   });
 
   // Create workout
-  app.post<{ Body: { date: string; locationProfile?: string; notes?: string } }>('/workouts', async (req, reply) => {
+  app.post<{ Body: { date: string; locationProfile?: string; notes?: string } }>('/workouts', { schema: { body: createWorkoutBody } }, async (req, reply) => {
     const { date, locationProfile, notes } = req.body;
     const result = db.insert(schema.workouts)
       .values({ date, locationProfile, notes, startedAt: startedAtForNewWorkout(date) })
@@ -251,7 +361,7 @@ export async function workoutRoutes(app: FastifyInstance) {
         }>;
       }>;
     };
-  }>('/workouts/start', async (req, reply) => {
+  }>('/workouts/start', { schema: { body: startWorkoutBody } }, async (req, reply) => {
     const { date, notes, locationProfile, exercises } = req.body;
 
     const result = db.transaction((tx) => {
@@ -292,6 +402,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   // Update workout (PUT)
   app.put<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string; effortRating?: number; startedAt?: string; endedAt?: string } }>(
     '/workouts/:id',
+    { schema: { params: idParams, body: updateWorkoutBody } },
     async (req, reply) => {
       const id = parseInt(req.params.id);
       const result = db.update(schema.workouts).set(req.body).where(eq(schema.workouts.id, id)).returning().get();
@@ -303,6 +414,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   // Update workout (PATCH)
   app.patch<{ Params: { id: string }; Body: { date?: string; locationProfile?: string; notes?: string; effortRating?: number; startedAt?: string; endedAt?: string } }>(
     '/workouts/:id',
+    { schema: { params: idParams, body: updateWorkoutBody } },
     async (req, reply) => {
       const id = parseInt(req.params.id);
       const result = db.update(schema.workouts).set(req.body).where(eq(schema.workouts.id, id)).returning().get();
@@ -314,6 +426,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   // Add exercise to existing workout
   app.post<{ Params: { id: string }; Body: { exerciseId: number; displayOrder?: number; supersetGroup?: number | null; swapReason?: string } }>(
     '/workouts/:id/exercises',
+    { schema: { params: idParams, body: addWorkoutExerciseBody } },
     async (req, reply) => {
       const workoutId = parseInt(req.params.id);
       const { exerciseId, displayOrder = 0, supersetGroup, swapReason } = req.body;
@@ -327,11 +440,8 @@ export async function workoutRoutes(app: FastifyInstance) {
   );
 
   // Bulk delete workouts
-  app.delete<{ Body: { ids: number[] } }>('/workouts/bulk', async (req, reply) => {
+  app.delete<{ Body: { ids: number[] } }>('/workouts/bulk', { schema: { body: bulkDeleteWorkoutsBody } }, async (req, reply) => {
     const { ids } = req.body;
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return reply.status(400).send({ error: 'ids must be a non-empty array' });
-    }
     db.transaction((tx) => {
       for (const id of ids) {
         tx.delete(schema.workouts).where(eq(schema.workouts.id, id)).run();
@@ -341,7 +451,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   });
 
   // Delete workout
-  app.delete<{ Params: { id: string } }>('/workouts/:id', async (req, reply) => {
+  app.delete<{ Params: { id: string } }>('/workouts/:id', { schema: { params: idParams } }, async (req, reply) => {
     const id = parseInt(req.params.id);
     db.delete(schema.workouts).where(eq(schema.workouts.id, id)).run();
     return reply.status(204).send();
@@ -350,7 +460,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   // Create workout_exercise (link exercise to workout)
   app.post<{
     Body: { workoutId: number; exerciseId: number; displayOrder?: number; supersetGroup?: number | null };
-  }>('/workout-exercises', async (req, reply) => {
+  }>('/workout-exercises', { schema: { body: createWorkoutExerciseBody } }, async (req, reply) => {
     const { workoutId, exerciseId, displayOrder = 0, supersetGroup } = req.body;
     const result = db
       .insert(schema.workoutExercises)
@@ -417,7 +527,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   });
 
   // Delete workout_exercise (cascades sets)
-  app.delete<{ Params: { id: string } }>('/workout-exercises/:id', async (req, reply) => {
+  app.delete<{ Params: { id: string } }>('/workout-exercises/:id', { schema: { params: idParams } }, async (req, reply) => {
     const id = parseInt(req.params.id);
     db.delete(schema.workoutExercises).where(eq(schema.workoutExercises.id, id)).run();
     return reply.status(204).send();
@@ -427,7 +537,7 @@ export async function workoutRoutes(app: FastifyInstance) {
   app.post<{
     Params: { id: string };
     Body: { reps?: number; weightKg?: number; isWarmup?: boolean; multiplier?: number };
-  }>('/workout-exercises/:id/sets', async (req, reply) => {
+  }>('/workout-exercises/:id/sets', { schema: { params: idParams, body: createSetForExerciseBody } }, async (req, reply) => {
     const workoutExerciseId = parseInt(req.params.id);
     const result = db
       .insert(schema.sets)

@@ -3,6 +3,24 @@ import { sql, eq, asc } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 import { parseMASPdf } from '../lib/pdf-parser.js';
 import { computeProgression, estimateWeightForNewExercise, classifyExercise, getRepRange } from '../lib/progression.js';
+import { idParams } from '../lib/http.js';
+
+// Runtime validation (#82). Deliberately permissive (additionalProperties:
+// true at every level): this validates external user JSON whose optional
+// fields the handler reads directly — stripping unknown keys would eat data.
+const importProgramJsonBody = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['name', 'days'],
+  properties: {
+    name: { type: 'string', minLength: 1 },
+    days: {
+      type: 'array',
+      minItems: 1,
+      items: { type: 'object', additionalProperties: true },
+    },
+  },
+} as const;
 
 // Normalize exercise name for fuzzy matching: lowercase, strip parentheticals, common prefixes, plurals
 function normalizeExName(name: string): string {
@@ -217,11 +235,8 @@ export async function programRoutes(app: FastifyInstance) {
   });
 
   // Import program from JSON
-  app.post('/programs/import-json', async (req, reply) => {
+  app.post('/programs/import-json', { schema: { body: importProgramJsonBody } }, async (req, reply) => {
     const data = req.body as any;
-    if (!data?.name || !data?.days?.length) {
-      return reply.status(400).send({ error: 'Invalid program JSON: requires name and days' });
-    }
 
     // Fetch all exercises for matching
     const allExercises = db.all<{ id: number; name: string; workouts: number }>(sql`
@@ -278,14 +293,14 @@ export async function programRoutes(app: FastifyInstance) {
   });
 
   // Delete a program
-  app.delete<{ Params: { id: string } }>('/programs/:id', async (req, reply) => {
+  app.delete<{ Params: { id: string } }>('/programs/:id', { schema: { params: idParams } }, async (req, reply) => {
     const id = parseInt(req.params.id);
     db.delete(schema.programs).where(eq(schema.programs.id, id)).run();
     return reply.status(204).send();
   });
 
   // Activate a program (set it as the current program to follow)
-  app.post<{ Params: { id: string } }>('/programs/:id/activate', async (req, reply) => {
+  app.post<{ Params: { id: string } }>('/programs/:id/activate', { schema: { params: idParams } }, async (req, reply) => {
     const id = parseInt(req.params.id);
     const program = db.select().from(schema.programs).where(eq(schema.programs.id, id)).get();
     if (!program) return reply.status(404).send({ error: 'Program not found' });

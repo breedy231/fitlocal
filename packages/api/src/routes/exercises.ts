@@ -2,6 +2,38 @@ import { FastifyInstance } from 'fastify';
 import { eq, like, sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 import { computeProgression } from '../lib/progression.js';
+import { idParams } from '../lib/http.js';
+
+// Runtime validation (#82) — see routes/sets.ts for the conventions.
+const createExerciseBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['name'],
+  properties: {
+    name: { type: 'string', minLength: 1 },
+    primaryMuscles: { type: ['array', 'null'], items: { type: 'string' } },
+    secondaryMuscles: { type: ['array', 'null'], items: { type: 'string' } },
+    equipment: { type: ['array', 'null'], items: { type: 'string' } },
+    movementType: { type: ['string', 'null'] },
+  },
+} as const;
+
+// name stays non-null: the column is NOT NULL.
+const updateExerciseBody = {
+  type: 'object',
+  additionalProperties: false,
+  minProperties: 1,
+  properties: {
+    name: { type: 'string', minLength: 1 },
+    primaryMuscles: { type: ['array', 'null'], items: { type: 'string' } },
+    secondaryMuscles: { type: ['array', 'null'], items: { type: 'string' } },
+    equipment: { type: ['array', 'null'], items: { type: 'string' } },
+    movementType: { type: ['string', 'null'] },
+    description: { type: ['string', 'null'] },
+    imageUrl: { type: ['string', 'null'] },
+    restSeconds: { type: ['integer', 'null'] },
+  },
+} as const;
 
 export async function exerciseRoutes(app: FastifyInstance) {
   // Last performance for a single exercise (used when swapping exercises mid-workout)
@@ -60,12 +92,12 @@ export async function exerciseRoutes(app: FastifyInstance) {
       equipment?: string[];
       movementType?: string;
     };
-  }>('/exercises', async (req, reply) => {
+  }>('/exercises', { schema: { body: createExerciseBody } }, async (req, reply) => {
     const result = db.insert(schema.exercises).values(req.body).returning().get();
     return reply.status(201).send(result);
   });
 
-  app.put<{ Params: { id: string }; Body: Record<string, unknown> }>('/exercises/:id', async (req, reply) => {
+  app.put<{ Params: { id: string }; Body: Record<string, unknown> }>('/exercises/:id', { schema: { params: idParams, body: updateExerciseBody } }, async (req, reply) => {
     const id = parseInt(req.params.id);
     const result = db.update(schema.exercises).set(req.body).where(eq(schema.exercises.id, id)).returning().get();
     if (!result) return reply.status(404).send({ error: 'Not found' });
@@ -80,7 +112,7 @@ export async function exerciseRoutes(app: FastifyInstance) {
     return computeProgression(id, exercise.name, db);
   });
 
-  app.delete<{ Params: { id: string } }>('/exercises/:id', async (req, reply) => {
+  app.delete<{ Params: { id: string } }>('/exercises/:id', { schema: { params: idParams } }, async (req, reply) => {
     const id = parseInt(req.params.id);
     db.delete(schema.exercises).where(eq(schema.exercises.id, id)).run();
     return reply.status(204).send();
