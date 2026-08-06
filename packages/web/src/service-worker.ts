@@ -101,7 +101,7 @@ sw.addEventListener('fetch', (event) => {
 
 // Web Push events (#78) — daily briefing notifications from the sender script
 sw.addEventListener('push', (event) => {
-  let data: { title?: string; body?: string; url?: string } = {};
+  let data: { title?: string; body?: string; url?: string };
   try {
     data = event.data?.json() ?? {};
   } catch {
