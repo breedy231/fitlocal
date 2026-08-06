@@ -23,7 +23,7 @@ export interface Exercise {
   restSeconds: number | null;
 }
 
-export interface ExerciseSearchResult extends Exercise {}
+export type ExerciseSearchResult = Exercise;
 
 /** GET /exercises/:id/progression — output from computeProgression. */
 export interface Progression {

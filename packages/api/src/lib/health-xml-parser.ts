@@ -150,7 +150,7 @@ export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
   try {
     execSync(`unzip -o -q "${zipPath}" -d "${tmpDir}"`, { maxBuffer: 500 * 1024 * 1024 });
   } catch (e: any) {
-    throw new Error(`Failed to unzip: ${e.message}`);
+    throw new Error(`Failed to unzip: ${e.message}`, { cause: e });
   }
 
   // Find export.xml — could be at root or in apple_health_export/

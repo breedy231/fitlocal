@@ -11,6 +11,8 @@
   let newName = $state('');
   let newText = $state('');
   let creating = $state(false);
+  const textPlaceholder =
+    'Paste exercises, one per line:\n\nBench Press\n3x12 Dumbbell Row\nLateral Raise 3x15\nBicep Curl';
 
   async function loadRoutines() {
     loading = true;
@@ -76,7 +78,7 @@
         class="w-full px-3 py-2 rounded-lg bg-neutral-800 text-white text-sm placeholder-neutral-500 border border-neutral-700 focus:outline-none focus:border-green-500"
       />
       <textarea
-        placeholder={"Paste exercises, one per line:\n\nBench Press\n3x12 Dumbbell Row\nLateral Raise 3x15\nBicep Curl"}
+        placeholder={textPlaceholder}
         bind:value={newText}
         rows="8"
         class="w-full px-3 py-2 rounded-lg bg-neutral-800 text-white text-sm placeholder-neutral-500 border border-neutral-700 focus:outline-none focus:border-green-500 resize-none font-mono"

@@ -86,7 +86,7 @@ export async function generateRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { dayType: string; equipment?: string; profileId?: string; supersets?: string; duration?: string } }>(
     '/generate-workout',
     async (req, reply) => {
-      let { dayType, equipment = 'full', profileId, supersets: supersetsParam, duration: durationParam } = req.query;
+      const { dayType, equipment = 'full', profileId, supersets: supersetsParam, duration: durationParam } = req.query;
       if (!dayType) {
         return reply.status(400).send({ error: 'dayType query param required (push, pull, legs, upper, lower, or fullbody)' });
       }
