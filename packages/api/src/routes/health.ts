@@ -4,6 +4,91 @@ import { db, schema } from '../db.js';
 import { parseHealthExportZip } from '../lib/health-xml-parser.js';
 import { lbsToKg } from 'fitlocal-shared';
 
+// Runtime validation (#82) — see routes/sets.ts for the conventions.
+// steps is number (not integer): HealthKit sends float aggregates.
+const healthSnapshotBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['date'],
+  properties: {
+    date: { type: 'string' },
+    restingHr: { type: ['number', 'null'] },
+    hrv: { type: ['number', 'null'] },
+    sleepHours: { type: ['number', 'null'] },
+    calories: { type: ['number', 'null'] },
+    proteinG: { type: ['number', 'null'] },
+    steps: { type: ['number', 'null'] },
+    bodyWeightKg: { type: ['number', 'null'] },
+  },
+} as const;
+
+const healthSyncBody = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    hrv: { type: ['number', 'null'] },
+    restingHr: { type: ['number', 'null'] },
+    sleepHours: { type: ['number', 'null'] },
+    steps: { type: ['number', 'null'] },
+    bodyWeightKg: { type: ['number', 'null'] },
+    bodyWeightLbs: { type: ['number', 'null'] },
+    calories: { type: ['number', 'null'] },
+    proteinG: { type: ['number', 'null'] },
+  },
+} as const;
+
+const syncBatchBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['snapshots'],
+  properties: {
+    snapshots: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['date'],
+        properties: {
+          date: { type: 'string' },
+          hrv: { type: ['number', 'null'] },
+          restingHr: { type: ['number', 'null'] },
+          sleepHours: { type: ['number', 'null'] },
+          steps: { type: ['number', 'null'] },
+          bodyWeightKg: { type: ['number', 'null'] },
+          calories: { type: ['number', 'null'] },
+          proteinG: { type: ['number', 'null'] },
+        },
+      },
+    },
+  },
+} as const;
+
+const importSamplesBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['type', 'samples'],
+  properties: {
+    type: {
+      type: 'string',
+      enum: ['hrv', 'restingHr', 'sleep', 'steps', 'bodyWeight', 'calories'],
+    },
+    samples: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['date', 'value'],
+        properties: {
+          date: { type: 'string' },
+          value: { type: 'number' },
+        },
+      },
+    },
+  },
+} as const;
+
 export async function healthRoutes(app: FastifyInstance) {
   app.get('/health-snapshots', async () => {
     return db.select().from(schema.healthSnapshots).orderBy(schema.healthSnapshots.date);
@@ -20,7 +105,7 @@ export async function healthRoutes(app: FastifyInstance) {
       steps?: number;
       bodyWeightKg?: number;
     };
-  }>('/health-snapshots', async (req, reply) => {
+  }>('/health-snapshots', { schema: { body: healthSnapshotBody } }, async (req, reply) => {
     const result = db.insert(schema.healthSnapshots).values(req.body).returning().get();
     return reply.status(201).send(result);
   });
@@ -37,7 +122,7 @@ export async function healthRoutes(app: FastifyInstance) {
       calories?: number;
       proteinG?: number;
     };
-  }>('/health/sync', async (req, reply) => {
+  }>('/health/sync', { schema: { body: healthSyncBody } }, async (req, reply) => {
     const _d = new Date();
     const date = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
     const raw = req.body;
@@ -102,11 +187,8 @@ export async function healthRoutes(app: FastifyInstance) {
         proteinG?: number;
       }>;
     };
-  }>('/health/sync-batch', async (req, reply) => {
+  }>('/health/sync-batch', { schema: { body: syncBatchBody } }, async (req, reply) => {
     const { snapshots } = req.body;
-    if (!snapshots || !Array.isArray(snapshots) || snapshots.length === 0) {
-      return reply.status(400).send({ error: 'snapshots must be a non-empty array' });
-    }
 
     const dates = snapshots.map(s => s.date).sort();
     req.log.info({ count: snapshots.length, dateRange: `${dates[0]} → ${dates[dates.length - 1]}`, dates }, `health/sync-batch: ${snapshots.length} snapshots`);
@@ -150,11 +232,8 @@ export async function healthRoutes(app: FastifyInstance) {
       type: 'hrv' | 'restingHr' | 'sleep' | 'steps' | 'bodyWeight' | 'calories';
       samples: Array<{ date: string; value: number }>;
     };
-  }>('/health/import-samples', async (req, reply) => {
+  }>('/health/import-samples', { schema: { body: importSamplesBody } }, async (req, reply) => {
     const { type, samples } = req.body;
-    if (!type || !samples || !Array.isArray(samples) || samples.length === 0) {
-      return reply.status(400).send({ error: 'type and non-empty samples array required' });
-    }
     req.log.info({ type, sampleCount: samples.length }, `health/import-samples: ${samples.length} ${type} samples`);
 
     const columnMap: Record<string, string> = {

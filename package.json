@@ -11,6 +11,18 @@
     "dev:web": "npm run dev -w packages/web",
     "dev": "npm run backup && (npm run dev:api & npm run dev:web)",
     "build": "npm run build -w packages/shared && npm run build -w packages/api && npm run build -w packages/web",
+    "lint": "eslint packages --no-warn-ignored --max-warnings=200",
+    "format": "prettier --write packages",
+    "format:check": "prettier --check packages",
     "deploy": "fly deploy"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-svelte": "^3.20.0",
+    "prettier": "^3.9.5",
+    "prettier-plugin-svelte": "^4.1.1",
+    "typescript-eslint": "^8.63.0"
   }
 }

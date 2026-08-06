@@ -2,6 +2,18 @@ import { FastifyInstance } from 'fastify';
 import { sql, eq } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 import { computeProgressionBatch, estimateWeightForNewExercise, classifyExercise, getRepRange } from '../lib/progression.js';
+import { idParams } from '../lib/http.js';
+
+// Runtime validation (#82) — see routes/sets.ts for the conventions.
+const createRoutineBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['name', 'text'],
+  properties: {
+    name: { type: 'string', minLength: 1 },
+    text: { type: 'string', minLength: 1 },
+  },
+} as const;
 
 // Normalize exercise name for fuzzy matching (shared logic with programs)
 function normalizeExName(name: string): string {
@@ -139,11 +151,8 @@ export async function routineRoutes(app: FastifyInstance) {
   });
 
   // Create routine from text (exercise names, one per line)
-  app.post<{ Body: { name: string; text: string } }>('/routines', async (req, reply) => {
-    const { name, text } = req.body as { name?: string; text?: string };
-    if (!name || !text) {
-      return reply.status(400).send({ error: 'name and text are required' });
-    }
+  app.post<{ Body: { name: string; text: string } }>('/routines', { schema: { body: createRoutineBody } }, async (req, reply) => {
+    const { name, text } = req.body;
 
     // Fetch all exercises with workout counts
     const allExercises = db.all<{ id: number; name: string; workouts: number }>(sql`
@@ -203,7 +212,7 @@ export async function routineRoutes(app: FastifyInstance) {
   });
 
   // Delete routine
-  app.delete<{ Params: { id: string } }>('/routines/:id', async (req, reply) => {
+  app.delete<{ Params: { id: string } }>('/routines/:id', { schema: { params: idParams } }, async (req, reply) => {
     const id = parseInt(req.params.id);
     db.delete(schema.routines).where(eq(schema.routines.id, id)).run();
     return reply.status(204).send();

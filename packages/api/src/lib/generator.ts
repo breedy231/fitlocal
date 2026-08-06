@@ -405,7 +405,7 @@ export function generateWorkout(dayType: string, equipment: string[] | null, db:
     const prog = progressionMap.get(e.id)!;
 
     let suggestedSets = prog.sets;
-    let suggestedReps = prog.reps;
+    const suggestedReps = prog.reps;
     let suggestedWeightKg = prog.weightKg;
     let directive = prog.directive;
 
@@ -539,7 +539,7 @@ export function generateFromProgram(
       : prog.reps;
 
     let suggestedSets = targetSets;
-    let suggestedReps = targetReps;
+    const suggestedReps = targetReps;
     let suggestedWeightKg = prog.weightKg;
     let directive = prog.directive;
 
