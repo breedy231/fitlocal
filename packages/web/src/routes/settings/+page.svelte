@@ -191,6 +191,95 @@
     loadExclusions();
   }
 
+  // Web Push notifications (#78)
+  let pushSupported = $state(false);
+  let pushSubscribed = $state(false);
+  let pushBusy = $state(false);
+  let pushStatus = $state('');
+  let pushCurrentEndpoint = $state('');
+
+  // Detect push support and current subscription state — browser-only
+  onMount(async () => {
+    if (typeof window === 'undefined') return;
+    if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
+    pushSupported = true;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        pushSubscribed = true;
+        pushCurrentEndpoint = sub.endpoint;
+      }
+    } catch { /* ignore */ }
+  });
+
+  function urlBase64ToUint8Array(base64String: string): Uint8Array {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  }
+
+  async function enablePush() {
+    pushBusy = true;
+    pushStatus = '';
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') {
+        pushStatus = 'Notification permission denied.';
+        return;
+      }
+      const keyRes = await api<{ publicKey: string | null }>('/push/vapid-public-key');
+      if (!keyRes.publicKey) {
+        pushStatus = 'Push not configured on server (VAPID key missing).';
+        return;
+      }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(keyRes.publicKey),
+      });
+      const json = sub.toJSON() as { endpoint: string; keys?: { p256dh?: string; auth?: string } };
+      await api('/push-subscriptions', {
+        method: 'POST',
+        body: JSON.stringify({
+          endpoint: json.endpoint,
+          keys: { p256dh: json.keys?.p256dh ?? '', auth: json.keys?.auth ?? '' },
+        }),
+      });
+      pushSubscribed = true;
+      pushCurrentEndpoint = json.endpoint;
+      pushStatus = 'Notifications enabled!';
+    } catch (err: any) {
+      pushStatus = err.message || 'Failed to enable notifications';
+    } finally {
+      pushBusy = false;
+    }
+  }
+
+  async function disablePush() {
+    pushBusy = true;
+    pushStatus = '';
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await sub.unsubscribe();
+        await api('/push-subscriptions', {
+          method: 'DELETE',
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+      }
+      pushSubscribed = false;
+      pushCurrentEndpoint = '';
+      pushStatus = 'Notifications disabled.';
+    } catch (err: any) {
+      pushStatus = err.message || 'Failed to disable notifications';
+    } finally {
+      pushBusy = false;
+    }
+  }
+
   // API key
   let apiKey = $state(typeof localStorage !== 'undefined' ? (localStorage.getItem('fitlocal_api_key') ?? '') : '');
   let apiKeySaved = $state(false);
@@ -729,6 +818,45 @@ proteinG: <span class="text-green-400/80">protein</span> (number)</pre>
           </div>
           <p class="text-xs text-neutral-600 mt-1.5">Add header <code class="text-neutral-500">Authorization</code> with this value to the "Get Contents of URL" action in your Shortcut.</p>
         </div>
+      {/if}
+    </div>
+
+    <!-- Daily Briefing Notifications -->
+    <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
+      <h2 class="font-medium mb-3">Daily Briefing Notifications</h2>
+      <p class="text-sm text-neutral-400 mb-4">
+        Receive a push notification each morning with your training recommendation, cut progress, and nutrition targets.
+        Only works in the installed PWA (iOS 16.4+).
+      </p>
+      {#if !pushSupported}
+        <p class="text-sm text-neutral-500">
+          Push notifications are not available in this browser. Install the app to your Home Screen to enable them (iOS 16.4+).
+        </p>
+      {:else if pushSubscribed}
+        <div class="mb-3 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-green-500 shrink-0"></span>
+          <span class="text-sm text-green-400">Notifications enabled</span>
+        </div>
+        <button
+          onclick={disablePush}
+          disabled={pushBusy}
+          class="w-full py-3 px-4 rounded-lg bg-neutral-800 text-neutral-300 text-sm font-medium min-h-[48px] disabled:opacity-50 touch-manipulation"
+        >
+          {pushBusy ? 'Disabling...' : 'Disable Notifications'}
+        </button>
+      {:else}
+        <button
+          onclick={enablePush}
+          disabled={pushBusy}
+          class="w-full py-3 px-4 rounded-lg bg-green-600 text-white text-sm font-medium min-h-[48px] disabled:opacity-50 touch-manipulation"
+        >
+          {pushBusy ? 'Enabling...' : 'Enable Daily Briefing Notifications'}
+        </button>
+      {/if}
+      {#if pushStatus}
+        <p class="text-sm mt-2 {pushStatus.includes('enabled') || pushStatus.includes('Notification') && !pushStatus.includes('denied') && !pushStatus.includes('Failed') ? 'text-green-400' : 'text-neutral-400'}">
+          {pushStatus}
+        </p>
       {/if}
     </div>
 
