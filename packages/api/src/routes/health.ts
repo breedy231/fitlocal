@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
-import { parseHealthExportZip } from '../lib/health-xml-parser.js';
+import { parseHealthExportZip, computeLatestByMetric } from '../lib/health-xml-parser.js';
 import { lbsToKg } from 'fitlocal-shared';
 
 // Runtime validation (#82) — see routes/sets.ts for the conventions.
@@ -354,12 +354,14 @@ export async function healthRoutes(app: FastifyInstance) {
     });
 
     const dateRange = `${snapshots[0].date} to ${snapshots[snapshots.length - 1].date}`;
+    const latestByMetric = computeLatestByMetric(snapshots);
 
     return reply.status(200).send({
       daysProcessed: snapshots.length,
       dateRange,
       ...results,
       sampleCounts: stats,
+      latestByMetric,
     });
   });
 }

@@ -304,6 +304,19 @@
   let showBackfill = $state(false);
   let healthImporting = $state(false);
   let healthImportResult = $state('');
+  let healthImportLatest = $state<{ label: string; date: string | null; stale: boolean }[]>([]);
+
+  const STALE_DAYS = 7;
+
+  const METRIC_DISPLAY_ORDER: Array<{ key: string; label: string }> = [
+    { key: 'bodyWeight', label: 'Body weight' },
+    { key: 'steps', label: 'Steps' },
+    { key: 'calories', label: 'Calories' },
+    { key: 'protein', label: 'Protein' },
+    { key: 'hrv', label: 'HRV' },
+    { key: 'restingHr', label: 'Resting HR' },
+    { key: 'sleep', label: 'Sleep' },
+  ];
 
   function getApiBase(): string {
     if (typeof window === 'undefined') return 'http://localhost:3001';
@@ -323,6 +336,7 @@
 
     healthImporting = true;
     healthImportResult = '';
+    healthImportLatest = [];
     try {
       const buffer = await file.arrayBuffer();
       const storedKey = typeof localStorage !== 'undefined' ? localStorage.getItem('fitlocal_api_key') : null;
@@ -339,12 +353,26 @@
         throw new Error(err.error || `Import failed: ${res.status}`);
       }
       const result = await res.json();
-      const counts = result.sampleCounts || {};
-      const details = Object.entries(counts).map(([k, v]) => `${k}: ${v}`).join(', ');
-      healthImportResult = `Imported ${result.daysProcessed} days (${result.dateRange}). ${result.inserted} new, ${result.updated} updated. Samples: ${details}`;
+      healthImportResult = `Imported ${result.daysProcessed} days (${result.dateRange}). ${result.inserted} new, ${result.updated} updated.`;
+
+      const latestByMetric: Record<string, string> = result.latestByMetric || {};
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      healthImportLatest = METRIC_DISPLAY_ORDER.map(({ key, label }) => {
+        const dateStr = latestByMetric[key] ?? null;
+        let stale = true;
+        if (dateStr) {
+          const d = new Date(dateStr + 'T00:00:00');
+          const diffDays = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+          stale = diffDays > STALE_DAYS;
+        }
+        return { label, date: dateStr, stale };
+      });
+
       showToast('Health data imported!', 'success');
     } catch (err: any) {
       healthImportResult = err.message || 'Import failed';
+      healthImportLatest = [];
       showToast(healthImportResult, 'error');
     } finally {
       healthImporting = false;
@@ -620,6 +648,16 @@
         <p class="text-xs mt-2 {healthImportResult.startsWith('Imported') ? 'text-green-400' : 'text-red-400'} leading-relaxed">
           {healthImportResult}
         </p>
+        {#if healthImportLatest.length}
+          <div class="mt-2 rounded-lg bg-neutral-800 px-3 py-2">
+            {#each healthImportLatest as item}
+              <div class="flex justify-between text-xs py-0.5">
+                <span class="text-neutral-400">{item.label}</span>
+                <span class={item.stale ? 'text-amber-400' : 'text-neutral-300'}>{item.date ?? 'no data'} {item.stale ? '⚠️' : ''}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
       {/if}
 
       <p class="text-xs text-neutral-600 mt-2">Imports HRV, resting heart rate, sleep, steps, body weight, calories, and protein. Safe to re-import — data is merged by date.</p>

@@ -316,6 +316,38 @@ export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
   return { snapshots, stats };
 }
 
+/**
+ * For each metric, find the most recent date that had a non-null value.
+ * Returns a map from stat key to YYYY-MM-DD date string.
+ * Keys: hrv, restingHr, steps, bodyWeight, calories, protein, sleep
+ * Only keys with at least one non-null value are included.
+ */
+export function computeLatestByMetric(snapshots: DaySnapshot[]): Record<string, string> {
+  const latest: Record<string, string> = {};
+
+  const fieldToKey: Array<[keyof DaySnapshot, string]> = [
+    ['hrv', 'hrv'],
+    ['restingHr', 'restingHr'],
+    ['steps', 'steps'],
+    ['bodyWeightKg', 'bodyWeight'],
+    ['calories', 'calories'],
+    ['proteinG', 'protein'],
+    ['sleepHours', 'sleep'],
+  ];
+
+  for (const snapshot of snapshots) {
+    for (const [field, key] of fieldToKey) {
+      if (snapshot[field] !== null && snapshot[field] !== undefined) {
+        if (!(key in latest) || snapshot.date > latest[key]) {
+          latest[key] = snapshot.date;
+        }
+      }
+    }
+  }
+
+  return latest;
+}
+
 function findFile(dir: string, name: string): string[] {
   const results: string[] = [];
   try {
