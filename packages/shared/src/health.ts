@@ -62,4 +62,5 @@ export interface HealthImportAppleResponse {
   inserted: number;
   updated: number;
   sampleCounts: Record<string, number>;
+  latestByMetric: Record<string, string>;
 }
