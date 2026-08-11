@@ -45,11 +45,12 @@ interface RawSample {
   value: number;
 }
 
-interface SleepInterval {
+export interface SleepInterval {
   date: string; // attributed date (wake-up date)
   startMs: number;
   endMs: number;
   creationDate: string; // groups segments into sessions
+  sourceName: string;
 }
 
 // Parse a single <Record .../> line from the XML using regex (streaming, no DOM needed)
@@ -113,12 +114,17 @@ function parseSleepLine(line: string): SleepInterval | null {
   if (end.getTime() <= start.getTime()) return null;
 
   const creationDate = creationMatch ? creationMatch[1] : endMatch[1];
+  const sourceMatch = line.match(/sourceName="([^"]+)"/);
+  const sourceName = sourceMatch ? sourceMatch[1] : 'unknown';
   // Date will be assigned at session level, not per-segment
-  return { date: '', startMs: start.getTime(), endMs: end.getTime(), creationDate };
+  return { date: '', startMs: start.getTime(), endMs: end.getTime(), creationDate, sourceName };
 }
 
+// Defense-in-depth safety net: a single date should never exceed this many sleep hours
+const MAX_SLEEP_HOURS = 16;
+
 // Merge overlapping intervals and return total hours
-function mergeAndSumSleepHours(intervals: SleepInterval[]): number {
+export function mergeAndSumSleepHours(intervals: SleepInterval[]): number {
   if (intervals.length === 0) return 0;
   // Sort by start time
   intervals.sort((a, b) => a.startMs - b.startMs);
@@ -134,6 +140,79 @@ function mergeAndSumSleepHours(intervals: SleepInterval[]): number {
   }
   const totalMs = merged.reduce((sum, m) => sum + (m.end - m.start), 0);
   return totalMs / (1000 * 60 * 60);
+}
+
+/**
+ * Given intervals from multiple sources (e.g. Apple Watch + a third-party sleep app),
+ * pick the source whose merged interval total is the highest and return only its intervals.
+ * This eliminates double-counting when two apps record the same night independently.
+ *
+ * Trade-off: if a user genuinely uses one app for naps and another for nights on the same
+ * attributed date, the smaller source is dropped — accepted to eliminate impossible totals.
+ */
+export function pickBestSourceIntervals(intervals: SleepInterval[]): SleepInterval[] {
+  if (intervals.length === 0) return [];
+
+  // Group by sourceName
+  const bySource = new Map<string, SleepInterval[]>();
+  for (const si of intervals) {
+    if (!bySource.has(si.sourceName)) bySource.set(si.sourceName, []);
+    bySource.get(si.sourceName)!.push(si);
+  }
+
+  // Single source — return as-is
+  if (bySource.size === 1) return intervals;
+
+  // Pick source with max merged hours; tie-break by lexicographically smallest name
+  let bestSource = '';
+  let bestHours = -1;
+  for (const [sourceName, sourceIntervals] of bySource) {
+    const hours = mergeAndSumSleepHours([...sourceIntervals]); // copy to avoid mutation
+    if (hours > bestHours || (hours === bestHours && sourceName < bestSource)) {
+      bestHours = hours;
+      bestSource = sourceName;
+    }
+  }
+
+  return bySource.get(bestSource)!;
+}
+
+/**
+ * Group sleep intervals into sessions by creationDate, then attribute each session to
+ * its wake-up date (the local date of the latest segment's creationDate). Preserves the
+ * same attribution logic as the original inline code in parseHealthExportZip.
+ */
+export function groupSleepByDate(intervals: SleepInterval[]): Map<string, SleepInterval[]> {
+  const sleepSessions = new Map<string, SleepInterval[]>();
+  for (const si of intervals) {
+    if (!sleepSessions.has(si.creationDate)) sleepSessions.set(si.creationDate, []);
+    sleepSessions.get(si.creationDate)!.push(si);
+  }
+
+  const sleepByDate = new Map<string, SleepInterval[]>();
+  for (const [, segments] of sleepSessions) {
+    // Attribute session to the local date of the latest segment's creation date
+    // (creationDate is when Apple Watch uploaded, always after wake-up on the same local date)
+    const latestSegment = segments.reduce((a, b) => b.endMs > a.endMs ? b : a);
+    const sessionDate = extractLocalDate(latestSegment.creationDate);
+
+    if (!sleepByDate.has(sessionDate)) sleepByDate.set(sessionDate, []);
+    sleepByDate.get(sessionDate)!.push(...segments);
+  }
+
+  return sleepByDate;
+}
+
+/**
+ * Compute the canonical sleep hours for a set of intervals attributed to one date:
+ * 1. Pick the best single source (eliminates multi-source double-counting)
+ * 2. Merge overlapping segments (handles fragmented staged-sleep from one app)
+ * 3. Clamp to MAX_SLEEP_HOURS (defense-in-depth)
+ */
+export function computeSleepHoursForDate(intervals: SleepInterval[]): number {
+  const best = pickBestSourceIntervals(intervals);
+  const hours = mergeAndSumSleepHours(best);
+  return Math.min(hours, MAX_SLEEP_HOURS);
 }
 
 export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
@@ -206,24 +285,9 @@ export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
   // Cleanup
   try { execSync(`rm -rf "${tmpDir}"`); } catch { /* ignore */ }
 
-  // Group sleep segments into sessions by creationDate, then attribute each
-  // session to its wake-up date (max endMs). Merge overlapping sessions per date.
-  const sleepSessions = new Map<string, SleepInterval[]>();
-  for (const si of sleepIntervals) {
-    if (!sleepSessions.has(si.creationDate)) sleepSessions.set(si.creationDate, []);
-    sleepSessions.get(si.creationDate)!.push(si);
-  }
-
-  const sleepByDate = new Map<string, SleepInterval[]>();
-  for (const [, segments] of sleepSessions) {
-    // Attribute session to the local date of the latest segment's creation date
-    // (creationDate is when Apple Watch uploaded, always after wake-up on the same local date)
-    const latestSegment = segments.reduce((a, b) => b.endMs > a.endMs ? b : a);
-    const sessionDate = extractLocalDate(latestSegment.creationDate);
-
-    if (!sleepByDate.has(sessionDate)) sleepByDate.set(sessionDate, []);
-    sleepByDate.get(sessionDate)!.push(...segments);
-  }
+  // Group sleep segments into sessions by creationDate, attribute each to its wake-up date,
+  // then pick the best single source per date to eliminate multi-source double-counting.
+  const sleepByDate = groupSleepByDate(sleepIntervals);
 
   // Collect all dates
   const allDates = new Set([...byDate.keys(), ...sleepByDate.keys()]);
@@ -232,7 +296,7 @@ export async function parseHealthExportZip(zipBuffer: Buffer): Promise<{
   for (const date of allDates) {
     const day = byDate.get(date);
     const sleepInts = sleepByDate.get(date);
-    const sleepHours = sleepInts ? mergeAndSumSleepHours(sleepInts) : 0;
+    const sleepHours = sleepInts ? computeSleepHoursForDate(sleepInts) : 0;
 
     snapshots.push({
       date,
