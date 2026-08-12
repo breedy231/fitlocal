@@ -23,3 +23,6 @@ fitlocal.db.CORRUPT.*
 .claude/settings.local.json
 # Playwright MCP output directory
 .playwright-mcp/
+
+# Personal-data screenshots — never commit (see issue #87)
+.github/test-screenshots/
