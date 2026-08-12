@@ -133,6 +133,21 @@ export async function workoutSessionRoutes(app: FastifyInstance) {
       try {
         results.push(processSession(session, now));
       } catch (err) {
+        // Idempotency race: a concurrent POST with the same externalId can slip
+        // past the idempotency SELECT and collide on idx_sets_external_id. The
+        // other writer has since committed, so re-running finds that set and
+        // takes the 'updated' path — the correct idempotent outcome.
+        if (isUniqueExternalIdError(err)) {
+          try {
+            results.push(processSession(session, now));
+            continue;
+          } catch (retryErr) {
+            req.log.error({ err: retryErr }, 'workout-sessions: retry after external_id collision failed');
+            const externalId = typeof session?.externalId === 'string' ? session.externalId : '';
+            results.push({ externalId, status: 'invalid', reason: 'internal_error' });
+            continue;
+          }
+        }
         req.log.error({ err }, 'workout-sessions: session processing failed');
         const externalId = typeof session?.externalId === 'string' ? session.externalId : '';
         results.push({ externalId, status: 'invalid', reason: 'internal_error' });
@@ -141,6 +156,17 @@ export async function workoutSessionRoutes(app: FastifyInstance) {
 
     return reply.status(201).send({ results });
   });
+}
+
+// better-sqlite3 raises SqliteError with code 'SQLITE_CONSTRAINT_UNIQUE' and a
+// message naming the index's column when idx_sets_external_id is violated.
+function isUniqueExternalIdError(err: unknown): boolean {
+  const e = err as { code?: string; message?: string } | null;
+  return (
+    e?.code === 'SQLITE_CONSTRAINT_UNIQUE' &&
+    typeof e.message === 'string' &&
+    e.message.includes('sets.external_id')
+  );
 }
 
 function processSession(session: SessionInput, now: number): SessionResult {
@@ -431,6 +457,11 @@ function findOverlappingWorkout(
   if (best) return { id: best.id };
 
   // --- Windowless fallback (locked decision #3) ---
+  // This query intentionally casts wide — any same-date workout with any
+  // unclaimed set. It does NOT filter to cardio (the `exercises e` JOIN is not
+  // constrained in the WHERE). The per-workout getCardioExercises() re-check
+  // below is load-bearing: it enforces the exact-or-family cardio match with an
+  // unclaimed set. Do not "simplify" by trusting this SQL alone.
   const localStartDate = localDate(new Date(startMs));
   const fallbackRows = sqlite
     .prepare(
