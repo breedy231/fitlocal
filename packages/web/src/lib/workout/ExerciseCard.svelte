@@ -2,6 +2,7 @@
   import type { ExerciseProgressionReport } from 'fitlocal-shared';
   import SetRow, { type WorkoutSet } from './SetRow.svelte';
   import ExerciseHistoryPanel from './ExerciseHistoryPanel.svelte';
+  import SplitsTable from './SplitsTable.svelte';
 
   type HistoryPoint = ExerciseProgressionReport['dataPoints'][number];
 
@@ -193,6 +194,10 @@
         {adjustWeightLbs}
         onToggleComplete={() => onToggleComplete(set)}
       />
+      <!-- Apple cardio splits (#93), shown under their set when present. -->
+      {#if set.splits && set.splits.length > 0}
+        <SplitsTable splits={set.splits} />
+      {/if}
     {/each}
 
     <!-- Per-exercise RIR: appears after all sets are complete -->

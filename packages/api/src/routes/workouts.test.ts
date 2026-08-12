@@ -33,7 +33,12 @@ beforeAll(async () => {
       date TEXT NOT NULL, location_profile TEXT, notes TEXT,
       effort_rating INTEGER, started_at TEXT, ended_at TEXT, source TEXT
     );
-    CREATE TABLE exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE);
+    CREATE TABLE exercises (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE,
+      rest_seconds INTEGER DEFAULT 60, image_url TEXT,
+      primary_muscles TEXT DEFAULT '[]', secondary_muscles TEXT DEFAULT '[]',
+      equipment TEXT DEFAULT '[]'
+    );
     CREATE TABLE workout_exercises (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workout_id INTEGER NOT NULL, exercise_id INTEGER NOT NULL,
@@ -47,6 +52,11 @@ beforeAll(async () => {
       external_id TEXT, source TEXT, energy_kcal REAL
     );
     CREATE TABLE health_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, body_weight_kg REAL);
+    CREATE TABLE set_splits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, set_id INTEGER NOT NULL,
+      split_index INTEGER NOT NULL, distance_meters REAL NOT NULL,
+      duration_seconds REAL NOT NULL, avg_hr INTEGER
+    );
   `);
   // Body weight for the export's MET-based calorie estimate.
   seed.exec(`INSERT INTO health_snapshots (date, body_weight_kg) VALUES ('2025-01-01', 80);`);
@@ -238,5 +248,53 @@ describe('GET /workouts/export', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].durationMinutes).toBe(5); // 2 * 2.5, no cardio
     expect(rows[0].exerciseType).toBe('strength');
+  });
+});
+
+// GET /workouts/:id — surfaces Apple cardio data for the web UI (#93 step 6):
+// per-set splits (ordered), plus source / externalId / energyKcal passthrough,
+// and the workout-level source.
+describe('GET /workouts/:id splits + Apple source', () => {
+  it('returns ordered splits and source/energyKcal for an Apple cardio set', async () => {
+    const seed = new Database(TMP_DB);
+    const w = Number(seed.prepare("INSERT INTO workouts (date, source) VALUES ('2025-02-01', 'apple_health')").run().lastInsertRowid);
+    const we = Number(seed.prepare('INSERT INTO workout_exercises (workout_id, exercise_id, display_order) VALUES (?, 2, 0)').run(w).lastInsertRowid);
+    const setId = Number(seed.prepare(
+      "INSERT INTO sets (workout_exercise_id, reps, distance_meters, external_id, source, energy_kcal) VALUES (?, 30, 4828.03, 'apple-uuid-splits', 'apple_health', 320)"
+    ).run(we).lastInsertRowid);
+    // Insert splits out of order to prove ORDER BY split_index.
+    const splitStmt = seed.prepare('INSERT INTO set_splits (set_id, split_index, distance_meters, duration_seconds, avg_hr) VALUES (?, ?, ?, ?, ?)');
+    splitStmt.run(setId, 3, 800, 300, 158); // partial last mile
+    splitStmt.run(setId, 1, 1609.344, 540, 142);
+    splitStmt.run(setId, 2, 1609.344, 528, 150);
+    seed.close();
+
+    const res = await app.inject({ method: 'GET', url: `/workouts/${w}` });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.source).toBe('apple_health');
+    const set = body.exercises[0].sets[0];
+    expect(set.source).toBe('apple_health');
+    expect(set.externalId).toBe('apple-uuid-splits');
+    expect(set.energyKcal).toBe(320);
+    // Splits present and ordered by split_index 1,2,3.
+    expect(set.splits.map((s: { splitIndex: number }) => s.splitIndex)).toEqual([1, 2, 3]);
+    expect(set.splits[0]).toMatchObject({ splitIndex: 1, distanceMeters: 1609.344, durationSeconds: 540, avgHr: 142 });
+    expect(set.splits[2].distanceMeters).toBe(800); // partial final split
+  });
+
+  it('returns an empty splits array for a manual (non-Apple) set', async () => {
+    const seed = new Database(TMP_DB);
+    const w = Number(seed.prepare("INSERT INTO workouts (date) VALUES ('2025-02-02')").run().lastInsertRowid);
+    const we = Number(seed.prepare('INSERT INTO workout_exercises (workout_id, exercise_id, display_order) VALUES (?, 1, 0)').run(w).lastInsertRowid);
+    seed.prepare('INSERT INTO sets (workout_exercise_id, reps, weight_kg) VALUES (?, 5, 60)').run(we);
+    seed.close();
+
+    const res = await app.inject({ method: 'GET', url: `/workouts/${w}` });
+    const body = res.json();
+    expect(body.source).toBeNull();
+    const set = body.exercises[0].sets[0];
+    expect(set.splits).toEqual([]);
+    expect(set.source).toBeNull();
   });
 });

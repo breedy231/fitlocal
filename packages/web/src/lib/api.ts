@@ -62,6 +62,13 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   }
 }
 
+// HR summary + time-in-zone for a workout (#59, #93). Returns sampleCount:0
+// (and zones:null) when the workout has no HR samples — callers should treat
+// that as "nothing to show".
+export function getWorkoutHr(id: number): Promise<import('fitlocal-shared').WorkoutHr> {
+  return api<import('fitlocal-shared').WorkoutHr>(`/workouts/${id}/hr`);
+}
+
 // Replay queued requests when coming back online
 if (typeof window !== 'undefined') {
   window.addEventListener('online', async () => {
