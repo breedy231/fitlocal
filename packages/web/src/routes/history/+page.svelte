@@ -4,6 +4,9 @@
   import { goto } from '$app/navigation';
   import CalendarHeatmap from '$lib/CalendarHeatmap.svelte';
   import WorkoutCard from '$lib/workout/WorkoutCard.svelte';
+  import SplitsTable from '$lib/workout/SplitsTable.svelte';
+  import HrSummary from '$lib/workout/HrSummary.svelte';
+  import SourceBadge from '$lib/workout/SourceBadge.svelte';
   import type { WorkoutListItem, WorkoutDetail, CalendarReport } from 'fitlocal-shared';
   import { CARDIO_PATTERN } from 'fitlocal-shared';
 
@@ -261,6 +264,9 @@
                   {#if workout.notes}
                     <span class="ml-2 text-sm text-neutral-500">{workout.notes}</span>
                   {/if}
+                  {#if workout.source === 'apple_health'}
+                    <span class="ml-2"><SourceBadge /></span>
+                  {/if}
                 </div>
               </div>
               <div class="flex items-center gap-3 text-sm text-neutral-500">
@@ -277,6 +283,11 @@
 
           {#if !editMode && expandedId === workout.id}
             <div class="px-4 pb-4">
+              {#if workout.startedAt}
+                <div class="pt-2">
+                  <HrSummary workoutId={workout.id} />
+                </div>
+              {/if}
               <!-- View toggle: detailed list vs. styled card -->
               {#if workout.exercises}
                 <div class="flex justify-end pt-2 pb-3 border-t border-neutral-800">
@@ -321,14 +332,22 @@
                             <div class="text-xs {set.isWarmup ? 'text-neutral-600' : 'text-neutral-400'} font-mono">
                               {#if set.isWarmup}<span class="text-neutral-600 mr-1">W</span>{:else}<span class="text-neutral-600 mr-1">{idx + 1}</span>{/if}
                               {#if cardio}
-                                {set.reps ?? 0} min{#if set.resistance}, resistance {set.resistance}{/if}{#if set.distanceMeters && set.distanceMeters > 0}, {(set.distanceMeters / 1609.344).toFixed(2)} mi{/if}
+                                {set.reps ?? 0} min{#if set.resistance}, resistance {set.resistance}{/if}{#if set.distanceMeters && set.distanceMeters > 0}, {(set.distanceMeters / 1609.344).toFixed(2)} mi{/if}{#if set.energyKcal}, {Math.round(set.energyKcal)} kcal{/if}
                               {:else}
                                 {set.reps ?? 0} reps
                                 {#if set.weightKg && set.weightKg > 0}
                                   @ {kgToLbs(set.weightKg)} lbs
                                 {/if}
                               {/if}
+                              {#if set.source === 'apple_health'}
+                                <span class="ml-1"><SourceBadge compact /></span>
+                              {/if}
                             </div>
+                            {#if set.splits && set.splits.length > 0}
+                              <div class="pl-2 py-1">
+                                <SplitsTable splits={set.splits} />
+                              </div>
+                            {/if}
                           {/each}
                         </div>
                       {/if}

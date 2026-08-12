@@ -204,6 +204,7 @@ export async function workoutRoutes(app: FastifyInstance) {
       set_is_warmup: number | null; set_rpe: number | null; set_multiplier: number | null;
       set_duration_seconds: number | null; set_distance_meters: number | null;
       set_resistance: number | null; set_completed: number | null;
+      set_external_id: string | null; set_source: string | null; set_energy_kcal: number | null;
     }>(sql`
       SELECT
         we.id as we_id, we.exercise_id, we.display_order, we.superset_group,
@@ -214,7 +215,8 @@ export async function workoutRoutes(app: FastifyInstance) {
         s.is_warmup as set_is_warmup, s.rpe as set_rpe, s.multiplier as set_multiplier,
         s.duration_seconds as set_duration_seconds,
         s.distance_meters as set_distance_meters, s.resistance as set_resistance,
-        s.completed as set_completed
+        s.completed as set_completed,
+        s.external_id as set_external_id, s.source as set_source, s.energy_kcal as set_energy_kcal
       FROM workout_exercises we
       JOIN exercises e ON we.exercise_id = e.id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
@@ -258,7 +260,41 @@ export async function workoutRoutes(app: FastifyInstance) {
           distanceMeters: r.set_distance_meters,
           resistance: r.set_resistance,
           completed: !!r.set_completed,
+          // Apple cardio ingest (#93) — NULL for manual sets.
+          externalId: r.set_external_id,
+          source: r.set_source,
+          energyKcal: r.set_energy_kcal,
+          splits: [],
         });
+      }
+    }
+
+    // Attach per-set splits (Apple cardio, #93). Ordered by split_index so the
+    // last (possibly partial) mile stays last. Grouped by set_id into each set.
+    const allSetIds = Array.from(exerciseMap.values()).flatMap((e: any) => e.sets.map((s: any) => s.id as number));
+    if (allSetIds.length > 0) {
+      const splitRows = db.all<{
+        set_id: number; split_index: number; distance_meters: number; duration_seconds: number; avg_hr: number | null;
+      }>(sql`
+        SELECT set_id, split_index, distance_meters, duration_seconds, avg_hr
+        FROM set_splits
+        WHERE set_id IN (${sql.join(allSetIds.map((sid) => sql`${sid}`), sql`, `)})
+        ORDER BY set_id, split_index ASC
+      `);
+      const splitsBySet = new Map<number, { splitIndex: number; distanceMeters: number; durationSeconds: number; avgHr: number | null }[]>();
+      for (const r of splitRows) {
+        if (!splitsBySet.has(r.set_id)) splitsBySet.set(r.set_id, []);
+        splitsBySet.get(r.set_id)!.push({
+          splitIndex: r.split_index,
+          distanceMeters: r.distance_meters,
+          durationSeconds: r.duration_seconds,
+          avgHr: r.avg_hr,
+        });
+      }
+      for (const ex of exerciseMap.values()) {
+        for (const set of ex.sets) {
+          set.splits = splitsBySet.get(set.id) ?? [];
+        }
       }
     }
 
