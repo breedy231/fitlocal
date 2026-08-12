@@ -3,6 +3,7 @@ import { eq, desc, like, sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 import { startedAtForNewWorkout } from '../lib/session-window.js';
 import { idParams } from '../lib/http.js';
+import { CARDIO_PATTERN } from 'fitlocal-shared';
 
 // Runtime validation (#82) — see routes/sets.ts for the conventions.
 // additionalProperties: false strips unknown keys (incl. id / parent ids).
@@ -483,47 +484,78 @@ export async function workoutRoutes(app: FastifyInstance) {
     `);
     const bodyWeightKg = weightRow?.body_weight_kg || 80; // fallback 80kg
 
-    const rows = db.all<{
+    // Pull one row per set (with its exercise name + Apple-source flag) rather
+    // than pre-aggregating in SQL. Cardio-vs-strength is classified per set in JS
+    // via the shared CARDIO_PATTERN (single source of truth — the old hardcoded
+    // IN(...) lists omitted Hiking / Stair Stepper / Swimming, so manual cardio
+    // for those was silently dropped). Apple-sourced sets (external_id IS NOT NULL,
+    // i.e. source='apple_health') already live in Apple Health, so re-exporting
+    // their energy would double-count — they contribute 0 min / 0 kcal.
+    const setRows = db.all<{
       date: string;
-      strength_sets: number;
-      cardio_minutes: number;
-      has_cardio: number;
+      exercise_name: string;
+      reps: number | null;
+      is_apple: number;
     }>(sql`
       SELECT w.date,
-        SUM(CASE WHEN e.name NOT IN ('Walking','Walking - Treadmill','Cycling','Cycling - Stationary',
-          'Elliptical','Rowing','Running','Running - Treadmill')
-          THEN 1 ELSE 0 END) as strength_sets,
-        COALESCE(SUM(CASE WHEN e.name IN ('Walking','Walking - Treadmill','Cycling','Cycling - Stationary',
-          'Elliptical','Rowing','Running','Running - Treadmill')
-          THEN s.reps ELSE 0 END), 0) as cardio_minutes,
-        MAX(CASE WHEN e.name IN ('Walking','Walking - Treadmill','Cycling','Cycling - Stationary',
-          'Elliptical','Rowing','Running','Running - Treadmill')
-          THEN 1 ELSE 0 END) as has_cardio
+        e.name as exercise_name,
+        s.reps as reps,
+        CASE WHEN s.external_id IS NOT NULL THEN 1 ELSE 0 END as is_apple
       FROM workouts w
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN exercises e ON we.exercise_id = e.id
       LEFT JOIN sets s ON s.workout_exercise_id = we.id
       WHERE ${dateFilter}
-      GROUP BY w.id
       ORDER BY w.date
     `);
 
-    return rows.map(r => {
+    // Aggregate the exported (manual only) portion per date.
+    const perDate = new Map<string, { strengthSets: number; cardioMinutes: number; hasCardio: boolean; hasStrength: boolean }>();
+    for (const row of setRows) {
+      let agg = perDate.get(row.date);
+      if (!agg) {
+        agg = { strengthSets: 0, cardioMinutes: 0, hasCardio: false, hasStrength: false };
+        perDate.set(row.date, agg);
+      }
+      // Apple-sourced sets contribute nothing to the writeback (avoid double-count).
+      if (row.is_apple) continue;
+      // A workout_exercise with no sets yields a LEFT JOIN row with reps=null and
+      // is_apple=0 — skip it (an empty exercise shouldn't register as strength).
+      if (row.reps === null) continue;
+      if (CARDIO_PATTERN.test(row.exercise_name)) {
+        agg.cardioMinutes += row.reps; // reps = minutes for cardio exercises
+        agg.hasCardio = true;
+      } else {
+        agg.strengthSets += 1;
+        agg.hasStrength = true;
+      }
+    }
+
+    const result: { date: string; durationMinutes: number; caloriesBurned: number; exerciseType: string }[] = [];
+    for (const [date, agg] of perDate) {
       // MET-based estimation: strength ~4 METs, cardio ~5 METs (walking/cycling mix)
       // Formula: MET * bodyWeightKg * durationHours
-      const strengthMinutes = r.strength_sets * 2.5; // ~2.5 min per set including rest
-      const cardioMinutes = r.cardio_minutes; // reps = minutes for cardio exercises
+      const strengthMinutes = agg.strengthSets * 2.5; // ~2.5 min per set including rest
+      const cardioMinutes = agg.cardioMinutes;
       const strengthCals = 4 * bodyWeightKg * (strengthMinutes / 60);
       const cardioCals = 5 * bodyWeightKg * (cardioMinutes / 60);
       const totalMinutes = Math.round(strengthMinutes + cardioMinutes);
 
-      return {
-        date: r.date,
+      // Drop rows that net to 0 exported minutes — e.g. a standalone Apple workout
+      // whose sets are all Apple-sourced. Apple already has that session verbatim.
+      if (totalMinutes === 0) continue;
+
+      const exerciseType = agg.hasCardio && agg.hasStrength ? 'mixed' : agg.hasCardio ? 'cardio' : 'strength';
+
+      result.push({
+        date,
         durationMinutes: totalMinutes,
         caloriesBurned: Math.round(strengthCals + cardioCals),
-        exerciseType: r.has_cardio ? 'mixed' : 'strength',
-      };
-    });
+        exerciseType,
+      });
+    }
+
+    return result;
   });
 
   // Delete workout_exercise (cascades sets)
