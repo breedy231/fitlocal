@@ -9,6 +9,9 @@ export const workouts = sqliteTable('workouts', {
   effortRating: integer('effort_rating'),
   startedAt: text('started_at'),
   endedAt: text('ended_at'),
+  // 'apple_health' only for standalone workouts created by Apple cardio ingest
+  // (#93). Manual workouts stay NULL.
+  source: text('source'),
 });
 
 export const exercises = sqliteTable('exercises', {
@@ -45,6 +48,10 @@ export const sets = sqliteTable('sets', {
   distanceMeters: real('distance_meters'),
   resistance: real('resistance'),
   completed: integer('completed', { mode: 'boolean' }).default(false),
+  // Apple cardio ingest (#93). All nullable so manual sets are unaffected.
+  externalId: text('external_id'), // Apple HKWorkout UUID — idempotency key (partial-unique index)
+  source: text('source'), // 'apple_health' when measured fields came from Apple, else NULL
+  energyKcal: real('energy_kcal'), // Apple-measured active energy for the session
 });
 
 export const muscleGroups = sqliteTable('muscle_groups', {
@@ -154,6 +161,17 @@ export const workoutHrSamples = sqliteTable('workout_hr_samples', {
   workoutId: integer('workout_id').notNull().references(() => workouts.id, { onDelete: 'cascade' }),
   t: text('t').notNull(),
   bpm: integer('bpm').notNull(),
+});
+
+// Per-set running/cycling splits from an Apple cardio session (#93). Cascade-
+// deletes with the set. split_index is 1-based; distance/duration required.
+export const setSplits = sqliteTable('set_splits', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  setId: integer('set_id').notNull().references(() => sets.id, { onDelete: 'cascade' }),
+  splitIndex: integer('split_index').notNull(),
+  distanceMeters: real('distance_meters').notNull(),
+  durationSeconds: real('duration_seconds').notNull(),
+  avgHr: integer('avg_hr'),
 });
 
 // Web Push subscriptions (#78) — one row per subscribed browser/device.

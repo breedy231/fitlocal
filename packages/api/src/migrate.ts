@@ -414,5 +414,45 @@ sqlite.exec(`
   );
 `);
 
+// Apple cardio-session ingest (#93). Cardio isn't a separate entity — it's a
+// workout_exercise + sets matching CARDIO_PATTERN inside a workout — so ingestion
+// enriches a set in place. These columns tag a set as Apple-sourced and carry the
+// measured energy; all nullable so the manual logging flow is untouched (NULL
+// source = hand-logged).
+//   external_id: Apple HKWorkout UUID, the idempotency key (one Apple session ↔ one set)
+//   source:      'apple_health' when measured fields came from Apple, else NULL
+//   energy_kcal: Apple-measured active energy for the session
+for (const col of [
+  'ALTER TABLE sets ADD COLUMN external_id TEXT',
+  'ALTER TABLE sets ADD COLUMN source TEXT',
+  'ALTER TABLE sets ADD COLUMN energy_kcal REAL',
+]) {
+  try { sqlite.exec(col); } catch { /* Column already exists */ }
+}
+
+// Hard idempotency for Apple ingest: one Apple session maps to exactly one set.
+// Partial index so the many manual sets (external_id IS NULL) are exempt.
+sqlite.exec(
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_sets_external_id ON sets(external_id) WHERE external_id IS NOT NULL`
+);
+
+// workouts.source: 'apple_health' only for standalone workouts created by Apple
+// ingest (no overlapping manual workout). Manual workouts stay NULL.
+try { sqlite.exec('ALTER TABLE workouts ADD COLUMN source TEXT'); } catch { /* exists */ }
+
+// Per-set running/cycling splits from an Apple cardio session. Cascade-deletes
+// with the set so splits die with their cardio set.
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS set_splits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    set_id INTEGER NOT NULL REFERENCES sets(id) ON DELETE CASCADE,
+    split_index INTEGER NOT NULL,
+    distance_meters REAL NOT NULL,
+    duration_seconds REAL NOT NULL,
+    avg_hr INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_set_splits_set_id ON set_splits(set_id);
+`);
+
 console.log('Database migrated successfully');
 sqlite.close();

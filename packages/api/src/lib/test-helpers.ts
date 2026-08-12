@@ -19,7 +19,8 @@ export function createTestDb() {
       notes TEXT,
       effort_rating INTEGER,
       started_at TEXT,
-      ended_at TEXT
+      ended_at TEXT,
+      source TEXT
     );
 
     CREATE TABLE IF NOT EXISTS exercises (
@@ -55,7 +56,19 @@ export function createTestDb() {
       completed INTEGER DEFAULT 0,
       duration_seconds INTEGER,
       distance_meters REAL,
-      resistance REAL
+      resistance REAL,
+      external_id TEXT,
+      source TEXT,
+      energy_kcal REAL
+    );
+
+    CREATE TABLE IF NOT EXISTS set_splits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      set_id INTEGER NOT NULL REFERENCES sets(id) ON DELETE CASCADE,
+      split_index INTEGER NOT NULL,
+      distance_meters REAL NOT NULL,
+      duration_seconds REAL NOT NULL,
+      avg_hr INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS health_snapshots (

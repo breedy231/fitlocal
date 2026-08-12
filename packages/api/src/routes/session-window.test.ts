@@ -33,7 +33,7 @@ beforeAll(async () => {
     CREATE TABLE workouts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date TEXT NOT NULL, location_profile TEXT, notes TEXT,
-      effort_rating INTEGER, started_at TEXT, ended_at TEXT
+      effort_rating INTEGER, started_at TEXT, ended_at TEXT, source TEXT
     );
     CREATE TABLE exercises (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);
     CREATE TABLE workout_exercises (
@@ -46,7 +46,8 @@ beforeAll(async () => {
       workout_exercise_id INTEGER NOT NULL,
       reps INTEGER, weight_kg REAL, is_warmup INTEGER DEFAULT 0, rpe REAL,
       multiplier REAL DEFAULT 1.0, duration_seconds INTEGER, distance_meters REAL,
-      resistance REAL, completed INTEGER DEFAULT 0
+      resistance REAL, completed INTEGER DEFAULT 0,
+      external_id TEXT, source TEXT, energy_kcal REAL
     );
     CREATE TABLE workout_hr_samples (
       id INTEGER PRIMARY KEY AUTOINCREMENT, workout_id INTEGER NOT NULL, t TEXT NOT NULL, bpm INTEGER NOT NULL
