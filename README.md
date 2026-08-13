@@ -1,6 +1,29 @@
 # FitLocal
 
+[![CI](https://github.com/breedy231/fitlocal/actions/workflows/ci.yml/badge.svg)](https://github.com/breedy231/fitlocal/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Self-hosted workout tracker PWA — a Fitbod replacement you own. No subscriptions, no cloud lock-in. Single-user by design (no multi-tenancy). Production runs on Fly.io with the SQLite database continuously replicated to object storage, but it self-hosts anywhere that runs a Node process.
+
+## Why I built this
+
+I was paying for Fitbod and wanted the same thing without the subscription or
+someone else's cloud holding my training history. FitLocal is deliberately
+single-user: no accounts, no tenancy, one SQLite file I own. That constraint
+made room for the parts that were actually interesting to build — SQLite with
+Litestream streaming replication to Cloudflare R2 (the container restores from
+object storage on cold start), an offline-first PWA that queues mutations in
+IndexedDB and replays them when the gym's dead spot lets go, hand-rolled SVG
+charts instead of a charting dependency, and a workout generator driven by a
+muscle-recovery decay model rather than a fixed template.
+
+## Screenshots
+
+| Home | Active workout |
+|---|---|
+| ![Home](docs/screenshots/home.png) | ![Active workout](docs/screenshots/active-workout.png) |
+| **Generate** | **Reports** |
+| ![Generate](docs/screenshots/generate.png) | ![Reports](docs/screenshots/reports.png) |
 
 ## Architecture
 
@@ -379,3 +402,12 @@ Automate it on a daily schedule via Shortcuts → Automation → Time of Day.
 
 See `HEALTHKIT.md` for the full bidirectional sync contract (including workout
 calorie write-back to Apple Health).
+
+## License
+
+[MIT](LICENSE) © 2026 Brendan Reed.
+
+Exercise catalog content bundled in `scripts/seed-data/exercises.json` comes from
+the [wger](https://wger.de) project and is licensed
+[CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) — see the seeding
+section above.
