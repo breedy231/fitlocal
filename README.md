@@ -90,6 +90,39 @@ npm run dev:api      # http://localhost:3001
 npm run dev:web      # http://localhost:5173
 ```
 
+### Seeding demo data
+
+A fresh clone starts with an empty database, so the generator, history, reports
+and recovery views have nothing to show. `npm run seed` fills it in:
+
+```bash
+npm install
+npm run seed         # exercise catalog + ~6 weeks of demo history
+npm run dev
+```
+
+It loads a 112-exercise catalog plus deterministic synthetic history: a 6-week
+Push/Pull/Legs rotation (~24 workouts with progressing weights) and one health
+snapshot per day showing a gentle cut.
+
+The seed **refuses to run when the target database already contains exercises
+or workouts**, so it can't touch real training data. It never deletes anything.
+To seed a throwaway database instead:
+
+```bash
+DATABASE_PATH=/tmp/demo.db npm run seed
+DATABASE_PATH=/tmp/demo.db npm run dev:api
+```
+
+The catalog itself lives in `scripts/seed-data/exercises.json` and is committed,
+so seeding works offline. It's regenerated only when the catalog changes, via
+`node scripts/build-seed-exercises.mjs` (the one script that talks to the wger
+API).
+
+> Exercise descriptions, images and muscle data in `scripts/seed-data/exercises.json`
+> come from the [wger](https://wger.de) project and are licensed
+> [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+
 ### Production (local build)
 
 ```bash
