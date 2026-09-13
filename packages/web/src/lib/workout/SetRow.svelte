@@ -142,7 +142,7 @@
 {:else}
   <!-- Grid: [set#] [reps] [weight] [✓] — compact 4-col layout for iPhone viewport -->
   <!-- 44px tap targets = exact iOS HIG minimum -->
-  <div class="grid items-center gap-x-1 py-2 {index > 0 ? 'border-t border-neutral-800/50' : ''} {set.isWarmup ? 'opacity-70' : ''}" style="grid-template-columns: 24px minmax(0,1fr) minmax(0,1fr) 44px">
+  <div class="grid items-center gap-x-0.5 py-2 {index > 0 ? 'border-t border-neutral-800/50' : ''} {set.isWarmup ? 'opacity-70' : ''}" style="grid-template-columns: 18px minmax(0,4fr) minmax(0,5fr) 44px">
     <!-- Set number + last performance -->
     <div class="text-center">
       {#if set.isWarmup}
@@ -156,7 +156,7 @@
     </div>
 
     <!-- Reps: −/input/+ -->
-    <div class="flex items-center gap-0.5">
+    <div class="flex items-center gap-px">
       <button
         onpointerdown={() => pressReps(-1)}
         onpointerup={clearHold}
@@ -169,7 +169,7 @@
         type="number"
         value={set.reps ?? 0}
         onchange={(e) => { set.reps = Math.max(0, parseInt(e.currentTarget.value) || 0); }}
-        class="flex-1 min-w-0 h-11 text-center text-base font-bold rounded-lg bg-neutral-800/50 text-white border-none outline-none"
+        class="flex-1 min-w-0 h-11 px-0.5 text-center text-base font-bold tabular-nums rounded-lg bg-neutral-800/50 text-white border-none outline-none"
         inputmode="numeric"
         min="0"
       />
@@ -184,7 +184,7 @@
     </div>
 
     <!-- Weight: −/input/+ -->
-    <div class="flex items-center gap-0.5">
+    <div class="flex items-center gap-px">
       <button
         onpointerdown={() => pressWeight(-5)}
         onpointerup={clearHold}
@@ -197,7 +197,7 @@
         type="number"
         value={kgToLbs(set.weightKg)}
         onchange={(e) => updateWeightLbs(set, e.currentTarget.value)}
-        class="flex-1 min-w-0 h-11 text-center text-base font-bold rounded-lg bg-neutral-800/50 text-white border-none outline-none"
+        class="flex-1 min-w-0 h-11 px-0.5 text-center text-[15px] font-bold tabular-nums rounded-lg bg-neutral-800/50 text-white border-none outline-none"
         step="2.5"
         inputmode="decimal"
       />
