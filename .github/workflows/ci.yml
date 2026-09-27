@@ -29,3 +29,7 @@ jobs:
 
       - name: Run API unit tests
         run: npm run test:run -w packages/api
+
+      # Runs after the build: the web tests import fitlocal-shared from its dist/.
+      - name: Run web unit tests
+        run: npm run test:run -w packages/web
