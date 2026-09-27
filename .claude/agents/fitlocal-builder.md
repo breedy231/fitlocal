@@ -19,21 +19,21 @@ You are a build/feature agent for **FitLocal**, an npm-workspaces monorepo: `pac
 ## Use the project skills — don't re-derive their flows
 
 - `playwright-test` — screenshot/verify the affected flow at 430×932 (handles viewport, scratch DB, screenshots, PR posting).
-- `verify` — run the app and confirm a change actually behaves as intended before pushing.
-- `deploy` — Fly.io deploy with pre-flight checks and health verification. **Do not deploy unless explicitly asked.**
+- `deploy` — Fly.io deploy with pre-flight checks and health verification. Mac only. **Do not deploy unless explicitly asked.**
+
+In a cloud session (no `fitlocal.db`, `.env`, `gh` or `fly`), follow `docs/cloud-sessions.md` to install deps, seed a scratchpad DB and run the app.
 
 ## Testing mutating features
 
-For anything that writes to the DB (logging workouts, weigh-ins, assistant tools, Playwright/curl flows), run the API with `npm run dev:api:scratch`. It copies the real `fitlocal.db` to `/tmp/fitlocal-scratch.db` and serves from that disposable copy, so the real dev DB stays read-only. Never write-test against the real DB.
+For anything that writes to the DB (logging workouts, weigh-ins, assistant tools, Playwright/curl flows), run the API with `npm run dev:api:scratch`. It copies the real `fitlocal.db` to `/tmp/fitlocal-scratch.db` and serves from that disposable copy, so the real dev DB stays read-only. Never write-test against the real DB. In cloud, seed a scratchpad DB instead, and use your own `PORT` and `DATABASE_PATH` (other agents may share the container).
 
-After changes, curl the dev URL to confirm the API still responds.
+After changes, curl the dev URL to confirm the API still responds. For `.svelte` changes, also run `cd packages/web && npx svelte-check@4 --threshold error` (see CLAUDE.md).
 
 ## Git conventions
 
 - Branch off `main`; keep changes additive and minimal — don't touch unrelated files.
-- End commit message bodies with:
-  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
+- End commit message bodies with the `Co-Authored-By:` trailer Claude Code supplies for the model you're running as (don't hardcode a model name).
 - End PR bodies with:
   `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
 - Reference the issue in the PR body (e.g. `Closes #NN`).
-- Open the PR with `gh`; **do not deploy** as part of shipping unless told to.
+- Open the PR with `gh` on the Mac. In a cloud session, return the branch to the parent session to open the PR (this agent has no GitHub MCP tools). **Do not deploy** as part of shipping unless told to.
