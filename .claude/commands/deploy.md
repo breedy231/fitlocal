@@ -1,5 +1,8 @@
 Deploy the latest code to production (Fly.io).
 
+**Mac only.** Cloud sessions have no `fly` CLI or token, and can't reach production. In a cloud
+session, stop once the PR is merged and ask the user to run `/deploy` from the Mac.
+
 Steps:
 
 1. **Pre-deploy guard — check for an active workout session.** A `fly deploy` restarts the single Fly machine and can interrupt in-progress logging (dropped connection / lost in-flight set PATCHes). Run:
@@ -13,16 +16,16 @@ Steps:
 2. Run `fly deploy --app fitlocal-app` from the project root. This builds the Docker image (shared → API → web), pushes to Fly, and does a rolling deploy with health checks.
 
 3. Verify the deploy succeeded. The health endpoint is unauthenticated:
-   `curl -s https://fitlocal-app.fly.dev/api/health`  → expect `{"status":"ok"}`
-   To also confirm the DB is serving real data, load the token from `.env` (gitignored) and hit an authed route:
-   `export $(grep -E '^FITLOCAL_API_KEY=' .env | xargs)`
-   `curl -s -H "Authorization: Bearer $FITLOCAL_API_KEY" https://fitlocal-app.fly.dev/api/workouts | python3 -c "import json,sys; d=json.load(sys.stdin); print('Up — latest workout:', d[0]['date'])"`
+   `curl -sS -m 20 https://fitlocal-app.fly.dev/api/health`  → expect `{"status":"ok"}`
+   To also confirm the DB is serving real data, hit an authed route through `scripts/api.sh`, which loads the
+   token from the environment or `.env` (never `export $(grep … .env)` by hand; see `/cut-status`):
+   `scripts/api.sh GET /workouts | python3 -c "import json,sys; d=json.load(sys.stdin); print('Up — latest workout:', d[0]['date'])"`
 
 4. If the health check fails or the deploy hangs:
    - Check logs: `fly logs --app fitlocal-app`
    - Check machine status: `fly status --app fitlocal-app`
    - Common issues:
-     - Litestream restore from R2 takes ~10s on cold start — extend grace period if needed
+     - Litestream restore from R2 takes ~10s on cold start (the `fly.toml` health check already has a 60s grace period)
      - `NODE_ENV` not set → routes missing `/api` prefix (should be set as a secret)
      - npm workspace resolution errors → check Dockerfile copies all three package.json files
 

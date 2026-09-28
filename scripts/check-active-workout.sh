@@ -27,8 +27,13 @@ API_BASE="${FITLOCAL_API_BASE:-https://fitlocal-app.fly.dev/api}"
 if [[ -z "${FITLOCAL_API_KEY:-}" ]]; then
   ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
   if [[ -f "$ENV_FILE" ]]; then
-    # shellcheck disable=SC2046
-    export $(grep -E '^FITLOCAL_API_KEY=' "$ENV_FILE" | xargs) || true
+    # Source rather than `export $(grep … | xargs)`: when the key is missing that
+    # runs a bare `export`, which prints every environment variable (secrets
+    # included) to stdout.
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
   fi
 fi
 
