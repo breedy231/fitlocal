@@ -9,9 +9,9 @@ the app. Last verified 2026-09-27 on Node 22.22 against `main` @ 4041df6.
 
 | | Cloud container | Consequence |
 |---|---|---|
-| `node_modules` | **Not installed** at start | Run `npm ci` first (about 10s). Never `npm install`: it rewrites `package-lock.json` with metadata churn. |
-| `packages/shared/dist` | Missing (gitignored) | `fitlocal-shared` resolves to `dist/`, so the API, web app, tests and svelte-check can't import it until `npm run build -w packages/shared` has run (`npm run seed` builds it too). |
-| `.env` | Missing | `npm run dev`, `dev:api` and `dev:api:scratch` exit with `node: ../../.env: not found`. Start the API directly (recipe below). |
+| `node_modules` | Installed by the SessionStart hook (`.claude/hooks/session-start.sh`) when it's registered; otherwise missing | If `node_modules` is missing, run `npm ci` (about 10s). Never `npm install`: it rewrites `package-lock.json` with metadata churn. |
+| `packages/shared/dist` | Built by the hook; otherwise missing (gitignored) | `fitlocal-shared` resolves to `dist/`, so the API, web app, tests and svelte-check can't import it until `npm run build -w packages/shared` has run (`npm run seed` builds it too). |
+| `.env` | Missing | Fine: the API dev script uses `--env-file-if-exists`. Without it, `FITLOCAL_API_KEY` and `ANTHROPIC_API_KEY` are unset. Don't `touch .env` to work around anything. |
 | `fitlocal.db` | Missing: **no real data exists here** | Seed a demo DB into your scratchpad. |
 | `FITLOCAL_API_KEY`, `ANTHROPIC_API_KEY` | Unset | No authenticated production calls, and the AI assistant can't be exercised. |
 | Production (`fitlocal-app.fly.dev`) | **Not reachable**: the host isn't in the environment's network allowlist, so requests hang or get a proxy 403 | `/workout`, `/cut-status`, `/gym-swap`, `/deploy` and `scripts/check-active-workout.sh` can't run. Always pass `curl -m 20` so a blocked call fails fast. |
@@ -30,21 +30,19 @@ paths for `DATABASE_PATH`, and **never let it default**: the default creates
 
 ```bash
 cd /home/user/fitlocal
-npm ci
+[ -d node_modules ] || npm ci   # the SessionStart hook normally did this
 
 # Demo DB: builds packages/shared if needed, runs migrations, then loads
 # 112 exercises, 24 PPL workouts (six weeks ending yesterday), 536 sets and
 # 42 days of health data. Refuses a non-empty file.
 DATABASE_PATH=$S/demo.db npm run seed
 
-# API. Bypasses the dev script's hard --env-file. Dev has no /api prefix.
-cd packages/api
-PORT=3001 DATABASE_PATH=$S/demo.db setsid nohup \
-  npx tsx watch --env-file-if-exists=../../.env src/server.ts > $S/api.log 2>&1 &
+# API on :3001 (dev has no /api prefix)
+PORT=3001 DATABASE_PATH=$S/demo.db setsid nohup npm run dev:api > $S/api.log 2>&1 &
 curl -s -m 20 localhost:3001/workouts | head -c 200
 
 # Web on :5173. Its Vite proxy is hard-coded to localhost:3001.
-cd ../web && setsid nohup npx vite dev --port 5173 --strictPort > $S/web.log 2>&1 &
+(cd packages/web && setsid nohup npx vite dev --port 5173 --strictPort > $S/web.log 2>&1 &)
 ```
 
 - **Empty but migrated DB:** `npm run build -w packages/shared && (cd packages/api && DATABASE_PATH=$S/empty.db npx tsx src/migrate.ts)`. Don't boot the API on a brand-new empty file on `main` @ 4041df6: it crashes with `no such table` (fixed in PR #107).
@@ -135,9 +133,9 @@ that needs the real `fitlocal.db`.
 ## Delegating to other cloud sessions
 
 A delegated session starts from a fresh clone and only knows what's in `main`
-plus its prompt. Until a SessionStart hook automates it, put the bootstrap in
-every delegated prompt: `npm ci`, seed into a scratchpad `DATABASE_PATH`, start
-the API with `--env-file-if-exists`. Also list the exact files each task may
+plus its prompt. The SessionStart hook installs dependencies, but seeding is
+per-task: tell delegated sessions to seed into their own scratchpad
+`DATABASE_PATH`. Also list the exact files each task may
 touch and check the lists for overlap before dispatching. When two PRs share a
 file (e.g. `server.ts`, `ci.yml`), the second to merge has to merge `main` in
 and re-run CI.

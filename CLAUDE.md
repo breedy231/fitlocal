@@ -35,8 +35,10 @@ npm run backup           # Manual SQLite backup (scripts/backup-db.sh)
 ```
 
 **IMPORTANT: Cloud sessions (Claude Code on the web)** start from a fresh clone
-with no `node_modules`, `.env`, `fitlocal.db`, `gh`, `fly` or `sqlite3`, and
-can't reach production. The `npm run dev*` scripts above fail there. Read
+with no `.env`, `fitlocal.db`, `gh`, `fly` or `sqlite3`, and can't reach
+production. The SessionStart hook (`.claude/hooks/session-start.sh`) installs
+dependencies once it's registered in `.claude/settings.json`; if it hasn't run,
+`npm ci` first. There's no data until you seed a scratchpad DB. Read
 [`docs/cloud-sessions.md`](docs/cloud-sessions.md) before running anything.
 
 ## Architecture
