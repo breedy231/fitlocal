@@ -1,3 +1,8 @@
+# How long the final sync to R2 keeps retrying after node exits (0.5.x default: 30s).
+# Keep it below fly.toml's kill_timeout (30s) minus node's shutdown time, so the
+# sync finishes before Fly's follow-up SIGTERM interrupts it.
+shutdown-sync-timeout: 20s
+
 dbs:
   - path: ${DATABASE_PATH}
     replicas:
