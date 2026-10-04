@@ -1,16 +1,21 @@
 Show the last workout and recommend the next one based on a Push / Pull / Legs rotation.
 
-**Production server (Fly.io).** All `/api/*` calls require a bearer token. Load it from `.env` first
-(it is gitignored — never hardcode it here):
-`export $(grep -E '^FITLOCAL_API_KEY=' .env | xargs)`
-Then pass `-H "Authorization: Bearer $FITLOCAL_API_KEY"` on every request. Base URL: `https://fitlocal-app.fly.dev/api`.
+**Production server (Fly.io).** All `/api/*` calls require a bearer token. Make every call through
+`scripts/api.sh METHOD /path [json]`: it adds the token (from the environment, or the gitignored `.env`)
+and the prod base URL `https://fitlocal-app.fly.dev/api`, and times out instead of hanging. Don't
+`export $(grep … .env)` by hand: when the key is missing, that runs a bare `export`, which prints
+every environment variable, secrets included, into the transcript. If `api.sh` reports the key is
+missing or the call times out (the default in cloud sessions, see `docs/cloud-sessions.md`), tell the
+user this needs production access. Don't guess at their data.
 
 Steps:
 
-1. Fetch recent workouts: `curl -s -H "Authorization: Bearer $FITLOCAL_API_KEY" https://fitlocal-app.fly.dev/api/workouts`
-   Take the first result (most recent). Note its date, notes field, and id.
+1. Fetch recent workouts: `scripts/api.sh GET /workouts`
+   Take the first result (most recent). Note its date, notes field, and id. Workout dates are
+   America/Chicago calendar dates: work out "today"/"yesterday" with `TZ=America/Chicago date +%F`, never
+   bare `date` (servers and cloud containers run in UTC).
 
-2. Fetch the full workout detail: `curl -s -H "Authorization: Bearer $FITLOCAL_API_KEY" https://fitlocal-app.fly.dev/api/workouts/<id>`
+2. Fetch the full workout detail: `scripts/api.sh GET /workouts/<id>`
    Exercise name is nested at `.exercises[].exercise.name`; sets are at `.exercises[].sets[]`.
    List every exercise with sets × reps × weight (convert kg to lbs). Mark warm-up sets if isWarmup=1. Skip cardio-only entries in the strength summary but mention them separately.
 

@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type RouteHandlerMethod } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import { fileURLToPath } from 'url';
@@ -69,11 +69,26 @@ const apiPrefix = isProduction ? '/api' : '';
 // dev web app may not send one), so it stays open even if .env sets one.
 const apiKey = isProduction ? process.env.FITLOCAL_API_KEY : undefined;
 
+// Health check (Fly's http_service check in fly.toml polls this). It must prove
+// the DB is usable, not just that Node is up: a cheap read of a core table fails
+// on a missing schema, the wrong file, or an unreadable DB, and returns 503 so
+// Fly marks the machine unhealthy instead of serving from a broken database.
+const healthCheck: RouteHandlerMethod = async (_req, reply) => {
+  try {
+    sqlite.prepare('SELECT 1 FROM workouts LIMIT 1').get();
+    return { status: 'ok' };
+  } catch (err) {
+    app.log.error({ err }, 'health: database check failed');
+    return reply.code(503).send({ status: 'error', error: 'database unavailable' });
+  }
+};
+
 // Every API route goes inside registerApi's authenticated scope; /health is
 // the only public one. Don't register data routes on `app` directly.
 await registerApi(app, {
   prefix: apiPrefix,
   apiKey,
+  health: healthCheck,
   routes: [
     workoutRoutes,
     exerciseRoutes,
@@ -152,6 +167,15 @@ if (isProduction) {
 // Prevents data loss if the next startup encounters corruption — writes that
 // live only in the WAL are merged to disk while the server still holds the
 // lock, so recovery tools operate on a complete main file, not a half-applied WAL.
+//
+// The checkpoint must never block. In production Litestream is PID 1 and holds
+// a read lock on the WAL, so TRUNCATE can't complete; under better-sqlite3's
+// default 5s busy timeout it sat blocked for the whole of Fly's kill window,
+// leaving Litestream no time for its final sync to R2. With a short busy timeout
+// SQLite waits briefly, then falls back to a PASSIVE checkpoint (backfills every
+// frame it can, reports busy=1). Locally nothing else holds the lock, so it still
+// truncates the WAL immediately.
+const SHUTDOWN_CHECKPOINT_BUSY_MS = 100;
 let shuttingDown = false;
 async function shutdown(signal: string) {
   if (shuttingDown) return;
@@ -163,6 +187,7 @@ async function shutdown(signal: string) {
     app.log.error({ err }, 'shutdown: fastify close failed');
   }
   try {
+    sqlite.pragma(`busy_timeout = ${SHUTDOWN_CHECKPOINT_BUSY_MS}`);
     const result = sqlite.pragma('wal_checkpoint(TRUNCATE)');
     app.log.info({ result }, 'shutdown: WAL checkpoint complete');
     sqlite.close();

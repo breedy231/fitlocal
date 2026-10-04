@@ -127,45 +127,60 @@ export function invalidateCache(pathPrefix: string) {
   }
 }
 
+function unique(values: string[]): string[] {
+  return values.filter((v, i) => values.indexOf(v) === i);
+}
+
 /**
- * Invalidation rules triggered by mutations.
- * Call this after a successful POST/PUT/DELETE.
+ * GET-cache prefixes a write to `path` makes stale.
  */
-export function invalidateAfterMutation(path: string) {
+function relatedPrefixes(path: string): string[] {
+  const prefixes: string[] = [];
+
   // Workout-related mutations bust workout, recovery, and report caches
   if (path.startsWith('/workouts') || path.startsWith('/sets') || path.startsWith('/workout-exercises')) {
-    invalidateCache('/workouts');
-    invalidateCache('/recovery-summary');
-    invalidateCache('/reports/');
+    prefixes.push('/workouts', '/recovery-summary', '/reports/');
   }
 
   // Program advancement
   if (path.startsWith('/programs/active')) {
-    invalidateCache('/programs');
+    prefixes.push('/programs');
   }
 
   // Exercise changes
   if (path.startsWith('/exercises')) {
-    invalidateCache('/exercises');
+    prefixes.push('/exercises');
   }
 
   // Health data changes
   if (path.startsWith('/health')) {
-    invalidateCache('/health');
-    invalidateCache('/reports/');
+    prefixes.push('/health', '/reports/');
   }
 
   // Goals changes
   if (path.startsWith('/goals')) {
-    invalidateCache('/goals');
-    invalidateCache('/reports/');
+    prefixes.push('/goals', '/reports/');
   }
 
-  // Notify service worker to bust its cache too
-  if (typeof navigator !== 'undefined' && navigator.serviceWorker?.controller) {
-    navigator.serviceWorker.controller.postMessage({
-      type: 'INVALIDATE_API_CACHE',
-      pathPrefix: path,
-    });
+  return prefixes;
+}
+
+/**
+ * Invalidation rules triggered by mutations.
+ * Call this after a successful POST/PUT/PATCH/DELETE (or a batch of replayed ones).
+ */
+export function invalidateAfterMutation(paths: string | string[]) {
+  const mutated = typeof paths === 'string' ? [paths] : paths;
+  const prefixes = unique(mutated.flatMap(relatedPrefixes));
+  for (const prefix of prefixes) invalidateCache(prefix);
+
+  // Bust the service worker's offline copies too. Send the related prefixes,
+  // not just the mutated path: a PATCH /sets/12 has to clear the SW's cached
+  // /api/workouts/* or offline reads keep serving the pre-change workout.
+  const sw = typeof navigator !== 'undefined' ? navigator.serviceWorker?.controller : null;
+  if (sw) {
+    for (const pathPrefix of unique([...mutated, ...prefixes])) {
+      sw.postMessage({ type: 'INVALIDATE_API_CACHE', pathPrefix });
+    }
   }
 }

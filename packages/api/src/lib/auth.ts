@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, RouteHandlerMethod } from 'fastify';
 
 // Bearer-token auth for the API. The hook lives inside the one encapsulated
 // plugin that owns every API route, so it runs for any request that *routes*
@@ -15,6 +15,8 @@ export interface ApiOptions {
   prefix: string;
   /** Bearer token every API route requires. Unset = open (dev). */
   apiKey?: string;
+  /** Handler for GET <prefix>/health, the one public API route. */
+  health: RouteHandlerMethod;
   routes: RoutePlugin[];
 }
 
@@ -26,10 +28,13 @@ function isAuthorized(header: string | undefined, expected: Buffer): boolean {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-export async function registerApi(app: FastifyInstance, { prefix, apiKey, routes }: ApiOptions) {
+export async function registerApi(
+  app: FastifyInstance,
+  { prefix, apiKey, health, routes }: ApiOptions
+) {
   // Public on purpose: Fly's HTTP health check (fly.toml) polls it without a
   // token. Registered outside the authenticated scope below.
-  app.get(`${prefix}/health`, async () => ({ status: 'ok' }));
+  app.get(`${prefix}/health`, health);
 
   // Encapsulated: the hook covers every route registered in here (including
   // Fastify's auto-generated HEAD routes) and nothing outside it.

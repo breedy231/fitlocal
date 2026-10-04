@@ -2,20 +2,23 @@ Suggest a substitute exercise when the user wants to swap something out — equi
 
 Trigger phrases: "swap X", "substitute for X", "don't have X", "what can I do instead of X", "replace X"
 
-**Production server (Fly.io).** All `/api/*` calls require a bearer token. Load it from `.env` first
-(it is gitignored — never hardcode it here):
-`export $(grep -E '^FITLOCAL_API_KEY=' .env | xargs)`
-Then pass `-H "Authorization: Bearer $FITLOCAL_API_KEY"` on every request. Base URL: `https://fitlocal-app.fly.dev/api`.
+**Production server (Fly.io).** All `/api/*` calls require a bearer token. Make every call through
+`scripts/api.sh METHOD /path [json]`: it adds the token (from the environment, or the gitignored `.env`)
+and the prod base URL `https://fitlocal-app.fly.dev/api`, and times out instead of hanging. Don't
+`export $(grep … .env)` by hand: when the key is missing, that runs a bare `export`, which prints
+every environment variable, secrets included, into the transcript. If `api.sh` reports the key is
+missing or the call times out (the default in cloud sessions, see `docs/cloud-sessions.md`), tell the
+user this needs production access. Don't guess at their data.
 
 Steps:
 
 1. Identify the exercise being swapped from the user's message.
 
-2. Fetch the full exercise list: `curl -s -H "Authorization: Bearer $FITLOCAL_API_KEY" https://fitlocal-app.fly.dev/api/exercises`
+2. Fetch the full exercise list: `scripts/api.sh GET /exercises`
    Filter client-side to find exercises that target the same primary muscle group.
 
 3. Fetch recent workouts to check what the user has actually done before:
-   `curl -s -H "Authorization: Bearer $FITLOCAL_API_KEY" https://fitlocal-app.fly.dev/api/workouts`
+   `scripts/api.sh GET /workouts`
    Then fetch details for the 3–4 most recent sessions of the relevant day type (push/pull/legs) to find exercises with logged history.
 
 4. Rank swap candidates by:

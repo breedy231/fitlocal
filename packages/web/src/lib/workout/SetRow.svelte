@@ -14,9 +14,12 @@
     adjustReps: (set: Set, delta: number) => void;
     adjustWeightLbs: (set: Set, deltaLbs: number) => void;
     onToggleComplete: () => void;
+    // Fired after a value typed straight into an input is written to the set,
+    // so the page can persist it and track it as unsynced.
+    onEdited?: () => void;
   }
 
-  let { set, index, mode, lastPerformance, kgToLbs, updateWeightLbs, adjustReps, adjustWeightLbs, onToggleComplete }: Props = $props();
+  let { set, index, mode, lastPerformance, kgToLbs, updateWeightLbs, adjustReps, adjustWeightLbs, onToggleComplete, onEdited }: Props = $props();
 
   let lastSet = $derived(lastPerformance?.sets[index]);
 
@@ -85,7 +88,7 @@
           <input
             type="number"
             value={set.reps ?? 0}
-            onchange={(e) => { set.reps = Math.max(0, parseInt(e.currentTarget.value) || 0); }}
+            onchange={(e) => { set.reps = Math.max(0, parseInt(e.currentTarget.value) || 0); onEdited?.(); }}
             class="w-12 text-center text-base font-bold py-2 rounded-lg bg-neutral-800/50 text-white border-none outline-none"
             inputmode="numeric"
             min="0"
@@ -104,7 +107,7 @@
         <input
           type="number"
           value={set.resistance ?? ''}
-          onchange={(e) => { set.resistance = parseFloat(e.currentTarget.value) || 0; }}
+          onchange={(e) => { set.resistance = parseFloat(e.currentTarget.value) || 0; onEdited?.(); }}
           placeholder="level"
           class="w-full h-12 text-center text-base py-2 rounded-lg bg-neutral-800 text-white border-none outline-none"
           step="1"
@@ -120,6 +123,7 @@
           onchange={(e) => {
             const mi = parseFloat(e.currentTarget.value);
             set.distanceMeters = isNaN(mi) ? null : Math.round(mi * 1609.344);
+            onEdited?.();
           }}
           placeholder="opt."
           class="w-full h-12 text-center text-base py-2 rounded-lg bg-neutral-800 text-white border-none outline-none"
@@ -168,7 +172,7 @@
       <input
         type="number"
         value={set.reps ?? 0}
-        onchange={(e) => { set.reps = Math.max(0, parseInt(e.currentTarget.value) || 0); }}
+        onchange={(e) => { set.reps = Math.max(0, parseInt(e.currentTarget.value) || 0); onEdited?.(); }}
         class="flex-1 min-w-0 h-11 px-0.5 text-center text-base font-bold tabular-nums rounded-lg bg-neutral-800/50 text-white border-none outline-none"
         inputmode="numeric"
         min="0"

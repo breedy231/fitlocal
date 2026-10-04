@@ -36,7 +36,11 @@ async function healthRoutes(app: FastifyInstance) {
 
 async function buildApp(opts: { prefix: string; apiKey?: string }) {
   const app = Fastify();
-  await registerApi(app, { ...opts, routes: [workoutRoutes, healthRoutes] });
+  await registerApi(app, {
+    ...opts,
+    health: async () => ({ status: 'ok' }),
+    routes: [workoutRoutes, healthRoutes],
+  });
   await app.register(fastifyStatic, { root: STATIC_ROOT });
   await app.ready();
   return app;

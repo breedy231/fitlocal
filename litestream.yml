@@ -1,11 +1,29 @@
+# Litestream 0.5.x config. The schema changed in 0.5, and unknown keys are
+# silently ignored, so a typo here fails quietly. Keys below were checked
+# against the v0.5.12 source and exercised with the v0.5.12 binary.
+
+# Full snapshots of the DB, taken every `interval`, deleted once older than
+# `retention`. Retention also prunes the incremental LTX files that predate the
+# oldest kept snapshot, so it sets how far back a point-in-time restore can go.
+# 0.5's default is 24h/24h, which leaves only about 1 day of history. With 8 days
+# the oldest kept snapshot is always more than 7 days old. (Go durations: no "d".)
+snapshot:
+  interval: 6h
+  retention: 192h
+
+# How long Litestream keeps retrying its final sync to R2 after node exits on
+# shutdown (default 30s). Kept under fly.toml's kill_timeout (30s) so the retry
+# loop finishes before Fly sends SIGKILL.
+shutdown-sync-timeout: 20s
+
 dbs:
   - path: ${DATABASE_PATH}
-    replicas:
-      - type: s3
-        bucket: ${LITESTREAM_BUCKET}
-        path: fitlocal
-        endpoint: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
-        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
-        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
-        force-path-style: true
-        sync-interval: 1s
+    replica:
+      type: s3
+      bucket: ${LITESTREAM_BUCKET}
+      path: fitlocal
+      endpoint: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+      access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+      secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+      force-path-style: true
+      sync-interval: 1s
