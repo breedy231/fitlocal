@@ -67,7 +67,7 @@ npm run test:run -w packages/api        # ~4s, 272 tests on 4041df6
 npm run lint                            # ~5s
 npm run build                           # ~12s
 npm run build -w packages/shared && (cd packages/web && npx svelte-kit sync) \
-  && npx -y svelte-check@4 --workspace packages/web   # 3 errors / 48 warnings on 4041df6
+  && npx -y svelte-check@4 --workspace packages/web   # 0 errors / 48 warnings
 ```
 
 svelte-check gives meaningless output until both `packages/shared/dist` and

@@ -47,6 +47,7 @@
   let addExerciseOpen = $state(false);
   let addExerciseSearch = $state('');
   let addExerciseResults: { id: number; name: string }[] = $state([]);
+  let addExerciseLoading = $state(false);
   let addSearchTimer: ReturnType<typeof setTimeout> | undefined;
 
   let filteredAlternatives = $derived(
@@ -1009,17 +1010,6 @@
     </div>
   {/if}
 
-  <!-- Add Exercise Sheet (program mode) -->
-  <ExerciseSearchSheet
-    open={addExerciseOpen}
-    title="Add Exercise"
-    query={addExerciseSearch}
-    results={addExerciseResults}
-    onInput={onAddExerciseInput}
-    onSelect={pickExerciseToAdd}
-    onClose={closeAddExercise}
-  />
-
   {#if !activeProgram}
     <p class="text-center text-sm text-neutral-600 mt-6">
       <a href="/programs" class="hover:text-green-400">Programs</a>
@@ -1028,4 +1018,16 @@
     </p>
   {/if}
   {/if}
+
+  <!-- Add Exercise Sheet (program mode) — outside the freestyle block so program mode can open it -->
+  <ExerciseSearchSheet
+    open={addExerciseOpen}
+    title="Add Exercise"
+    query={addExerciseSearch}
+    results={addExerciseResults}
+    loading={addExerciseLoading}
+    onInput={onAddExerciseInput}
+    onSelect={pickExerciseToAdd}
+    onClose={closeAddExercise}
+  />
 </div>

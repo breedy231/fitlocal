@@ -13,12 +13,13 @@
     results: SearchResult[];
     suggestions?: SearchResult[];
     suggestionsLabel?: string;
+    loading?: boolean;
     onInput: (q: string) => void;
     onSelect: (result: SearchResult) => void;
     onClose: () => void;
   }
 
-  let { open, title, query, results, suggestions = [], suggestionsLabel = 'Suggested', onInput, onSelect, onClose }: Props = $props();
+  let { open, title, query, results, suggestions = [], suggestionsLabel = 'Suggested', loading = false, onInput, onSelect, onClose }: Props = $props();
 
   let showingSuggestions = $derived(query.length < 2 && suggestions.length > 0);
   let displayResults = $derived(showingSuggestions ? suggestions : results);
@@ -73,6 +74,8 @@
               </button>
             {/each}
           </div>
+        {:else if loading}
+          <p class="text-neutral-500 text-sm text-center py-8">Searching…</p>
         {:else if query.length >= 2}
           <p class="text-neutral-500 text-sm text-center py-8">No exercises found</p>
         {:else}
