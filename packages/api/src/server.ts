@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type RouteHandlerMethod } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import { fileURLToPath } from 'url';
@@ -23,6 +23,7 @@ import { hrRoutes } from './routes/hr.js';
 import { workoutSessionRoutes } from './routes/workout-sessions.js';
 import { pushRoutes } from './routes/push.js';
 import { applyErrorHandler } from './lib/http.js';
+import { registerApi } from './lib/auth.js';
 import { sqlite } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,56 +61,19 @@ app.addContentTypeParser('application/zip', { parseAs: 'buffer' }, (_req, body, 
   done(null, body);
 });
 
-// Bearer token auth — only enforced when FITLOCAL_API_KEY is set (dev works without it)
-const apiKey = process.env.FITLOCAL_API_KEY;
-if (apiKey) {
-  app.addHook('onRequest', (req, reply, done) => {
-    // Skip auth for static assets and the health check endpoint
-    if (!req.url.startsWith('/api/') && req.url !== '/api') {
-      done();
-      return;
-    }
-    if (req.url === '/api/health') {
-      done();
-      return;
-    }
-    const auth = req.headers['authorization'];
-    if (auth === `Bearer ${apiKey}`) {
-      done();
-      return;
-    }
-    reply.code(401).send({ error: 'Unauthorized' });
-  });
-}
-
 // In production, mount API routes under /api prefix
 const apiPrefix = isProduction ? '/api' : '';
 
-await app.register(workoutRoutes, { prefix: apiPrefix });
-await app.register(exerciseRoutes, { prefix: apiPrefix });
-await app.register(setRoutes, { prefix: apiPrefix });
-await app.register(healthRoutes, { prefix: apiPrefix });
-await app.register(importRoutes, { prefix: apiPrefix });
-await app.register(generateRoutes, { prefix: apiPrefix });
-await app.register(recoveryRoutes, { prefix: apiPrefix });
-await app.register(stretchRoutes, { prefix: apiPrefix });
-await app.register(reportRoutes, { prefix: apiPrefix });
-await app.register(programRoutes, { prefix: apiPrefix });
-await app.register(challengeRoutes, { prefix: apiPrefix });
-await app.register(achievementRoutes, { prefix: apiPrefix });
-await app.register(goalRoutes, { prefix: apiPrefix });
-await app.register(routineRoutes, { prefix: apiPrefix });
-await app.register(equipmentProfileRoutes, { prefix: apiPrefix });
-await app.register(assistantRoutes, { prefix: apiPrefix });
-await app.register(hrRoutes, { prefix: apiPrefix });
-await app.register(workoutSessionRoutes, { prefix: apiPrefix });
-await app.register(pushRoutes, { prefix: apiPrefix });
+// Bearer token auth — only enforced in production when FITLOCAL_API_KEY is set.
+// Dev mounts routes without the /api prefix and has never required a key (the
+// dev web app may not send one), so it stays open even if .env sets one.
+const apiKey = isProduction ? process.env.FITLOCAL_API_KEY : undefined;
 
 // Health check (Fly's http_service check in fly.toml polls this). It must prove
 // the DB is usable, not just that Node is up: a cheap read of a core table fails
 // on a missing schema, the wrong file, or an unreadable DB, and returns 503 so
 // Fly marks the machine unhealthy instead of serving from a broken database.
-app.get(`${apiPrefix}/health`, async (_req, reply) => {
+const healthCheck: RouteHandlerMethod = async (_req, reply) => {
   try {
     sqlite.prepare('SELECT 1 FROM workouts LIMIT 1').get();
     return { status: 'ok' };
@@ -117,6 +81,35 @@ app.get(`${apiPrefix}/health`, async (_req, reply) => {
     app.log.error({ err }, 'health: database check failed');
     return reply.code(503).send({ status: 'error', error: 'database unavailable' });
   }
+};
+
+// Every API route goes inside registerApi's authenticated scope; /health is
+// the only public one. Don't register data routes on `app` directly.
+await registerApi(app, {
+  prefix: apiPrefix,
+  apiKey,
+  health: healthCheck,
+  routes: [
+    workoutRoutes,
+    exerciseRoutes,
+    setRoutes,
+    healthRoutes,
+    importRoutes,
+    generateRoutes,
+    recoveryRoutes,
+    stretchRoutes,
+    reportRoutes,
+    programRoutes,
+    challengeRoutes,
+    achievementRoutes,
+    goalRoutes,
+    routineRoutes,
+    equipmentProfileRoutes,
+    assistantRoutes,
+    hrRoutes,
+    workoutSessionRoutes,
+    pushRoutes,
+  ],
 });
 
 // Cache-Control headers for GET responses
