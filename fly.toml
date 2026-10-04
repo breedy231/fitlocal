@@ -1,11 +1,10 @@
 app = "fitlocal-app"
 
-# Shutdown (deploys, restarts, auto_stop): Fly sends kill_signal to PID 1, which is
-# Litestream (scripts/docker-entrypoint.sh). Litestream forwards it to node, waits
-# for node to exit, then does a final WAL sync to R2, capped by
-# shutdown-sync-timeout in litestream.yml. When kill_timeout runs out, Fly sends
-# SIGTERM again and Litestream abandons that sync. With Fly's defaults (SIGINT, 5s),
-# node's own shutdown uses up the whole window and the final sync is skipped.
+# Shutdown (deploys, `fly machine stop`, auto_stop_machines idle stops): Fly sends
+# kill_signal to PID 1 (Litestream), which forwards it to node, waits for node to
+# exit, then does a final WAL sync to R2 (bounded by shutdown-sync-timeout: 20s in
+# litestream.yml). Fly's default window is 5s, which that final sync could miss.
+# After kill_timeout Fly signals again, and Litestream abandons the sync.
 kill_signal = "SIGTERM"
 kill_timeout = 30
 

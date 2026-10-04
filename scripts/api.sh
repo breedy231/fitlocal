@@ -56,7 +56,9 @@ fi
 # PATH_ may be given with or without a leading slash.
 [[ "$PATH_" == /* ]] || PATH_="/$PATH_"
 
-args=(-sS -X "$METHOD" "$BASE$PATH_")
+# --max-time: fail fast instead of hanging when prod is unreachable (e.g. cloud
+# sessions, whose network allowlist doesn't include fitlocal-app.fly.dev).
+args=(-sS --max-time "${FITLOCAL_API_TIMEOUT:-30}" -X "$METHOD" "$BASE$PATH_")
 [[ -n "${FITLOCAL_API_KEY:-}" ]] && args+=(-H "Authorization: Bearer $FITLOCAL_API_KEY")
 if [[ -n "$BODY" ]]; then
   args+=(-H "Content-Type: application/json" -d "$BODY")

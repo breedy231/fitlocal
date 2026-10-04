@@ -4,6 +4,7 @@
   import Toast from '$lib/Toast.svelte';
   import { onMount, onDestroy } from 'svelte';
   import { onQueueChange } from '$lib/offline-queue';
+  import { startOfflineSync } from '$lib/api';
   let { children } = $props();
 
   let isOffline = $state(false);
@@ -18,6 +19,8 @@
     window.addEventListener('offline', goOffline);
     window.addEventListener('online', goOnline);
     unsubQueue = onQueueChange((count) => { queuedCount = count; });
+    // Replay offline writes now (relaunch) and on online / return to foreground.
+    startOfflineSync();
     return () => {
       window.removeEventListener('offline', goOffline);
       window.removeEventListener('online', goOnline);

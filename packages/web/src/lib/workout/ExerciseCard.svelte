@@ -43,6 +43,7 @@
     onAddSet: (isWarmup?: boolean) => void;
     onDeleteSet: (setId: number) => void;
     onSetRir: (rpe: number) => void;
+    onSetEdited?: (set: WorkoutSet) => void;
   }
 
   let {
@@ -68,6 +69,7 @@
     onAddSet,
     onDeleteSet,
     onSetRir,
+    onSetEdited,
   }: Props = $props();
 
   const REST_PRESETS = [30, 45, 60, 90, 120, 180];
@@ -193,6 +195,7 @@
         {adjustReps}
         {adjustWeightLbs}
         onToggleComplete={() => onToggleComplete(set)}
+        onEdited={() => onSetEdited?.(set)}
       />
       <!-- Apple cardio splits (#93), shown under their set when present. -->
       {#if set.splits && set.splits.length > 0}

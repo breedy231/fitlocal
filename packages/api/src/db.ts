@@ -20,13 +20,9 @@ sqlite.pragma('foreign_keys = ON');
 // workout) this is imperceptible.
 sqlite.pragma('wal_autocheckpoint = 100');
 
-// Ensure performance indexes exist
-sqlite.exec(`
-  CREATE INDEX IF NOT EXISTS idx_we_workout_id ON workout_exercises(workout_id);
-  CREATE INDEX IF NOT EXISTS idx_we_exercise_id ON workout_exercises(exercise_id);
-  CREATE INDEX IF NOT EXISTS idx_sets_we_id ON sets(workout_exercise_id);
-  CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts(date);
-`);
+// No schema work here: this module is imported (via the route modules) before
+// server.ts runs migrate.ts, so any DDL touching a table crashes a fresh DB with
+// "no such table". Tables and indexes all live in migrate.ts.
 
 export const db = drizzle(sqlite, { schema });
 export { schema, sqlite };
