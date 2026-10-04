@@ -8,6 +8,10 @@ import { build, files, version } from '$service-worker';
 const CACHE = `cache-${version}`;
 const API_CACHE = `api-cache-${version}`;
 const ASSETS = [...build, ...files];
+// The SPA shell. adapter-static's fallback index.html isn't in `build` or
+// `files`, and every client-side route (/log/12, /history, …) is served that
+// same page, so it has to be precached for the PWA to cold-start offline.
+const APP_SHELL = '/';
 const API_CACHE_MAX = 50;
 const NETWORK_TIMEOUT_MS = 3000;
 
@@ -17,7 +21,12 @@ sw.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll(ASSETS))
+      .then(async (cache) => {
+        await cache.addAll(ASSETS);
+        // Separate from addAll so a failed shell fetch doesn't block the
+        // install (the offline cold start just stays unavailable).
+        await cache.add(APP_SHELL).catch(() => {});
+      })
       .then(() => sw.skipWaiting())
   );
 });
@@ -78,10 +87,32 @@ async function evictApiCache(cache: Cache) {
   }
 }
 
+/**
+ * Page navigations: network-first so a deploy is picked up right away, but
+ * fall back to the precached shell when there's no (or a dead) connection.
+ */
+async function navigate(request: Request): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
+  try {
+    return await fetch(request, { signal: controller.signal });
+  } catch {
+    const shell = await caches.match(APP_SHELL, { cacheName: CACHE });
+    return shell ?? Response.error();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 sw.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+
+  if (event.request.mode === 'navigate' && url.origin === location.origin) {
+    event.respondWith(navigate(event.request));
+    return;
+  }
 
   // API requests: network-first with timeout + cache fallback
   if (url.origin === location.origin && url.pathname.startsWith('/api/')) {

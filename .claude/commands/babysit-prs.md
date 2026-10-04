@@ -2,6 +2,9 @@ Babysit open pull requests: poll their CI state, nudge stuck checks, and squash-
 
 If invoked with `--dry-run`, do everything below **except** pushing empty commits and merging — just produce the report and state what *would* happen. This is report-only mode.
 
+**Cloud sessions** have no `gh` (installing it doesn't help: the proxy blocks GitHub GraphQL). Use the
+GitHub MCP tools and see "Cloud sessions" at the end of this file. The nudge in step 4 does not apply there.
+
 ## Steps
 
 1. **List candidate PRs.** Run `gh pr list --state open --base main --json number,title,isDraft,labels` to get every open PR targeting `main`. Only PRs into `main` are in scope — ignore PRs targeting any other base branch.
@@ -56,11 +59,24 @@ If invoked with `--dry-run`, do everything below **except** pushing empty commit
 - **Never merge drafts or `hold`/`wip`-labeled PRs.** Row 1 is a hard skip.
 - **Never touch conflicting PRs.** Surface them for manual resolution.
 - **Only PRs into `main`.** Filtered at step 1 via `--base main`.
-- **Never deploy.** Merging ≠ shipping — deploy stays a separate manual call (`/project:deploy`). This command never builds, restarts, or deploys anything.
+- **Never deploy.** Merging ≠ shipping — deploy stays a separate manual call (`/deploy`, Mac only). This command never builds, restarts, or deploys anything.
 - **Idempotent.** Safe to run repeatedly. A nudged PR with checks now running falls into "pending" next pass; an already-merged PR drops off the open list; re-running on a green PR just re-proposes it (no merge without confirmation).
 - **`--dry-run` is report-only** — no empty commits, no merges, no branch deletions.
 
 ## Running it on a cadence
 
-- Attended, in-session: `/loop /project:babysit-prs` (self-paced, roughly 60–270s between passes).
-- Unattended: a `/schedule` cloud routine (~20 min cadence) or a one-shot background agent — survives disconnect, unlike an in-session `/loop`.
+- Attended, in-session: `/loop /babysit-prs` (self-paced, roughly 60–270s between passes).
+- Unattended: a scheduled cloud Routine (at most hourly) or a one-shot background agent. Both survive a disconnect, unlike an in-session `/loop`. For specific PRs, `subscribe_pr_activity` is event-driven and doesn't need polling.
+
+## Cloud sessions
+
+Map each `gh` step to the GitHub MCP tools (owner `breedy231`, repo `fitlocal`):
+
+| Step | Cloud equivalent |
+|---|---|
+| 1. list | `mcp__github__list_pull_requests` (state `open`, base `main`). List results have no merge state. |
+| 2. state | `mcp__github__pull_request_read` with method `get` for `draft`, `labels`, `head` and `mergeable_state` (lowercase: `clean` / `blocked` / `behind` / `dirty` / `unstable` / `unknown`). Use method `get_check_runs` and method `get_status` for checks, and method `get_reviews` for reviews. |
+| decision table | CONFLICTING/DIRTY → `mergeable_state == 'dirty'`. CLEAN → `'clean'`. `'unknown'` → still computing, re-check next pass. "No checks ran" → `get_check_runs` total is 0 **and** `get_status` total is 0. |
+| 4. nudge | **Not in cloud.** The session harness forbids empty commits and close/reopen to kick CI, and `git checkout` would move the session off its own branch. If the PR is behind `main`, `mcp__github__update_pull_request_branch` starts a fresh CI run. Otherwise report it as stuck. |
+| failing checks | `get_check_runs` gives names, conclusions and links. `mcp__github__get_job_logs` gives log excerpts. |
+| 5. merge | `mcp__github__merge_pull_request` with `merge_method: squash`, still confirm-first. There's no delete-branch tool: report the leftover branch, or turn on "Automatically delete head branches" in the repo settings. |

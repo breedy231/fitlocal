@@ -105,7 +105,19 @@ await app.register(hrRoutes, { prefix: apiPrefix });
 await app.register(workoutSessionRoutes, { prefix: apiPrefix });
 await app.register(pushRoutes, { prefix: apiPrefix });
 
-app.get(`${apiPrefix}/health`, async () => ({ status: 'ok' }));
+// Health check (Fly's http_service check in fly.toml polls this). It must prove
+// the DB is usable, not just that Node is up: a cheap read of a core table fails
+// on a missing schema, the wrong file, or an unreadable DB, and returns 503 so
+// Fly marks the machine unhealthy instead of serving from a broken database.
+app.get(`${apiPrefix}/health`, async (_req, reply) => {
+  try {
+    sqlite.prepare('SELECT 1 FROM workouts LIMIT 1').get();
+    return { status: 'ok' };
+  } catch (err) {
+    app.log.error({ err }, 'health: database check failed');
+    return reply.code(503).send({ status: 'error', error: 'database unavailable' });
+  }
+});
 
 // Cache-Control headers for GET responses
 app.addHook('onSend', (_request, reply, _payload, done) => {
@@ -162,6 +174,15 @@ if (isProduction) {
 // Prevents data loss if the next startup encounters corruption — writes that
 // live only in the WAL are merged to disk while the server still holds the
 // lock, so recovery tools operate on a complete main file, not a half-applied WAL.
+//
+// The checkpoint must never block. In production Litestream is PID 1 and holds
+// a read lock on the WAL, so TRUNCATE can't complete; under better-sqlite3's
+// default 5s busy timeout it sat blocked for the whole of Fly's kill window,
+// leaving Litestream no time for its final sync to R2. With a short busy timeout
+// SQLite waits briefly, then falls back to a PASSIVE checkpoint (backfills every
+// frame it can, reports busy=1). Locally nothing else holds the lock, so it still
+// truncates the WAL immediately.
+const SHUTDOWN_CHECKPOINT_BUSY_MS = 100;
 let shuttingDown = false;
 async function shutdown(signal: string) {
   if (shuttingDown) return;
@@ -192,6 +213,7 @@ async function shutdown(signal: string) {
     clearTimeout(closeTimer);
   }
   try {
+    sqlite.pragma(`busy_timeout = ${SHUTDOWN_CHECKPOINT_BUSY_MS}`);
     const result = sqlite.pragma('wal_checkpoint(TRUNCATE)');
     app.log.info({ result }, 'shutdown: WAL checkpoint complete');
     sqlite.close();

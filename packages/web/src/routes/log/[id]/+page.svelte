@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { api } from '$lib/api';
+  import { api, OfflineError } from '$lib/api';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import ExerciseDetail from '$lib/ExerciseDetail.svelte';
@@ -8,7 +8,7 @@
   import { cachedGet } from '$lib/api-cache.svelte';
   import { showToast } from '$lib/toast';
   import type { NutritionData, LastPerformance, ExerciseProgressionReport, GeneratedAlternative, WorkoutDetail } from 'fitlocal-shared';
-  import { CARDIO_PATTERN } from 'fitlocal-shared';
+  import { isCardioName, isTreadmillName } from '$lib/workout/exercise-kind';
 
   import RestTimer from '$lib/workout/RestTimer.svelte';
   import ExerciseCard, { type WorkoutExerciseLike } from '$lib/workout/ExerciseCard.svelte';
@@ -219,14 +219,12 @@
 
   const SUPERSET_REST_SECONDS = 30;
 
-  const TREADMILL_PATTERN = /treadmill|walking/i;
-
   function isCardio(ex: WorkoutExercise): boolean {
-    return CARDIO_PATTERN.test(ex.exercise?.name ?? '');
+    return isCardioName(ex.exercise?.name ?? '');
   }
 
   function isTreadmill(ex: WorkoutExercise): boolean {
-    return TREADMILL_PATTERN.test(ex.exercise?.name ?? '');
+    return isTreadmillName(ex.exercise?.name ?? '');
   }
 
   const KG_TO_LBS = 2.20462;
@@ -311,17 +309,84 @@
     }));
   }
 
+  // The workout is mirrored to localStorage so an iOS swipe-kill or a dead gym
+  // signal loses nothing. `dirty` tracks sets edited on this device that the
+  // server hasn't confirmed yet (set id → last local edit, ms since epoch). Reps
+  // and weight edits only reach the server when a set is toggled or the workout
+  // finished, so without this a reopen would overwrite them with server data.
   const CACHE_PREFIX = 'fitlocal-workout-';
+  const SET_FIELDS = ['reps', 'weightKg', 'rpe', 'distanceMeters', 'resistance', 'completed'] as const;
 
-  function cacheWorkout(id: string, data: Workout) {
-    try { localStorage.setItem(CACHE_PREFIX + id, JSON.stringify(data)); } catch { /* quota */ }
+  interface CachedWorkout {
+    v: 2;
+    workout: Workout;
+    dirty: Record<number, number>;
   }
 
-  function getCachedWorkout(id: string): Workout | null {
+  let dirtySets: Record<number, number> = {};
+
+  function cacheWorkout(id: string, data: Workout) {
+    const entry: CachedWorkout = { v: 2, workout: data, dirty: dirtySets };
+    try { localStorage.setItem(CACHE_PREFIX + id, JSON.stringify(entry)); } catch { /* quota */ }
+  }
+
+  function getCachedWorkout(id: string): CachedWorkout | null {
     try {
       const raw = localStorage.getItem(CACHE_PREFIX + id);
-      return raw ? JSON.parse(raw) : null;
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed?.v === 2) return { v: 2, workout: parsed.workout, dirty: parsed.dirty ?? {} };
+      // Older caches stored the bare workout, without dirty tracking.
+      return parsed?.exercises ? { v: 2, workout: parsed, dirty: {} } : null;
     } catch { return null; }
+  }
+
+  function markDirty(set: SetData) {
+    dirtySets[set.id] = Date.now();
+    debouncedSave();
+  }
+
+  function sameSetValues(a: SetData, b: SetData): boolean {
+    return SET_FIELDS.every((f) => f === 'completed' ? !!a[f] === !!b[f] : (a[f] ?? null) === (b[f] ?? null));
+  }
+
+  // Carry local set edits the server never received (made offline, or the app
+  // was killed before they were sent) over onto the fresh server copy. Returns
+  // the sets that still differ from the server and need re-sending.
+  function reapplyLocalEdits(fresh: Workout, cached: CachedWorkout): SetData[] {
+    const localSets = new Map<number, SetData>();
+    for (const ex of cached.workout.exercises) {
+      for (const s of ex.sets) localSets.set(s.id, s);
+    }
+    const unsynced: SetData[] = [];
+    const stillDirty: Record<number, number> = {};
+    for (const ex of fresh.exercises) {
+      for (const s of ex.sets) {
+        const editedAt = cached.dirty[s.id];
+        const local = localSets.get(s.id);
+        if (editedAt == null || !local || sameSetValues(local, s)) continue;
+        for (const f of SET_FIELDS) (s as any)[f] = local[f];
+        stillDirty[s.id] = editedAt;
+        unsynced.push(s);
+      }
+    }
+    dirtySets = stillDirty;
+    return unsynced;
+  }
+
+  // Save a set's current values. Clears its dirty mark once the server has
+  // them, unless it was edited again while the request was in flight. A write
+  // queued offline resolves undefined, so the set stays dirty until it syncs.
+  async function saveSet(set: SetData): Promise<void> {
+    const sentAt = Date.now();
+    const saved = await api<SetData | undefined>(`/sets/${set.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, distanceMeters: set.distanceMeters, resistance: set.resistance, completed: !!set.completed }),
+    });
+    if (saved !== undefined && (dirtySets[set.id] ?? 0) <= sentAt) {
+      delete dirtySets[set.id];
+      debouncedSave();
+    }
   }
 
   function initWorkout(w: Workout) {
@@ -335,11 +400,16 @@
 
   onMount(async () => {
     const id = $page.params.id!;
+    const cached = getCachedWorkout(id);
     try {
-      workout = await api<Workout>(`/workouts/${id}`);
+      const fresh = await api<Workout>(`/workouts/${id}`);
+      const unsynced = fresh?.exercises && cached ? reapplyLocalEdits(fresh, cached) : [];
+      workout = fresh;
       if (workout?.exercises) {
         cacheWorkout(id, workout);
         initWorkout(workout);
+        // Re-send what the server never got (re-queued if still offline).
+        for (const set of unsynced) saveSet(set).catch(() => {});
         // Fetch last performance for each exercise (runs in parallel, non-blocking)
         loadAllLastPerformance(workout, parseInt(id));
         // Pre-fetch swap candidates for all exercises so inline swap is instant
@@ -350,9 +420,9 @@
       }
     } catch (e: any) {
       // Try loading from cache if offline
-      const cached = getCachedWorkout(id);
       if (cached) {
-        workout = cached;
+        workout = cached.workout;
+        dirtySets = cached.dirty;
         initWorkout(workout);
         showToast('Loaded from offline cache', 'info');
       } else {
@@ -415,32 +485,30 @@
 
   function adjustReps(set: SetData, delta: number) {
     set.reps = Math.max(0, (set.reps ?? 0) + delta);
-    debouncedSave();
+    markDirty(set);
   }
 
   function adjustWeightLbs(set: SetData, deltaLbs: number) {
     const currentLbs = kgToLbs(set.weightKg);
     const newLbs = Math.max(0, currentLbs + deltaLbs);
     set.weightKg = lbsToKg(newLbs);
-    debouncedSave();
+    markDirty(set);
   }
 
   function updateWeightLbs(set: SetData, lbsStr: string) {
     const lbs = parseFloat(lbsStr) || 0;
     set.weightKg = lbsToKg(lbs);
-    debouncedSave();
+    markDirty(set);
   }
 
   async function toggleComplete(set: SetData, ex: WorkoutExercise) {
     set.completed = !set.completed;
+    markDirty(set);
     // Cache locally immediately so state survives app exit
     saveWorkoutState();
-    // Persist completion state + set data to API
+    // Persist completion state + set data to API (queued if offline)
     try {
-      await api(`/sets/${set.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, distanceMeters: set.distanceMeters, resistance: set.resistance, completed: set.completed }),
-      });
+      await saveSet(set);
     } catch {
       showToast('Failed to save set — will retry on finish', 'error');
     }
@@ -594,8 +662,9 @@
       workout.exercises = [...workout.exercises]; // trigger reactivity
       closeInlineSwap();
       showToast('Exercise swapped', 'info');
-    } catch {
-      showToast('Failed to swap exercise', 'error');
+    } catch (e) {
+      // OfflineError: api() already told the user why
+      if (!(e instanceof OfflineError)) showToast('Failed to swap exercise', 'error');
     }
   }
 
@@ -630,8 +699,8 @@
       }];
       closeSearchSheet();
       showToast(`Added ${exerciseName}`, 'info');
-    } catch {
-      showToast('Failed to add exercise', 'error');
+    } catch (e) {
+      if (!(e instanceof OfflineError)) showToast('Failed to add exercise', 'error');
     }
   }
 
@@ -685,8 +754,8 @@
       } else {
         exercise.sets = [...exercise.sets, newSet];
       }
-    } catch (e: any) {
-      showToast('Failed to add set', 'error');
+    } catch (e) {
+      if (!(e instanceof OfflineError)) showToast('Failed to add set', 'error');
     }
   }
 
@@ -708,10 +777,8 @@
           // Finishing marks every set completed (incl. cardio) so the workout
           // doesn't read as "active" forever to the pre-deploy guard (#73).
           set.completed = true;
-          await api(`/sets/${set.id}`, {
-            method: 'PUT',
-            body: JSON.stringify({ reps: set.reps, weightKg: set.weightKg, rpe: set.rpe, distanceMeters: set.distanceMeters, resistance: set.resistance, completed: true }),
-          });
+          markDirty(set);
+          await saveSet(set);
         }
       }
       await api(`/workouts/${workout.id}`, {
@@ -867,7 +934,8 @@
         onRemove={() => removeExercise(ex)}
         onAddSet={(isWarmup) => addSet(ex, isWarmup)}
         onDeleteSet={(setId) => deleteSet(ex, setId)}
-        onSetRir={(rpe) => { for (const s of ex.sets) s.rpe = rpe; }}
+        onSetRir={(rpe) => { for (const s of ex.sets) { s.rpe = rpe; markDirty(s); } }}
+        onSetEdited={(set) => markDirty(set)}
       />
     {/snippet}
 
@@ -942,7 +1010,7 @@
   <PlateCalculator
     weightLbs={plateCalcWeightLbs}
     onclose={() => { plateCalcWeightLbs = null; plateCalcSet = null; }}
-    onapply={(lbs) => { if (plateCalcSet) { plateCalcSet.weightKg = lbsToKg(lbs); } }}
+    onapply={(lbs) => { if (plateCalcSet) { plateCalcSet.weightKg = lbsToKg(lbs); markDirty(plateCalcSet); } }}
   />
 {/if}
 
