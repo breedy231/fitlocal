@@ -181,10 +181,29 @@ async function shutdown(signal: string) {
   if (shuttingDown) return;
   shuttingDown = true;
   app.log.info({ signal }, 'shutdown: starting graceful stop');
+  // Bound app.close(): Fastify waits for in-flight requests, and an assistant SSE
+  // stream (routes/assistant.ts) can stay open for tens of seconds. In production
+  // Litestream only runs its final WAL sync to R2 after node exits, and Fly's
+  // kill_timeout caps the whole stop — a long chat must not eat that window.
+  const CLOSE_TIMEOUT_MS = 5_000;
+  let closeTimer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await app.close();
+    const timedOut = await Promise.race([
+      app.close().then(() => false),
+      new Promise<boolean>((resolve) => {
+        closeTimer = setTimeout(() => resolve(true), CLOSE_TIMEOUT_MS);
+      }),
+    ]);
+    if (timedOut) {
+      app.log.warn(
+        { timeoutMs: CLOSE_TIMEOUT_MS },
+        'shutdown: fastify close timed out with requests still in flight; continuing'
+      );
+    }
   } catch (err) {
     app.log.error({ err }, 'shutdown: fastify close failed');
+  } finally {
+    clearTimeout(closeTimer);
   }
   try {
     sqlite.pragma(`busy_timeout = ${SHUTDOWN_CHECKPOINT_BUSY_MS}`);
