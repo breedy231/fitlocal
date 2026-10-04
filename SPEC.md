@@ -211,5 +211,5 @@ Use tools to log data or look up history beyond what's shown. Be concise — the
 
 - Each Todoist task carries its own description with file paths, commands, and acceptance criteria — treat the task description as the brief and this spec as backup context.
 - Always read `CLAUDE.md` first: prod vs dev API prefix (`/api` only in prod), kg/meters in DB vs lbs/miles in UI, Svelte 5 runes only, mobile-first 430×932.
-- After UI changes: run `/project:playwright-test`. After API changes: curl the dev URL.
+- After UI changes: run `/playwright-test`. After API changes: curl the dev URL.
 - Never modify `fitlocal.db` directly — API only.

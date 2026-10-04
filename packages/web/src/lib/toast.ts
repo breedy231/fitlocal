@@ -13,6 +13,9 @@ function notify() {
 }
 
 export function showToast(text: string, type: 'error' | 'success' | 'info' = 'error', duration = 4000) {
+  // Don't stack copies of a message that's already showing (e.g. a burst of
+  // "Saved offline" while logging sets with no signal).
+  if (current.some(t => t.text === text && t.type === type)) return;
   const id = nextId++;
   current = [...current, { id, text, type }];
   notify();
