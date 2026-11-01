@@ -91,6 +91,18 @@ export function createTestDb() {
       target_weight_kg REAL,
       weekly_deficit_kcal INTEGER
     );
+
+    CREATE TABLE IF NOT EXISTS injury_restrictions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      notes TEXT,
+      avoid_patterns TEXT NOT NULL DEFAULT '[]',
+      avoid_muscles TEXT NOT NULL DEFAULT '[]',
+      avoid_exercise_ids TEXT NOT NULL DEFAULT '[]',
+      allow_exercise_ids TEXT NOT NULL DEFAULT '[]',
+      started_at TEXT NOT NULL DEFAULT (datetime('now')),
+      cleared_at TEXT
+    );
   `);
 
   const db = drizzle(sqlite, { schema });

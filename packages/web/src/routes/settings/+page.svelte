@@ -5,6 +5,7 @@
   import { showToast } from '$lib/toast';
   import { onMount } from 'svelte';
   import type { UserGoals, EquipmentProfile } from 'fitlocal-shared';
+  import InjuryCard from '$lib/InjuryCard.svelte';
 
   const KG_TO_LBS = 2.20462;
   const LBS_TO_KG = 1 / KG_TO_LBS;
@@ -440,6 +441,8 @@
 <div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   <h1 class="text-2xl font-bold mb-6">Settings</h1>
   <div class="space-y-4">
+    <InjuryCard />
+
     <!-- Cut Phase -->
     <div class="rounded-xl p-4" style="background-color: #1a1a1a;">
       <h2 class="font-medium mb-3">Cut Phase</h2>

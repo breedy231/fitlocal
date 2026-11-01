@@ -9,6 +9,12 @@ vi.mock('./recovery.js', async (importOriginal) => {
 });
 
 describe('getMusclesForExercise', () => {
+  it('treats Hammerstrength machines as chest, not a hammer curl', () => {
+    expect(getMusclesForExercise('Hammerstrength Chest Press')).toEqual(['chest']);
+    expect(getMusclesForExercise('Hammerstrength Incline Chest Press')).toEqual(['chest']);
+    expect(getMusclesForExercise('Hammer Curls')).toContain('biceps');
+  });
+
   it('detects chest for bench press', () => {
     expect(getMusclesForExercise('Barbell Bench Press')).toContain('chest');
   });

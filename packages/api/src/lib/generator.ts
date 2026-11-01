@@ -5,6 +5,7 @@ import { getMusclesForExercise, getGlobalRecoveryModifier } from './recovery.js'
 import { computeProgressionBatch, type ProgressionDirective, type RepRange } from './progression.js';
 import { matchesEquipment, normalizeAvailableEquipment } from './equipment-match.js';
 import { CARDIO_PATTERN } from 'fitlocal-shared';
+import type { ExerciseFilter } from './injury.js';
 
 type DB = BetterSQLite3Database<typeof schemaTypes>;
 
@@ -188,6 +189,8 @@ export interface GeneratedWorkout {
   isInCut: boolean;
   volumeReductionPct?: number;
   programDriven?: boolean;
+  injuryLabel?: string;
+  injuryRemoved?: string[];
   exercises: GeneratedExercise[];
 }
 
@@ -312,13 +315,16 @@ function interleaveByMuscle(exercises: ScoredExercise[]): ScoredExercise[] {
   return result;
 }
 
-export function generateWorkout(dayType: string, equipment: string[] | null, db: DB, options?: { supersets?: boolean; durationMinutes?: number; isInCut?: boolean }): GeneratedWorkout {
+export function generateWorkout(dayType: string, equipment: string[] | null, db: DB, options?: { supersets?: boolean; durationMinutes?: number; isInCut?: boolean; exerciseFilter?: ExerciseFilter }): GeneratedWorkout {
   const targetMuscles = DAY_TYPE_MUSCLES[dayType];
   if (!targetMuscles) {
     throw new Error(`Unknown day type: ${dayType}. Use upper, lower, or fullbody.`);
   }
 
-  const allExercises = db.all<ExerciseRow>(sql`SELECT id, name, rest_seconds, equipment FROM exercises`);
+  // An active injury restriction removes exercises before anything else sees them.
+  const filter = options?.exerciseFilter;
+  const allExercises = db.all<ExerciseRow>(sql`SELECT id, name, rest_seconds, equipment FROM exercises`)
+    .filter(e => !filter || filter(e));
 
   // Normalize the location's available equipment once (expands legacy aliases).
   const available = equipment && equipment.length > 0 ? normalizeAvailableEquipment(equipment) : null;
@@ -493,7 +499,7 @@ export function generateFromProgram(
   dayType: string,
   programExercises: ProgramExerciseInput[],
   db: DB,
-  options?: { supersets?: boolean; isInCut?: boolean },
+  options?: { supersets?: boolean; isInCut?: boolean; exerciseFilter?: ExerciseFilter },
 ): GeneratedWorkout {
   const globalModifier = getGlobalRecoveryModifier(db);
   const suppressProgression = globalModifier < 0.85;
@@ -505,11 +511,17 @@ export function generateFromProgram(
     .filter((id): id is number => id != null);
 
   const exerciseRows = exerciseIds.length > 0
-    ? db.all<{ id: number; name: string; rest_seconds: number | null }>(
-        sql`SELECT id, name, rest_seconds FROM exercises WHERE id IN (${sql.join(exerciseIds.map(id => sql`${id}`), sql`, `)})`
+    ? db.all<{ id: number; name: string; rest_seconds: number | null; equipment: string | null }>(
+        sql`SELECT id, name, rest_seconds, equipment FROM exercises WHERE id IN (${sql.join(exerciseIds.map(id => sql`${id}`), sql`, `)})`
       )
     : [];
-  const exerciseMap = new Map(exerciseRows.map(r => [r.id, r]));
+  // Program days are followed as written, except exercises an active injury
+  // restriction rules out: those are dropped and named in the response.
+  const filter = options?.exerciseFilter;
+  const injuryRemoved = filter ? exerciseRows.filter(r => !filter(r)).map(r => r.name) : [];
+  const exerciseMap = new Map(
+    exerciseRows.filter(r => !filter || filter(r)).map(r => [r.id, r])
+  );
 
   const progressionMap = computeProgressionBatch(
     exerciseRows.map(e => ({ id: e.id, name: e.name })),
@@ -593,7 +605,10 @@ export function generateFromProgram(
     assignSupersets(exercises);
   }
 
-  return { dayType, globalModifier, isInCut, programDriven: true, exercises };
+  return {
+    dayType, globalModifier, isInCut, programDriven: true, exercises,
+    ...(injuryRemoved.length > 0 ? { injuryRemoved } : {}),
+  };
 }
 
 function getAntagonist(muscle: string): string | null {

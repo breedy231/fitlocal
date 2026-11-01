@@ -6,6 +6,7 @@ import { computeProgressionBatch } from '../lib/progression.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
 import { matchesEquipment, normalizeAvailableEquipment } from '../lib/equipment-match.js';
 import { CARDIO_PATTERN } from 'fitlocal-shared';
+import { getActiveRestriction, buildExerciseFilter } from '../lib/injury.js';
 
 // Resolve equipment filter: profileId takes priority, then legacy equipment param
 function resolveEquipment(profileId?: string, equipment?: string): string[] | null {
@@ -99,9 +100,12 @@ export async function generateRoutes(app: FastifyInstance) {
 
       try {
         const equipmentList = resolveEquipment(profileId, equipment);
+        const injury = getActiveRestriction(db);
+        const exerciseFilter = buildExerciseFilter(injury);
         const workout = programExercises
-          ? generateFromProgram(dayType, programExercises, db, { supersets, isInCut })
-          : generateWorkout(dayType, equipmentList, db, { supersets, durationMinutes, isInCut });
+          ? generateFromProgram(dayType, programExercises, db, { supersets, isInCut, exerciseFilter })
+          : generateWorkout(dayType, equipmentList, db, { supersets, durationMinutes, isInCut, exerciseFilter });
+        if (injury) workout.injuryLabel = injury.label;
 
         applyNutritionVolumeReduction(workout, today);
 
@@ -153,6 +157,11 @@ export async function generateRoutes(app: FastifyInstance) {
     );
 
     const excludeSet = new Set([exerciseId, ...excludeIds]);
+    // Swaps never suggest an exercise the active injury restriction rules out.
+    const injuryFilter = buildExerciseFilter(getActiveRestriction(db));
+    if (injuryFilter) {
+      for (const e of allExercises) if (!injuryFilter(e)) excludeSet.add(e.id);
+    }
 
     // Equipment filter helper for this request: subset-match the exercise's
     // required tags against the location's (normalized) available equipment.

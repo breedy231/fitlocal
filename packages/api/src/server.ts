@@ -22,6 +22,7 @@ import { assistantRoutes } from './routes/assistant.js';
 import { hrRoutes } from './routes/hr.js';
 import { workoutSessionRoutes } from './routes/workout-sessions.js';
 import { pushRoutes } from './routes/push.js';
+import { injuryRoutes } from './routes/injury.js';
 import { applyErrorHandler } from './lib/http.js';
 import { registerApi } from './lib/auth.js';
 import { sqlite } from './db.js';
@@ -109,6 +110,7 @@ await registerApi(app, {
     hrRoutes,
     workoutSessionRoutes,
     pushRoutes,
+    injuryRoutes,
   ],
 });
 
