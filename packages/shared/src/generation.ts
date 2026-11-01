@@ -28,6 +28,10 @@ export interface GeneratedWorkout {
   /** Present when calorie deficit caused volume reduction. Value 0–20 (percentage points). */
   volumeReductionPct?: number;
   programDriven?: boolean;
+  /** Label of the active injury restriction, when one filtered this workout. */
+  injuryLabel?: string;
+  /** Program-day exercises dropped by the injury restriction. */
+  injuryRemoved?: string[];
   exercises: GeneratedExercise[];
 }
 

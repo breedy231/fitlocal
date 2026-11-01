@@ -454,5 +454,22 @@ sqlite.exec(`
   CREATE INDEX IF NOT EXISTS idx_set_splits_set_id ON set_splits(set_id);
 `);
 
+// Injury restrictions: one active row (cleared_at IS NULL) whose rules
+// hard-remove exercises from generated workouts, program days and swaps.
+// JSON list columns; clearing an injury stamps cleared_at so history is kept.
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS injury_restrictions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT NOT NULL,
+    notes TEXT,
+    avoid_patterns TEXT NOT NULL DEFAULT '[]',
+    avoid_muscles TEXT NOT NULL DEFAULT '[]',
+    avoid_exercise_ids TEXT NOT NULL DEFAULT '[]',
+    allow_exercise_ids TEXT NOT NULL DEFAULT '[]',
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    cleared_at TEXT
+  );
+`);
+
 console.log('Database migrated successfully');
 sqlite.close();

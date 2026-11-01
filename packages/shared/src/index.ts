@@ -15,3 +15,4 @@ export * from './workoutTheme.js';
 export * from './obsidian-import.js';
 export * from './exercise-description.js';
 export * from './units.js';
+export * from './injury.js';

@@ -871,6 +871,14 @@
 
   <!-- Workout Result -->
   {#if workout && !loading}
+    {#if workout.injuryLabel}
+      <a href="/settings" class="block mb-3 rounded-xl px-4 py-2.5 border border-red-500/40" style="background-color: #450a0a40;">
+        <span class="text-sm font-medium text-red-300">Injury filter on — {workout.injuryLabel}</span>
+        {#if workout.injuryRemoved?.length}
+          <span class="block text-xs text-red-300/70 mt-0.5">Dropped from program: {workout.injuryRemoved.join(', ')}</span>
+        {/if}
+      </a>
+    {/if}
     {#if workout.volumeReductionPct}
       <div class="mb-3 rounded-xl px-4 py-2.5 border border-amber-500/40" style="background-color: #78350f30;">
         <span class="text-sm font-medium text-amber-400">Volume reduced {workout.volumeReductionPct}% — calorie deficit</span>
