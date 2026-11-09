@@ -1,7 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
-import { KG_TO_LBS } from 'fitlocal-shared';
+import { KG_TO_LBS, weeklyWeightRateLbs } from 'fitlocal-shared';
+import { localDate } from '../lib/session-window.js';
 
 // Runtime validation (#82) — see routes/sets.ts for the conventions.
 const updateGoalsBody = {
@@ -213,23 +214,9 @@ export async function goalRoutes(app: FastifyInstance) {
       points.push({ date: r.date, rawKg: r.body_weight_kg, trendKg });
     }
 
-    // Calculate weekly rate: compare latest 7-day avg to 7-day avg from 7 days prior
-    let weeklyRateLbs: number | null = null;
-    if (points.length >= 2) {
-      const latest = points[points.length - 1].trendKg;
-      // Find point closest to 7 days ago
-      const targetDate = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-      const priorPoint = points.reduce((best, p) =>
-        Math.abs(p.date.localeCompare(targetDate)) < Math.abs(best.date.localeCompare(targetDate)) ? p : best
-      );
-      if (priorPoint && priorPoint.date !== points[points.length - 1].date) {
-        const daysDiff = (new Date(points[points.length - 1].date).getTime() - new Date(priorPoint.date).getTime()) / 86400000;
-        if (daysDiff > 0) {
-          const kgPerDay = (latest - priorPoint.trendKg) / daysDiff;
-          weeklyRateLbs = Math.round(kgPerDay * 7 * KG_TO_LBS * 10) / 10;
-        }
-      }
-    }
+    // Weekly rate: latest 7-day avg vs. the point nearest 7 days back (local
+    // date); null when the data is too sparse for a meaningful weekly rate.
+    const weeklyRateLbs = weeklyWeightRateLbs(points, localDate());
 
     return {
       points,

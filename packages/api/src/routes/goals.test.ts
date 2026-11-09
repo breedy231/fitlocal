@@ -1,6 +1,6 @@
 // PUT /goals must distinguish "key omitted" (leave column alone) from an
 // explicit null (clear the column). Schema comes from migrate.ts on a temp DB.
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import os from 'os';
@@ -58,5 +58,27 @@ describe('PUT /goals', () => {
     expect(g.targetCalories).toBe(2000);
     const fresh = (await app.inject({ method: 'GET', url: '/goals' })).json();
     expect(fresh.cutEndDate).toBeNull();
+  });
+});
+
+describe('GET /goals/weight-trend weekly rate', () => {
+  it('uses the point nearest 7 days back (Chicago date), not the first in range', async () => {
+    const { sqlite } = await import('../db.js');
+    sqlite.exec('DELETE FROM health_snapshots');
+    const ins = sqlite.prepare('INSERT INTO health_snapshots (date, body_weight_kg) VALUES (?, ?)');
+    ins.run('2026-09-01', 90);
+    ins.run('2026-11-01', 86);
+    ins.run('2026-11-09', 85);
+
+    // 22:00 Chicago on 2026-11-09 is already 2026-11-10 in UTC.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-10T04:00:00Z'));
+    try {
+      const body = (await app.inject({ method: 'GET', url: '/goals/weight-trend?since=2026-08-01' })).json();
+      // prior = 11-01 (8 days before latest): (85-86)/8 kg/day * 7 * 2.2046 = -1.9 lbs/wk
+      expect(body.weeklyRateLbs).toBe(-1.9);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
