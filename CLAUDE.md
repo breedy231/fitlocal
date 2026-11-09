@@ -25,9 +25,10 @@ fly logs --app fitlocal-app          # Stream live logs
 fly status --app fitlocal-app        # Machine health + check status
 fly deploy --app fitlocal-app        # Deploy from any directory
 
-# Tests (API package only — Vitest)
+# Tests (Vitest in packages/api and packages/web; CI runs both)
 npm test -w packages/api          # Watch mode
 npm run test:run -w packages/api  # Single run
+npm run test:run -w packages/web  # Web single run (needs shared built first)
 npx vitest run packages/api/src/lib/generator.test.ts  # Single file
 
 # Database

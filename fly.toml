@@ -8,6 +8,10 @@ app = "fitlocal-app"
 kill_signal = "SIGTERM"
 kill_timeout = 30
 
+# min_machines_running only applies in the primary region; without this it is ignored
+# and the proxy idle-stops the only machine.
+primary_region = "ord"
+
 [build]
   dockerfile = "packages/api/Dockerfile"
 

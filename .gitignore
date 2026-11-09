@@ -26,3 +26,9 @@ fitlocal.db.CORRUPT.*
 
 # Personal-data screenshots — never commit (see issue #87)
 .github/test-screenshots/
+
+# Python bytecode
+__pycache__/
+
+# Local MCP config (absolute local paths)
+.mcp.json
