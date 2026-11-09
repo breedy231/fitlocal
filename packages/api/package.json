@@ -17,7 +17,7 @@
     "@anthropic-ai/sdk": "^0.105.0",
     "@fastify/cors": "^10.0.2",
     "@fastify/multipart": "^9.0.3",
-    "@fastify/static": "^9.0.0",
+    "@fastify/static": "^10.1.10",
     "better-sqlite3": "^11.7.0",
     "csv-parse": "^5.6.0",
     "drizzle-orm": "^0.45.4",
