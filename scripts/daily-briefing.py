@@ -54,6 +54,9 @@ ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL = "claude-sonnet-5-5"
 CLAUDE_MAX_TOKENS = 300
 CLAUDE_TIMEOUT = 60   # seconds
+# Cut data older than this (latest weigh-in) is treated as stale: no cut numbers in the
+# note or the LLM prompt.
+STALE_WEIGHIN_DAYS = 14
 
 # PPL rotation order
 PPL_ROTATION = ["push", "pull", "legs"]
@@ -242,7 +245,7 @@ def rule_based_recommendation(rec, dl):
     return f"{todo}{caveat}{deload}"
 
 
-def claude_recommendation(rec, dl, tl, cut_line, injury=None):
+def claude_recommendation(rec, dl, tl, cut_line, injury=None, session_summary=None):
     """Coaching rec from the Claude API (claude-sonnet-5-5). Returns clean prose, or None
     to trigger the rule-based fallback. Any missing key, API error, or empty/junk
     response falls back — never raises."""
@@ -263,6 +266,12 @@ def claude_recommendation(rec, dl, tl, cut_line, injury=None):
             f"{', '.join(injury.get('avoidPatterns') or []) or 'see notes'}): "
             f"{injury.get('notes') or ''} Never recommend movements that violate this.\n"
         )
+    cut_line_prompt = f"- {cut_line}\n" if cut_line else ""
+    session_prompt = (
+        f"- Today's planned session is already chosen: {session_summary}. Build on it (how hard to "
+        "push it, what to add or skip around it, whether to add cardio); do NOT prescribe a "
+        "different session or day type.\n" if session_summary else ""
+    )
     prompt = (
         "You are Brendan's strength & running coach. Write today's training recommendation.\n\n"
         "His standing goals: (1) build his running — increase distance and consistency, and protect "
@@ -271,12 +280,13 @@ def claude_recommendation(rec, dl, tl, cut_line, injury=None):
         f"Today's data:\n"
         f"- Muscle recovery (higher = fresher): {recs}\n"
         f"- {load} {deload}\n"
-        f"- {cut_line}\n"
-        f"{injury_line}\n"
+        f"{cut_line_prompt}"
+        f"{injury_line}"
+        f"{session_prompt}\n"
         "Recommend what to train today and how hard. Decide which muscle groups are recovered enough "
         "to lift, and whether to run / cross-train on the bike / rest given impact-tissue recovery and "
         "the training load. Keep it aligned with the cut.\n\n"
-        "Respond with ONLY 2-3 sentences of direct recommendation. Do NOT restate the numbers, do NOT "
+        "Respond with ONLY 2-3 sentences (hard maximum 3) of direct recommendation. Do NOT restate the numbers, do NOT "
         "explain your reasoning, do NOT write a preamble. Start with the recommendation itself."
     )
     body = json.dumps({
@@ -311,6 +321,10 @@ def claude_recommendation(rec, dl, tl, cut_line, injury=None):
         block.get("text", "") for block in data.get("content", []) if block.get("type") == "text"
     ).strip()
     text = " ".join(text.split())
+    # Enforce the 2-3 sentence contract even if the model runs long.
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    if len(sentences) > 3:
+        text = " ".join(sentences[:3])
     if len(text) < 10:
         print("WARN: claude output too short/empty; using fallback", file=sys.stderr)
         return None
@@ -328,8 +342,8 @@ def send_push_notifications(key, title, body, url="/"):
         print("push skipped: pywebpush not installed", file=sys.stderr)
         return
 
-    vapid_private_key = os.environ.get("FITLOCAL_VAPID_PRIVATE_KEY")
-    vapid_subject = os.environ.get("FITLOCAL_VAPID_SUBJECT")
+    vapid_private_key = read_env_value("FITLOCAL_VAPID_PRIVATE_KEY") or os.environ.get("FITLOCAL_VAPID_PRIVATE_KEY")
+    vapid_subject = read_env_value("FITLOCAL_VAPID_SUBJECT") or os.environ.get("FITLOCAL_VAPID_SUBJECT")
     if not vapid_private_key or not vapid_subject:
         print("push skipped: FITLOCAL_VAPID_PRIVATE_KEY or FITLOCAL_VAPID_SUBJECT not set", file=sys.stderr)
         return
@@ -432,24 +446,49 @@ def main():
         ws.sort(key=lambda s: s["date"])
 
     # Compute cut figures up front so the recommendation can reference them.
+    # Stale data (old weigh-in or cut end date passed) is reported as facts only and kept
+    # out of the LLM prompt, so the rec doesn't reason from an old weight.
     cut_block = None
-    cut_line = "Cut status unknown."
-    weighin_ref = "unknown"
+    cut_line = None          # None = omit from the LLM prompt
+    weighin_line = "**Weigh-in:** no body-weight log found."
     if ws and g:
         last = ws[-1]
         kg = last["bodyWeightKg"]
         lb = kg * LB_PER_KG
         tgt_lb = g["targetWeightKg"] * LB_PER_KG
         togo = lb - tgt_lb
-        trend = " → ".join(f'{s["bodyWeightKg"] * LB_PER_KG:.1f}' for s in ws[-5:])
-        cut_block = (f"**Cut:** {lb:.1f} lb ({kg:.2f} kg), **{togo:.1f} lb to go** to target "
-                     f"{tgt_lb:.1f} lb. Cut ends {g.get('cutEndDate', '?')}. "
-                     f"Recent 5: {trend} lb (single-day swings are water, not fat).")
-        cut_line = f"Cut: {lb:.1f} lb, {togo:.1f} lb to target {tgt_lb:.0f} lb, cut ends {g.get('cutEndDate', '?')}."
-        weighin_ref = last["date"]
+        today_d = datetime.date.today()
+        try:
+            age_days = (today_d - datetime.date.fromisoformat(str(last["date"])[:10])).days
+        except ValueError:
+            age_days = None
+        end_str = g.get("cutEndDate")
+        try:
+            cut_over = bool(end_str) and datetime.date.fromisoformat(str(end_str)[:10]) < today_d
+        except ValueError:
+            cut_over = False
+        stale = age_days is None or age_days > STALE_WEIGHIN_DAYS or cut_over
+        if stale:
+            bits = [f"last weigh-in {last['date']}" + (f" ({age_days} days ago)" if age_days is not None else "")]
+            if cut_over:
+                bits.append(f"cut target date {end_str} has passed")
+            cut_block = f"**Cut:** {'; '.join(bits)}. Cut progress not shown (stale)."
+            weighin_line = "**Weigh-in:** weigh in this morning."
+        else:
+            trend = " → ".join(f'{s["bodyWeightKg"] * LB_PER_KG:.1f}' for s in ws[-5:])
+            cut_block = (f"**Cut:** {lb:.1f} lb ({kg:.2f} kg), **{togo:.1f} lb to go** to target "
+                         f"{tgt_lb:.1f} lb. Cut ends {end_str or '?'}. "
+                         f"Recent 5: {trend} lb (single-day swings are water, not fat).")
+            cut_line = f"Cut: {lb:.1f} lb, {togo:.1f} lb to target {tgt_lb:.0f} lb, cut ends {end_str or '?'}."
+            weighin_line = f"**Weigh-in:** latest log is {last['date']} — weigh in this morning if you haven't yet."
+
+    session_summary = None
+    if generate_data and generate_data.get("exercises"):
+        names = ", ".join(e.get("name", "?") for e in generate_data["exercises"][:8])
+        session_summary = f"{next_day.capitalize()} day ({names})"
 
     # Recommendation: Claude Sonnet 5 first, deterministic fallback if it fails/errors.
-    claude_rec = claude_recommendation(rec, dl, tl, cut_line, injury)
+    claude_rec = claude_recommendation(rec, dl, tl, cut_line, injury, session_summary)
     rec_text = claude_rec or rule_based_recommendation(rec, dl)
     rec_source = "Claude Sonnet 5" if claude_rec else "rule-based fallback"
 
@@ -473,7 +512,7 @@ def main():
             f"**Nutrition:** target **{g['targetCalories']} cal / {g['targetProteinG']:.0f}g protein** "
             f"(maintenance {g['maintenanceCalories']}).{intake}", ""]
 
-    lines += [f"**Weigh-in:** latest log is {weighin_ref} — weigh in this morning if you haven't yet.", ""]
+    lines += [weighin_line, ""]
 
     # Today's session plan.
     session_section = build_session_section(generate_data, next_day)
