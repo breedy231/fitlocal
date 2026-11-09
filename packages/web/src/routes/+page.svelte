@@ -20,6 +20,7 @@
     WeeklyProgress,
     ChallengeCurrentResponse,
     GeneratedWorkout,
+    EquipmentProfile,
   } from 'fitlocal-shared';
 
   const recovery = cachedGet<RecoverySummary>('/recovery-summary');
@@ -153,18 +154,28 @@
     ctaBusy = true;
     daySheetOpen = false;
     try {
-      const equipment = (typeof localStorage !== 'undefined' && localStorage.getItem('fitlocal-equipment')) || 'full';
+      // Same profile selection as the generate page: stored id, else the first profile.
+      const storedProfileId = typeof localStorage !== 'undefined'
+        ? parseInt(localStorage.getItem('fitlocal-profile-id') || '0') || 0
+        : 0;
+      let profile: EquipmentProfile | null = null;
+      try {
+        const profiles = await api<EquipmentProfile[]>('/equipment-profiles');
+        profile = profiles.find((p) => p.id === storedProfileId) ?? profiles[0] ?? null;
+      } catch { /* profiles unavailable: server default (full gym) */ }
+      const profileParam = profile ? `&profileId=${profile.id}` : '';
       const duration = (typeof localStorage !== 'undefined' && parseInt(localStorage.getItem('fitlocal-duration') || '60')) || 60;
       const supersets = typeof localStorage !== 'undefined' ? localStorage.getItem('fitlocal-supersets') !== 'false' : true;
 
       const generated = await api<GeneratedWorkout>(
-        `/generate-workout?dayType=${dayType}&equipment=${equipment}&supersets=${supersets}&duration=${duration}`
+        `/generate-workout?dayType=${dayType}${profileParam}&supersets=${supersets}&duration=${duration}`
       );
 
       const created = await api<{ id: number }>('/workouts/start', {
         method: 'POST',
         body: JSON.stringify({
           date: todayIsoDate(),
+          locationProfile: profile?.name ?? null,
           notes: `${generated.dayType} day`,
           exercises: generated.exercises.map((ex, i) => ({
             exerciseId: ex.id,
