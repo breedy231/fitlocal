@@ -7,6 +7,7 @@
   import VolumeHeatmap from '$lib/VolumeHeatmap.svelte';
   import WeightTrendChart from '$lib/WeightTrendChart.svelte';
   import Expandable from '$lib/Expandable.svelte';
+  import { weeklyWeightRateLbs } from 'fitlocal-shared';
   import type {
     SummaryReport as Summary,
     FrequencyReport,
@@ -153,25 +154,10 @@
     }
     if (points.length === 0) return null;
 
-    // Recalculate weekly rate from filtered data
-    const KG_TO_LBS = 2.20462;
-    let weeklyRateLbs: number | null = null;
-    if (points.length >= 2) {
-      const latest = points[points.length - 1];
-      const targetDate = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-      let priorIdx = 0;
-      let bestDiff = Infinity;
-      for (let i = 0; i < points.length; i++) {
-        const diff = Math.abs(points[i].date.localeCompare(targetDate));
-        if (diff < bestDiff) { bestDiff = diff; priorIdx = i; }
-      }
-      if (priorIdx !== points.length - 1) {
-        const daysDiff = (new Date(latest.date).getTime() - new Date(points[priorIdx].date).getTime()) / 86400000;
-        if (daysDiff > 0) {
-          weeklyRateLbs = Math.round((latest.trendKg - points[priorIdx].trendKg) / daysDiff * 7 * KG_TO_LBS * 10) / 10;
-        }
-      }
-    }
+    // Recalculate weekly rate from filtered data. Local calendar date, not UTC.
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const weeklyRateLbs = weeklyWeightRateLbs(points, today);
 
     return {
       ...weightTrendRaw,

@@ -10,21 +10,21 @@ import { getMusclesForExercise } from '../lib/recovery.js';
 // the only reliable signal (these rows have no muscle tags / movement_type), so
 // we resolve MOBILITY_PATTERN (packages/shared/src/mobility.ts — single source
 // of truth) to IDs in JS and exclude them, rather than maintaining a pile of SQL
-// LIKEs. Cached for the process lifetime (the exercises table is static).
-// Both the mobility and cardio ID lists derive from the same `SELECT id, name
-// FROM exercises` scan, so resolve them together from a single fetch instead of
-// scanning the (static) table twice. Cached for the process lifetime.
-let mobilityExerciseIdsCache: number[] | null = null;
-let cardioExerciseIdsCache: number[] | null = null;
-function ensureClassifiedExerciseCaches(): void {
-  if (mobilityExerciseIdsCache !== null && cardioExerciseIdsCache !== null) return;
+// LIKEs.
+// Resolved per call, not cached: exercises can be created, renamed or deleted at
+// runtime (POST/PUT/DELETE /exercises and the import routes), and a stale list
+// misclassifies them until restart. The table is a few hundred rows in a
+// single-user SQLite app, so one `SELECT id, name` plus two regex passes is
+// cheaper than tracking every mutation path.
+function classifiedExerciseIds(): { mobility: number[]; cardio: number[] } {
   const rows = db.all(sql`SELECT id, name FROM exercises`) as { id: number; name: string }[];
-  mobilityExerciseIdsCache = rows.filter((r) => MOBILITY_PATTERN.test(r.name)).map((r) => r.id);
-  cardioExerciseIdsCache = rows.filter((r) => CARDIO_PATTERN.test(r.name)).map((r) => r.id);
+  return {
+    mobility: rows.filter((r) => MOBILITY_PATTERN.test(r.name)).map((r) => r.id),
+    cardio: rows.filter((r) => CARDIO_PATTERN.test(r.name)).map((r) => r.id),
+  };
 }
 function mobilityExerciseIds(): number[] {
-  ensureClassifiedExerciseCaches();
-  return mobilityExerciseIdsCache!;
+  return classifiedExerciseIds().mobility;
 }
 
 // Reusable SQL fragment excluding stretching/mobility exercises (call site joins
@@ -44,12 +44,8 @@ function STRENGTH_ONLY() {
 // the classification (packages/shared/src/cardio.ts); we resolve it to exercise
 // IDs in JS rather than redefining the regex in SQL, then exclude those IDs from
 // weight-based queries.
-//
-// Cached for the process lifetime: there's no runtime exercise-creation path, so
-// re-querying the (effectively static) exercises table per request is waste.
 function cardioExerciseIds(): number[] {
-  ensureClassifiedExerciseCaches();
-  return cardioExerciseIdsCache!;
+  return classifiedExerciseIds().cardio;
 }
 
 function parseExcludeIds(raw?: string): number[] {

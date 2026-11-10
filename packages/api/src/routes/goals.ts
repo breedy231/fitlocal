@@ -1,7 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
-import { KG_TO_LBS } from 'fitlocal-shared';
+import { KG_TO_LBS, weeklyWeightRateLbs } from 'fitlocal-shared';
+import { localDate } from '../lib/session-window.js';
 
 // Runtime validation (#82) — see routes/sets.ts for the conventions.
 const updateGoalsBody = {
@@ -49,16 +50,20 @@ export async function goalRoutes(app: FastifyInstance) {
   // PUT /goals — upsert the single goals row
   app.put<{
     Body: {
-      maintenanceCalories?: number;
-      targetCalories?: number;
-      targetProteinG?: number;
-      targetWeightKg?: number;
-      cutStartDate?: string;
-      cutEndDate?: string;
-      maxHr?: number;
+      maintenanceCalories?: number | null;
+      targetCalories?: number | null;
+      targetProteinG?: number | null;
+      targetWeightKg?: number | null;
+      cutStartDate?: string | null;
+      cutEndDate?: string | null;
+      maxHr?: number | null;
     };
   }>('/goals', { schema: { body: updateGoalsBody } }, async (req) => {
-    const { maintenanceCalories, targetCalories, targetProteinG, targetWeightKg, cutStartDate, cutEndDate, maxHr } = req.body;
+    const body = req.body;
+    const { maintenanceCalories, targetCalories, targetProteinG, targetWeightKg, cutStartDate, cutEndDate, maxHr } = body;
+
+    // Omitted key = leave the column alone; explicit null = clear it.
+    const has = (k: keyof typeof body) => body[k] !== undefined;
 
     const existing = db.all(sql`SELECT id FROM user_goals LIMIT 1`) as any[];
 
@@ -70,13 +75,13 @@ export async function goalRoutes(app: FastifyInstance) {
     } else {
       db.run(sql`
         UPDATE user_goals SET
-          maintenance_calories = COALESCE(${maintenanceCalories ?? null}, maintenance_calories),
-          target_calories = COALESCE(${targetCalories ?? null}, target_calories),
-          target_protein_g = COALESCE(${targetProteinG ?? null}, target_protein_g),
-          target_weight_kg = COALESCE(${targetWeightKg ?? null}, target_weight_kg),
-          cut_start_date = COALESCE(${cutStartDate ?? null}, cut_start_date),
-          cut_end_date = COALESCE(${cutEndDate ?? null}, cut_end_date),
-          max_hr = COALESCE(${maxHr ?? null}, max_hr),
+          maintenance_calories = CASE WHEN ${has('maintenanceCalories') ? 1 : 0} THEN ${maintenanceCalories ?? null} ELSE maintenance_calories END,
+          target_calories = CASE WHEN ${has('targetCalories') ? 1 : 0} THEN ${targetCalories ?? null} ELSE target_calories END,
+          target_protein_g = CASE WHEN ${has('targetProteinG') ? 1 : 0} THEN ${targetProteinG ?? null} ELSE target_protein_g END,
+          target_weight_kg = CASE WHEN ${has('targetWeightKg') ? 1 : 0} THEN ${targetWeightKg ?? null} ELSE target_weight_kg END,
+          cut_start_date = CASE WHEN ${has('cutStartDate') ? 1 : 0} THEN ${cutStartDate ?? null} ELSE cut_start_date END,
+          cut_end_date = CASE WHEN ${has('cutEndDate') ? 1 : 0} THEN ${cutEndDate ?? null} ELSE cut_end_date END,
+          max_hr = CASE WHEN ${has('maxHr') ? 1 : 0} THEN ${maxHr ?? null} ELSE max_hr END,
           updated_at = datetime('now')
         WHERE id = ${existing[0].id}
       `);
@@ -209,23 +214,9 @@ export async function goalRoutes(app: FastifyInstance) {
       points.push({ date: r.date, rawKg: r.body_weight_kg, trendKg });
     }
 
-    // Calculate weekly rate: compare latest 7-day avg to 7-day avg from 7 days prior
-    let weeklyRateLbs: number | null = null;
-    if (points.length >= 2) {
-      const latest = points[points.length - 1].trendKg;
-      // Find point closest to 7 days ago
-      const targetDate = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-      const priorPoint = points.reduce((best, p) =>
-        Math.abs(p.date.localeCompare(targetDate)) < Math.abs(best.date.localeCompare(targetDate)) ? p : best
-      );
-      if (priorPoint && priorPoint.date !== points[points.length - 1].date) {
-        const daysDiff = (new Date(points[points.length - 1].date).getTime() - new Date(priorPoint.date).getTime()) / 86400000;
-        if (daysDiff > 0) {
-          const kgPerDay = (latest - priorPoint.trendKg) / daysDiff;
-          weeklyRateLbs = Math.round(kgPerDay * 7 * KG_TO_LBS * 10) / 10;
-        }
-      }
-    }
+    // Weekly rate: latest 7-day avg vs. the point nearest 7 days back (local
+    // date); null when the data is too sparse for a meaningful weekly rate.
+    const weeklyRateLbs = weeklyWeightRateLbs(points, localDate());
 
     return {
       points,
