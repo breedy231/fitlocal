@@ -478,7 +478,10 @@ def main():
     cut_block = None
     cut_line = None          # None = omit from the LLM prompt
     weighin_line = "**Weigh-in:** no body-weight log found."
-    if ws and g:
+    if ws and not (g and g.get("targetWeightKg")):
+        # No cut set (goals cleared): no cut block, just when the last weigh-in was.
+        weighin_line = f"**Weigh-in:** latest log is {ws[-1]['date']}."
+    elif ws and g:
         last = ws[-1]
         kg = last["bodyWeightKg"]
         lb = kg * LB_PER_KG
@@ -538,9 +541,15 @@ def main():
             prot = n.get("protein", {}).get("current")
             intake = (f" Yesterday's logged intake (Apple Health not synced today yet): {cur} cal / {prot}g protein."
                       if n.get("isStale") else f" Today so far: {cur} cal / {prot}g protein.")
-        lines += [
-            f"**Nutrition:** target **{g['targetCalories']} cal / {g['targetProteinG']:.0f}g protein** "
-            f"(maintenance {g['maintenanceCalories']}).{intake}", ""]
+        # Goals are nullable: with no cut set there is no calorie target, only maintenance.
+        tgt, prot_t, maint = g.get("targetCalories"), g.get("targetProteinG"), g.get("maintenanceCalories")
+        prot_s = f" / {prot_t:.0f}g protein" if prot_t else ""
+        if tgt:
+            maint_s = f" (maintenance {maint})" if maint else ""
+            lines += [f"**Nutrition:** target **{tgt} cal{prot_s}**{maint_s}.{intake}", ""]
+        elif maint or prot_t:
+            cal_s = f"maintenance **{maint} cal**" if maint else "no calorie target"
+            lines += [f"**Nutrition:** {cal_s}{prot_s}, no cut set.{intake}", ""]
 
     lines += [weighin_line, ""]
 
