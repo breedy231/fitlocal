@@ -635,32 +635,26 @@
         );
       } catch { /* no history — keep defaults */ }
 
-      // Create new workout_exercise and copy sets
-      const newWe = await api<{ id: number }>(`/workouts/${workout.id}/exercises`, {
+      // One atomic request: server creates the exercise + sets and deletes the
+      // old exercise in a single transaction, so a dropped signal can't leave
+      // a half-swap. Sets match the old set count, using last-performance
+      // weights when available.
+      const setsPayload = ex.sets.map((oldSet, i) => {
+        const histSet = lastPerf.sets[i];
+        return { reps: histSet?.reps ?? oldSet.reps, weightKg: histSet?.weightKg ?? 0 };
+      });
+      const newWe = await api<{ id: number; sets: SetData[] }>(`/workouts/${workout.id}/exercises`, {
         method: 'POST',
         body: JSON.stringify({
           exerciseId: newExerciseId,
           displayOrder: ex.sets.length > 0 ? workout.exercises.indexOf(ex) : 0,
           supersetGroup: ex.supersetGroup,
           swapReason: reason ?? null,
+          sets: setsPayload,
+          replaceWorkoutExerciseId: ex.id,
         }),
       });
-      // Create sets matching the old exercise's set count, using last-performance weights when available
-      const newSets: SetData[] = [];
-      for (let i = 0; i < ex.sets.length; i++) {
-        const oldSet = ex.sets[i];
-        const histSet = lastPerf.sets[i];
-        const reps = histSet?.reps ?? oldSet.reps;
-        const weightKg = histSet?.weightKg ?? 0;
-        const s = await api<SetData>('/sets', {
-          method: 'POST',
-          body: JSON.stringify({ workoutExerciseId: newWe.id, reps, weightKg }),
-        });
-        s.completed = false;
-        newSets.push(s);
-      }
-      // Remove old exercise
-      await api(`/workout-exercises/${ex.id}`, { method: 'DELETE' });
+      const newSets: SetData[] = newWe.sets.map((s) => ({ ...s, completed: false }));
       // Replace in local state
       const idx = workout.exercises.indexOf(ex);
       workout.exercises[idx] = {
@@ -684,23 +678,16 @@
   async function addExerciseToWorkout(exerciseId: number, exerciseName: string) {
     if (!workout) return;
     try {
-      const newWe = await api<{ id: number }>(`/workouts/${workout.id}/exercises`, {
+      // One atomic request: exercise + 3 default sets.
+      const newWe = await api<{ id: number; sets: SetData[] }>(`/workouts/${workout.id}/exercises`, {
         method: 'POST',
         body: JSON.stringify({
           exerciseId,
           displayOrder: workout.exercises.length,
+          sets: [0, 1, 2].map(() => ({ reps: 10, weightKg: 0 })),
         }),
       });
-      // Create 3 default sets
-      const newSets: SetData[] = [];
-      for (let i = 0; i < 3; i++) {
-        const s = await api<SetData>('/sets', {
-          method: 'POST',
-          body: JSON.stringify({ workoutExerciseId: newWe.id, reps: 10, weightKg: 0 }),
-        });
-        s.completed = false;
-        newSets.push(s);
-      }
+      const newSets: SetData[] = newWe.sets.map((s) => ({ ...s, completed: false }));
       workout.exercises = [...workout.exercises, {
         id: newWe.id,
         exerciseId,
