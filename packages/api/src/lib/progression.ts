@@ -58,8 +58,14 @@ export function layoffFactor(daysSince: number): number | null {
  * Returns a lighter-start result when the exercise has been off for 21+ days,
  * else null. Unweighted exercises (bodyweight with no load, cardio) are never
  * touched. Reuses the 'deload' directive; `layoffDays` tells the UI why.
+ *
+ * Assisted machines invert the load: the logged weight is counterweight, so a
+ * lighter start means MORE of it. Those divide by the factor instead.
  */
+const ASSISTED = /\bassisted\b/i;
+
 function layoffResult(
+  exerciseName: string,
   lastDate: string,
   lastWeight: number,
   classification: ExerciseClass,
@@ -71,8 +77,9 @@ function layoffResult(
   const days = daysSinceDate(lastDate, now);
   const factor = layoffFactor(days);
   if (factor === null) return null;
+  const weightKg = ASSISTED.test(exerciseName) ? lastWeight / factor : lastWeight * factor;
   return {
-    weightKg: round(lastWeight * factor),
+    weightKg: round(weightKg),
     reps: repRange.min + Math.floor((repRange.max - repRange.min) / 2),
     sets,
     directive: 'deload',
@@ -186,7 +193,7 @@ export function computeProgression(exerciseId: number, exerciseName: string, db:
     };
   }
 
-  const layoff = layoffResult(latest.date, lastWeight, classification, repRange, defaultSets, now);
+  const layoff = layoffResult(exerciseName, latest.date, lastWeight, classification, repRange, defaultSets, now);
   if (layoff) return layoff;
 
   // Evaluate recent sessions against rep range
@@ -416,7 +423,7 @@ export function computeProgressionBatch(
       continue;
     }
 
-    const layoff = layoffResult(latest.date, lastWeight, classification, repRange, defaultSets, now);
+    const layoff = layoffResult(ex.name, latest.date, lastWeight, classification, repRange, defaultSets, now);
     if (layoff) {
       results.set(ex.id, layoff);
       continue;

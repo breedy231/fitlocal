@@ -248,6 +248,19 @@ describe('return-from-layoff rule', () => {
     });
   }
 
+  it('assisted machines get MORE counterweight after a layoff, not less', () => {
+    const exId = ctx.seedExercise('Assisted Pull Up');
+    seed(exId, 60, [{ reps: 10, weightKg: 30 }, { reps: 10, weightKg: 30 }]);
+    const single = computeProgression(exId, 'Assisted Pull Up', ctx.db, NOW);
+    const batch = computeProgressionBatch([{ id: exId, name: 'Assisted Pull Up' }], ctx.db, NOW).get(exId)!;
+    for (const r of [single, batch]) {
+      expect(r.weightKg).toBe(Math.round((30 / 0.8) * 100) / 100);
+      expect(r.weightKg).toBeGreaterThan(30);
+      expect(r.directive).toBe('deload');
+      expect(r.layoffDays).toBe(60);
+    }
+  });
+
   it('never returns up after 21+ days even when history says progress', () => {
     const exId = ctx.seedExercise('Barbell Bench Press'); // 4-6
     seed(exId, 30, [{ reps: 6, weightKg: 100 }, { reps: 6, weightKg: 100 }]);
