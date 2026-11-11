@@ -57,6 +57,35 @@
     }
   }
 
+  // A cut is "set" when any cut-specific field has a saved value. Maintenance
+  // calories and the protein target describe the person, not the cut, so
+  // ending a cut keeps them.
+  const hasCut = $derived(
+    !!(goalsCache.data?.targetCalories || goalsCache.data?.targetWeightKg ||
+       goalsCache.data?.cutStartDate || goalsCache.data?.cutEndDate),
+  );
+
+  async function endCut() {
+    if (!confirm('End the cut? This clears the daily calorie target, goal weight and dates. Maintenance calories and protein target are kept.')) return;
+    cutSaving = true;
+    try {
+      await api('/goals', {
+        method: 'PUT',
+        body: JSON.stringify({ targetCalories: null, targetWeightKg: null, cutStartDate: null, cutEndDate: null }),
+      });
+      cutTargetCal = '';
+      cutTargetWeightLbs = '';
+      cutStartDate = '';
+      cutEndDate = '';
+      invalidateAfterMutation('/goals');
+      showToast('Cut ended', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to end cut', 'error');
+    } finally {
+      cutSaving = false;
+    }
+  }
+
   function setDefaultDates() {
     if (!cutStartDate) {
       // Default to next Monday
@@ -519,6 +548,15 @@
         >
           {cutSaving ? 'Saving...' : 'Save Cut Goals'}
         </button>
+        {#if hasCut}
+          <button
+            onclick={endCut}
+            disabled={cutSaving}
+            class="w-full py-3 px-4 rounded-lg bg-neutral-800 text-red-400 font-medium text-sm min-h-[48px] disabled:opacity-50"
+          >
+            End cut
+          </button>
+        {/if}
       </div>
     </div>
 
