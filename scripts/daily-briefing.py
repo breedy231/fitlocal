@@ -434,6 +434,9 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                          help="Print the briefing to stdout instead of writing/committing "
                               "the vault note or sending push notifications.")
+    parser.add_argument("--json", action="store_true",
+                        help="Print today's rec and session plan as JSON (for the home-ai morning "
+                             "Discord briefing) instead of writing the note, committing, or pushing.")
     args = parser.parse_args()
 
     key = read_key()
@@ -563,6 +566,22 @@ def main():
     if missing:
         lines += [f"> ⚠️ Some data was unavailable: {', '.join(missing)}.", ""]
     lines += [f"*Auto-generated from FitLocal prod. Recommendation: {rec_source}.*"]
+
+    if args.json:
+        # Consumed by ~/Projects/home-ai/scripts/morning-briefing.js at 07:00. Same rec as the
+        # note (one prompt, one fallback); only the output shape differs.
+        session = [{"name": ex.get("name", "?"), "plan": render_exercise_obsidian(ex).split("\n")[1:]}
+                   for ex in (generate_data or {}).get("exercises", [])]
+        print(json.dumps({
+            "day": next_day,
+            "rec": rec_text,
+            "recSource": rec_source,
+            "session": session,
+            "layoffDays": layoff_days,
+            "injury": (injury or {}).get("label") if injury else None,
+            "missing": missing + ([] if generate_data else ["session plan"]),
+        }))
+        return
 
     if args.dry_run:
         print("--- DRY RUN: not writing vault note, not committing, not sending push ---")
