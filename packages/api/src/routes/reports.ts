@@ -191,9 +191,71 @@ function classifyLevel(ratio: number, thresholds: Record<string, number>): strin
   return 'beginner';
 }
 
+// Query-string validation. Bad input gets a 400 from AJV instead of reaching a
+// handler that would NaN/RangeError into a 500 (or, for `weeks`, loop for
+// minutes). Fastify coerces numeric strings for `type: integer`. Unknown
+// params are stripped (removeAdditional), not rejected, so cache-busters keep
+// working. Style follows idParams in lib/http.ts.
+const ID_LIST_PATTERN = '^\\s*(\\d{1,15}(\\s*,\\s*\\d{1,15})*)?\\s*$'; // "1,2,3" or "" (web sends ids.join(','))
+const DATE_PATTERN = '^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$'; // YYYY-MM-DD
+const MAX_ID = 2147483647;
+const MAX_HEATMAP_WEEKS = 52;
+
+const excludeIdsQuery = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { excludeExerciseIds: { type: 'string', maxLength: 2000, pattern: ID_LIST_PATTERN } },
+} as const;
+const exerciseProgressionQuery = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    exerciseId: { type: 'integer', minimum: 1, maximum: MAX_ID },
+    name: { type: 'string', maxLength: 200 },
+    excludeExerciseIds: { type: 'string', maxLength: 2000, pattern: ID_LIST_PATTERN },
+  },
+} as const;
+const exerciseIdsQuery = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { exerciseIds: { type: 'string', maxLength: 2000, pattern: ID_LIST_PATTERN } },
+} as const;
+const healthTrendsQuery = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    since: { type: 'string', pattern: DATE_PATTERN },
+    until: { type: 'string', pattern: DATE_PATTERN },
+  },
+} as const;
+const oneRmHistoryQuery = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['exerciseId'],
+  properties: { exerciseId: { type: 'integer', minimum: 1, maximum: MAX_ID } },
+} as const;
+const calendarQuery = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    year: { type: 'integer', minimum: 1970, maximum: 2200 },
+    month: { type: 'integer', minimum: 1, maximum: 12 },
+  },
+} as const;
+const heatmapQuery = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { weeks: { type: 'integer', minimum: 1, maximum: MAX_HEATMAP_WEEKS } },
+} as const;
+const benchmarksQuery = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { gender: { type: 'string', enum: ['male', 'female'] } },
+} as const;
+
 export async function reportRoutes(app: FastifyInstance) {
   // Weekly workout frequency (last 12 weeks)
-  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/frequency', async (req) => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/frequency', { schema: { querystring: excludeIdsQuery } }, async (req) => {
     const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const rows = db.all(sql`
       SELECT
@@ -214,7 +276,7 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Volume over time (total kg lifted per workout, last 30 workouts)
-  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/volume', async (req) => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/volume', { schema: { querystring: excludeIdsQuery } }, async (req) => {
     const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const rows = db.all(sql`
       SELECT
@@ -241,7 +303,7 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Muscle group distribution (last 30 days)
-  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/muscle-distribution', async (req) => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/muscle-distribution', { schema: { querystring: excludeIdsQuery } }, async (req) => {
     const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
 
     const rows = db.all(sql`
@@ -274,7 +336,7 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Personal records (heaviest working set per exercise + estimated 1RM)
-  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/personal-records', async (req) => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/personal-records', { schema: { querystring: excludeIdsQuery } }, async (req) => {
     const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const rows = db.all(sql`
       SELECT
@@ -308,13 +370,14 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Exercise progression (weight over time for a specific exercise)
-  app.get<{ Querystring: { exerciseId?: string; name?: string; excludeExerciseIds?: string } }>(
+  app.get<{ Querystring: { exerciseId?: number; name?: string; excludeExerciseIds?: string } }>(
     '/reports/exercise-progression',
+    { schema: { querystring: exerciseProgressionQuery } },
     async (req) => {
       let exerciseId: number | undefined;
 
-      if (req.query.exerciseId) {
-        exerciseId = parseInt(req.query.exerciseId);
+      if (req.query.exerciseId !== undefined) {
+        exerciseId = req.query.exerciseId;
       } else if (req.query.name) {
         const exercise = await db
           .select()
@@ -367,6 +430,7 @@ export async function reportRoutes(app: FastifyInstance) {
   // no weight progression and resolve to empty dataPoints.
   app.get<{ Querystring: { exerciseIds?: string } }>(
     '/reports/exercise-progression-batch',
+    { schema: { querystring: exerciseIdsQuery } },
     async (req) => {
       const ids = parseExcludeIds(req.query.exerciseIds);
       if (ids.length === 0) return { results: [] };
@@ -416,7 +480,7 @@ export async function reportRoutes(app: FastifyInstance) {
   );
 
   // Exercise list for progression picker
-  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/exercises-with-history', async (req) => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/exercises-with-history', { schema: { querystring: excludeIdsQuery } }, async (req) => {
     const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const rows = db.all(sql`
       SELECT DISTINCT e.id, e.name,
@@ -436,7 +500,7 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Health trends (weight, steps, HRV, resting HR, sleep over time)
-  app.get<{ Querystring: { since?: string; until?: string } }>('/reports/health-trends', async (req) => {
+  app.get<{ Querystring: { since?: string; until?: string } }>('/reports/health-trends', { schema: { querystring: healthTrendsQuery } }, async (req) => {
     const until = req.query.until || new Date().toISOString().slice(0, 10);
     const since = req.query.since || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
@@ -472,9 +536,8 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Exercise 1RM history over time
-  app.get<{ Querystring: { exerciseId: string } }>('/reports/exercise-1rm-history', async (req) => {
-    const exerciseId = parseInt(req.query.exerciseId);
-    if (!exerciseId) return { exerciseName: null, dataPoints: [] };
+  app.get<{ Querystring: { exerciseId: number } }>('/reports/exercise-1rm-history', { schema: { querystring: oneRmHistoryQuery } }, async (req) => {
+    const exerciseId = req.query.exerciseId;
 
     const exercise = await db
       .select()
@@ -506,10 +569,10 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Workout calendar heatmap (month view)
-  app.get<{ Querystring: { year?: string; month?: string } }>('/reports/calendar', async (req) => {
+  app.get<{ Querystring: { year?: number; month?: number } }>('/reports/calendar', { schema: { querystring: calendarQuery } }, async (req) => {
     const now = new Date();
-    const year = parseInt(req.query.year || String(now.getFullYear()));
-    const month = parseInt(req.query.month || String(now.getMonth() + 1));
+    const year = req.query.year ?? now.getFullYear();
+    const month = req.query.month ?? now.getMonth() + 1;
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
 
@@ -545,8 +608,8 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Body part volume heatmap (weekly grid)
-  app.get<{ Querystring: { weeks?: string } }>('/reports/volume-heatmap', async (req) => {
-    const weeks = parseInt(req.query.weeks || '4');
+  app.get<{ Querystring: { weeks?: number } }>('/reports/volume-heatmap', { schema: { querystring: heatmapQuery } }, async (req) => {
+    const weeks = req.query.weeks ?? 4;
     const since = new Date();
     since.setDate(since.getDate() - weeks * 7);
     const sinceStr = since.toISOString().slice(0, 10);
@@ -607,8 +670,8 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Strength benchmarks
-  app.get<{ Querystring: { gender?: string } }>('/reports/benchmarks', async (req) => {
-    const gender = (req.query.gender || 'male') as 'male' | 'female';
+  app.get<{ Querystring: { gender?: 'male' | 'female' } }>('/reports/benchmarks', { schema: { querystring: benchmarksQuery } }, async (req) => {
+    const gender = req.query.gender ?? 'male';
 
     // Get latest body weight
     const bwRow = db.all(sql`
@@ -667,7 +730,7 @@ export async function reportRoutes(app: FastifyInstance) {
   });
 
   // Summary stats
-  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/summary', async (req) => {
+  app.get<{ Querystring: { excludeExerciseIds?: string } }>('/reports/summary', { schema: { querystring: excludeIdsQuery } }, async (req) => {
     const excludeIds = parseExcludeIds(req.query.excludeExerciseIds);
     const totalWorkouts = db.all(sql`
       SELECT COUNT(DISTINCT w.id) as count
