@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 import { parseHealthExportZip, computeLatestByMetric } from '../lib/health-xml-parser.js';
+import { localDate } from '../lib/session-window.js';
 import { lbsToKg } from 'fitlocal-shared';
 
 // Runtime validation (#82) — see routes/sets.ts for the conventions.
@@ -123,8 +124,9 @@ export async function healthRoutes(app: FastifyInstance) {
       proteinG?: number;
     };
   }>('/health/sync', { schema: { body: healthSyncBody } }, async (req, reply) => {
-    const _d = new Date();
-    const date = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
+    // The user's calendar day, not the server's: Fly runs in UTC, so server-local
+    // getters put an evening sync on tomorrow's row.
+    const date = localDate();
     const raw = req.body;
     // Treat 0 as null for metrics where zero is meaningless
     const hrv = raw.hrv || null;
