@@ -3,6 +3,10 @@ import { eq, desc, sql } from 'drizzle-orm';
 import { CARDIO_PATTERN, MOBILITY_PATTERN, type ExerciseDataPoint } from 'fitlocal-shared';
 import { db, schema } from '../db.js';
 import { getMusclesForExercise } from '../lib/recovery.js';
+import { epley1RMSql } from '../lib/strength.js';
+
+// Single source for the SQL e1RM expression (same rules as epley1RM()).
+const E1RM_SQL = sql.raw(epley1RMSql('s.weight_kg', 's.reps'));
 
 // Stretching / mobility / foam-rolling exercises are warm-up & cooldown
 // movements, not trained lifts — they carry no weight and would distort every
@@ -278,7 +282,7 @@ export async function reportRoutes(app: FastifyInstance) {
         s.weight_kg as maxWeightKg,
         s.reps as repsAtMax,
         w.date as dateAchieved,
-        MAX(s.weight_kg * (1.0 + MIN(CAST(s.reps AS REAL), 12.0) / 30.0)) as estimated1RmKg
+        MAX(${E1RM_SQL}) as estimated1RmKg
       FROM sets s
       JOIN workout_exercises we ON we.id = s.workout_exercise_id
       JOIN exercises e ON e.id = we.exercise_id
@@ -343,7 +347,7 @@ export async function reportRoutes(app: FastifyInstance) {
           MAX(CASE WHEN s.is_warmup = 0 THEN s.weight_kg ELSE 0 END) as maxWeight,
           MAX(CASE WHEN s.is_warmup = 0 THEN s.reps ELSE 0 END) as maxReps,
           SUM(CASE WHEN s.is_warmup = 0 THEN s.reps * s.weight_kg * s.multiplier ELSE 0 END) as sessionVolume,
-          MAX(CASE WHEN s.is_warmup = 0 AND s.weight_kg > 0 THEN s.weight_kg * (1.0 + MIN(CAST(s.reps AS REAL), 12.0) / 30.0) ELSE 0 END) as estimated1RmKg
+          MAX(CASE WHEN s.is_warmup = 0 AND s.weight_kg > 0 THEN ${E1RM_SQL} ELSE 0 END) as estimated1RmKg
         FROM workouts w
         JOIN workout_exercises we ON we.workout_id = w.id
         JOIN sets s ON s.workout_exercise_id = we.id
@@ -386,7 +390,7 @@ export async function reportRoutes(app: FastifyInstance) {
             MAX(CASE WHEN s.is_warmup = 0 THEN s.weight_kg ELSE 0 END) as maxWeight,
             MAX(CASE WHEN s.is_warmup = 0 THEN s.reps ELSE 0 END) as maxReps,
             SUM(CASE WHEN s.is_warmup = 0 THEN s.reps * s.weight_kg * s.multiplier ELSE 0 END) as sessionVolume,
-            MAX(CASE WHEN s.is_warmup = 0 AND s.weight_kg > 0 THEN s.weight_kg * (1.0 + MIN(CAST(s.reps AS REAL), 12.0) / 30.0) ELSE 0 END) as estimated1RmKg
+            MAX(CASE WHEN s.is_warmup = 0 AND s.weight_kg > 0 THEN ${E1RM_SQL} ELSE 0 END) as estimated1RmKg
           FROM workouts w
           JOIN workout_exercises we ON we.workout_id = w.id
           JOIN sets s ON s.workout_exercise_id = we.id
@@ -488,7 +492,7 @@ export async function reportRoutes(app: FastifyInstance) {
       SELECT
         w.date,
         MAX(CASE WHEN s.is_warmup = 0 AND s.weight_kg > 0
-          THEN s.weight_kg * (1.0 + MIN(CAST(s.reps AS REAL), 12.0) / 30.0) ELSE 0 END) as estimated1RmKg
+          THEN ${E1RM_SQL} ELSE 0 END) as estimated1RmKg
       FROM workouts w
       JOIN workout_exercises we ON we.workout_id = w.id
       JOIN sets s ON s.workout_exercise_id = we.id
@@ -620,7 +624,7 @@ export async function reportRoutes(app: FastifyInstance) {
       SELECT
         e.id,
         e.name,
-        MAX(s.weight_kg * (1.0 + MIN(CAST(s.reps AS REAL), 12.0) / 30.0)) as estimated1RmKg
+        MAX(${E1RM_SQL}) as estimated1RmKg
       FROM sets s
       JOIN workout_exercises we ON we.id = s.workout_exercise_id
       JOIN exercises e ON e.id = we.exercise_id
