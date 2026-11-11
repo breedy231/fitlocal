@@ -335,6 +335,8 @@
   let healthImporting = $state(false);
   let healthImportResult = $state('');
   let healthImportLatest = $state<{ label: string; date: string | null; stale: boolean }[]>([]);
+  // Expected metrics with no data in the last 14 days of the export (#90)
+  let healthImportMissing = $state('');
 
   const STALE_DAYS = 7;
 
@@ -367,6 +369,7 @@
     healthImporting = true;
     healthImportResult = '';
     healthImportLatest = [];
+    healthImportMissing = '';
     try {
       const buffer = await file.arrayBuffer();
       const storedKey = typeof localStorage !== 'undefined' ? localStorage.getItem('fitlocal_api_key') : null;
@@ -399,7 +402,16 @@
         return { label, date: dateStr, stale };
       });
 
-      showToast('Health data imported!', 'success');
+      const missing: Array<{ metric: string; latestDate: string | null; windowStart: string; windowEnd: string }> =
+        result.missingMetrics || [];
+      if (missing.length > 0) {
+        const labelOf = (key: string) => METRIC_DISPLAY_ORDER.find(m => m.key === key)?.label ?? key;
+        const parts = missing.map(m => `${labelOf(m.metric)} (last ${m.latestDate ?? 'never'})`);
+        healthImportMissing = `No ${parts.join(', ')} in the export's last 14 days (${missing[0].windowStart} to ${missing[0].windowEnd}). Nothing is writing these to Apple Health: check the source app's Health permissions.`;
+        showToast(`Imported, but missing: ${missing.map(m => labelOf(m.metric)).join(', ')}`, 'info', 6000);
+      } else {
+        showToast('Health data imported!', 'success');
+      }
     } catch (err: any) {
       healthImportResult = err.message || 'Import failed';
       healthImportLatest = [];
@@ -689,6 +701,9 @@
         <p class="text-xs mt-2 {healthImportResult.startsWith('Imported') ? 'text-green-400' : 'text-red-400'} leading-relaxed">
           {healthImportResult}
         </p>
+        {#if healthImportMissing}
+          <p class="text-xs mt-2 text-amber-400 leading-relaxed">⚠️ {healthImportMissing}</p>
+        {/if}
         {#if healthImportLatest.length}
           <div class="mt-2 rounded-lg bg-neutral-800 px-3 py-2">
             {#each healthImportLatest as item}
