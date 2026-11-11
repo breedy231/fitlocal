@@ -370,6 +370,7 @@ export async function programRoutes(app: FastifyInstance) {
           ...ex,
           exerciseId,
           progression: prog.directive,
+          layoffDays: prog.layoffDays ?? null,
           suggestedWeightKg: prog.weightKg,
           suggestedReps: prog.reps,
           repRange: prog.repRange,

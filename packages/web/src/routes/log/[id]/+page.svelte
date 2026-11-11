@@ -17,6 +17,8 @@
   import WorkoutSummary, { type WorkoutSummaryData, type ExerciseSummary } from '$lib/workout/WorkoutSummary.svelte';
   import CelebrationOverlay from '$lib/workout/CelebrationOverlay.svelte';
   import ExerciseSearchSheet from '$lib/workout/ExerciseSearchSheet.svelte';
+  import { isWorkoutStarted, resolveStartTime, readWarmupDoneAt, writeWarmupDoneAt } from '$lib/workout/session-state';
+  import { planFinish, unfinishedSummary, type FinishPlan } from '$lib/workout/unfinished-sets';
 
   type SetData = WorkoutSet;
 
@@ -30,6 +32,7 @@
     id: number;
     date: string;
     notes?: string;
+    startedAt?: string | null;
     exercises: WorkoutExercise[];
   }
 
@@ -414,9 +417,15 @@
         loadAllLastPerformance(workout, parseInt(id));
         // Pre-fetch swap candidates for all exercises so inline swap is instant
         prefetchSwapCandidates(workout);
-        const muscles = getWorkoutMuscles();
-        const stretchList = await loadStretches(muscles);
-        beginStretchPhase('warmup', stretchList);
+        // iOS kills backgrounded PWAs, so a reopen mid-workout must resume, not
+        // restart: skip the warm-up and count time from the persisted start.
+        const warmupDoneAt = readWarmupDoneAt(id);
+        if (isWorkoutStarted(workout.exercises, warmupDoneAt)) {
+          startTime = resolveStartTime(warmupDoneAt, workout.startedAt, Date.now());
+        } else {
+          const stretchList = await loadStretches(getWorkoutMuscles());
+          beginStretchPhase('warmup', stretchList);
+        }
       }
     } catch (e: any) {
       // Try loading from cache if offline
@@ -424,6 +433,10 @@
         workout = cached.workout;
         dirtySets = cached.dirty;
         initWorkout(workout);
+        const warmupDoneAt = readWarmupDoneAt(id);
+        if (isWorkoutStarted(workout.exercises, warmupDoneAt)) {
+          startTime = resolveStartTime(warmupDoneAt, workout.startedAt, Date.now());
+        }
         showToast('Loaded from offline cache', 'info');
       } else {
         showToast('Could not load workout — check that the server is running', 'error');
@@ -759,23 +772,74 @@
     }
   }
 
-  async function deleteSet(exercise: WorkoutExercise, setId: number) {
+  async function deleteSet(exercise: WorkoutExercise, setId: number): Promise<boolean> {
     try {
       await api(`/sets/${setId}`, { method: 'DELETE' });
       exercise.sets = exercise.sets.filter(s => s.id !== setId);
+      delete dirtySets[setId];
+      return true;
     } catch {
       showToast('Failed to delete set', 'error');
+      return false;
     }
   }
 
-  async function finishWorkout() {
+  // Finish Workout: sets never ticked done would otherwise be saved as done at
+  // their planned weight/reps and feed reports, PRs and next session's weights.
+  // With any unfinished, ask first. Cardio sets are exempt (see planFinish).
+  let finishPlan: FinishPlan | null = $state(null);
+
+  function currentFinishPlan(): FinishPlan {
+    return planFinish((workout?.exercises ?? []).map((ex: WorkoutExercise) => ({ id: ex.id, isCardio: isCardio(ex), sets: ex.sets })));
+  }
+
+  function requestFinish() {
+    if (!workout || finishing) return;
+    const plan = currentFinishPlan();
+    if (plan.unfinishedSetCount === 0) {
+      void finishWorkout('markAll');
+    } else {
+      finishPlan = plan;
+    }
+  }
+
+  // Delete the unfinished sets (and exercises left with none). Each DELETE is an
+  // idempotent write, so offline they queue in order ahead of the finish PUT.
+  // Local state only changes once a delete is accepted or queued.
+  async function removeUnfinished(): Promise<boolean> {
+    if (!workout) return false;
+    const plan = currentFinishPlan();
+    for (const exId of plan.removeExerciseIds) {
+      try {
+        await api(`/workout-exercises/${exId}`, { method: 'DELETE' });
+      } catch {
+        showToast('Failed to remove unfinished exercise', 'error');
+        return false;
+      }
+      const gone = workout.exercises.find(e => e.id === exId);
+      for (const s of gone?.sets ?? []) delete dirtySets[s.id];
+      workout.exercises = workout.exercises.filter(e => e.id !== exId);
+    }
+    for (const ex of [...workout.exercises]) {
+      for (const setId of plan.removeSetIds) {
+        if (ex.sets.some(s => s.id === setId) && !(await deleteSet(ex, setId))) return false;
+      }
+    }
+    saveWorkoutState();
+    return true;
+  }
+
+  async function finishWorkout(mode: 'remove' | 'markAll') {
     if (!workout) return;
+    finishPlan = null;
     finishing = true;
     try {
+      if (mode === 'remove' && !(await removeUnfinished())) return;
       for (const ex of workout.exercises) {
         for (const set of ex.sets) {
-          // Finishing marks every set completed (incl. cardio) so the workout
-          // doesn't read as "active" forever to the pre-deploy guard (#73).
+          // Marks every remaining set completed so the workout doesn't read as
+          // "active" forever to the pre-deploy guard (#73). After 'remove' the
+          // strength sets are already done, so this only touches cardio sets.
           set.completed = true;
           markDirty(set);
           await saveSet(set);
@@ -801,8 +865,10 @@
     const phase = stretchPhase;
     stretchPhase = null;
     if (phase === 'warmup') {
-      // Warm-up done — start the workout timer now
+      // Warm-up done — start the workout timer now, and remember when so a
+      // reopen after an iOS kill resumes instead of restarting the warm-up.
       startTime = Date.now();
+      writeWarmupDoneAt($page.params.id!, startTime);
     } else {
       // Cool-down done — show summary
       summaryData = computeSummary();
@@ -977,7 +1043,7 @@
     </button>
 
     <button
-      onclick={() => { if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20); finishWorkout(); }}
+      onclick={() => { if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20); requestFinish(); }}
       disabled={finishing}
       class="w-full font-semibold text-lg py-4 rounded-xl disabled:opacity-50 mb-24 active:opacity-80 transition-opacity touch-manipulation"
       style="background-color: #22c55e; color: #0f0f0f;"
@@ -993,6 +1059,45 @@
 
   <ExerciseDetail bind:exerciseId={detailExerciseId} />
 </div>
+
+{#if finishPlan}
+  <div
+    role="presentation"
+    class="fixed inset-0 z-50 flex items-end justify-center"
+    style="background-color: rgba(0,0,0,0.7); backdrop-filter: blur(4px);"
+    onclick={(e) => { if (e.target === e.currentTarget) finishPlan = null; }}
+  >
+    <div class="w-full max-w-lg rounded-t-2xl px-5 pt-3 pb-8" style="background-color: #242424;" role="dialog" aria-modal="true" aria-labelledby="finish-sheet-title">
+      <div class="flex justify-center pb-3">
+        <div class="w-10 h-1 rounded-full bg-neutral-600"></div>
+      </div>
+      <h2 id="finish-sheet-title" class="text-lg font-bold text-white mb-1">Unfinished sets</h2>
+      <p class="text-sm text-neutral-300">{unfinishedSummary(finishPlan)}</p>
+      <p class="text-xs text-neutral-500 mt-1 mb-5">
+        {#if finishPlan.completedSetCount === 0}
+          Nothing is marked done, so removing them leaves an empty workout.
+        {:else}
+          Removed sets are deleted and won't count toward your history or next session's weights.
+        {/if}
+      </p>
+      <div class="space-y-2">
+        <button
+          onclick={() => finishWorkout('remove')}
+          class="w-full min-h-[48px] py-3 rounded-xl text-base font-semibold active:opacity-80 touch-manipulation"
+          style="background-color: #22c55e; color: #0f0f0f;"
+        >Remove unfinished sets</button>
+        <button
+          onclick={() => finishWorkout('markAll')}
+          class="w-full min-h-[48px] py-3 rounded-xl text-base font-medium text-neutral-200 bg-neutral-800 active:bg-neutral-700 touch-manipulation"
+        >Mark all done</button>
+        <button
+          onclick={() => finishPlan = null}
+          class="w-full min-h-[48px] py-3 rounded-xl text-base font-medium text-neutral-400 active:text-white touch-manipulation"
+        >Go back</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <ExerciseSearchSheet
   open={addingExercise}

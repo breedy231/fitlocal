@@ -179,6 +179,7 @@ export interface GeneratedExercise {
   suggestedDurationSec?: number;
   restSeconds: number;
   progression?: ProgressionDirective;
+  layoffDays?: number;
   repRange?: { min: number; max: number };
   supersetGroup?: number;
 }
@@ -439,6 +440,7 @@ export function generateWorkout(dayType: string, equipment: string[] | null, db:
       isCardio,
       restSeconds: e.rest_seconds ?? 60,
       progression: isCardio ? undefined : directive,
+      ...(!isCardio && prog.layoffDays != null ? { layoffDays: prog.layoffDays } : {}),
       repRange: isCardio ? undefined : { min: prog.repRange.min, max: prog.repRange.max },
       ...(isCardio ? { suggestedDurationSec: profile.cardioDurationSec } : {}),
     };
@@ -583,6 +585,7 @@ export function generateFromProgram(
       isCardio,
       restSeconds: pe.restSeconds ?? row.rest_seconds ?? 60,
       progression: isCardio ? undefined : directive,
+      ...(!isCardio && prog.layoffDays != null ? { layoffDays: prog.layoffDays } : {}),
       repRange: isCardio ? undefined : { min: prog.repRange.min, max: prog.repRange.max },
     };
 

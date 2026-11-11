@@ -27,6 +27,7 @@ export interface EnrichedRoutineExercise {
   suggestedReps: number | null;
   repRange: RepRange | null;
   progression: ProgressionDirective | string | null;
+  layoffDays?: number | null;
   isEstimate: boolean;
 }
 

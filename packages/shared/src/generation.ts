@@ -16,6 +16,8 @@ export interface GeneratedExercise {
   suggestedDurationSec?: number;
   restSeconds: number;
   progression?: ProgressionDirective;
+  /** Set when `progression` is 'deload' because of time off, not missed reps. */
+  layoffDays?: number;
   repRange?: { min: number; max: number };
   supersetGroup?: number;
 }
@@ -47,6 +49,7 @@ export interface GeneratedAlternative {
   isCardio: boolean;
   restSeconds: number;
   progression: ProgressionDirective;
+  layoffDays?: number;
   repRange: { min: number; max: number };
 }
 export interface GenerateReplaceResponse {

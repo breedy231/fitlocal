@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import ExerciseDetail from '$lib/ExerciseDetail.svelte';
   import ExerciseSearchSheet from '$lib/workout/ExerciseSearchSheet.svelte';
+  import { layoffHint } from '$lib/workout/layoff';
   import { showToast } from '$lib/toast';
   import type {
     GeneratedExercise,
@@ -337,6 +338,7 @@
           suggestedReps: prog.reps,
           repRange: prog.repRange,
           progression: prog.directive,
+          layoffDays: prog.layoffDays ?? null,
           isEstimate: prog.isEstimate ?? false,
         };
         activeProgram.day.exercises = [...activeProgram.day.exercises];
@@ -529,7 +531,7 @@
       </span>
     {:else if ex.progression === 'deload'}
       <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #ef444420; color: #ef4444;">
-        ↓ DELOAD
+        {ex.layoffDays != null ? '↓ LIGHTER START' : '↓ DELOAD'}
       </span>
     {/if}
     {#if ex.isFocus}
@@ -561,6 +563,9 @@
       {/if}
     {/if}
   </div>
+  {#if ex.layoffDays != null}
+    <div class="text-xs mt-1" style="color: #f59e0b;">{layoffHint(ex.layoffDays)}</div>
+  {/if}
   <div class="text-xs text-neutral-600 mt-1">
     Last done: {ex.lastPerformedDaysAgo < 1 ? 'today' : `${Math.round(ex.lastPerformedDaysAgo)}d ago`}
     {#if ex.repRange && !ex.isCardio}
@@ -652,7 +657,7 @@
               </span>
             {:else if ex.progression === 'deload'}
               <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #ef444420; color: #ef4444;">
-                ↓ DELOAD
+                {ex.layoffDays != null ? '↓ LIGHTER START' : '↓ DELOAD'}
               </span>
             {/if}
           </div>
@@ -663,6 +668,9 @@
               @ {kgToLbs(ex.suggestedWeightKg)} lbs
             {/if}
           </div>
+          {#if ex.layoffDays != null}
+            <div class="text-xs mt-1" style="color: #f59e0b;">{layoffHint(ex.layoffDays)}</div>
+          {/if}
           {#if ex.restSeconds}
             <span class="text-xs text-neutral-600">
               {ex.restSeconds >= 60 ? `${Math.round(ex.restSeconds / 60)}m` : `${ex.restSeconds}s`} rest
@@ -746,7 +754,7 @@
                 </span>
               {:else if ex.progression === 'deload'}
                 <span class="text-xs font-bold px-2 py-0.5 rounded-full" style="background-color: #ef444420; color: #ef4444;">
-                  &#8595; DELOAD
+                  {ex.layoffDays != null ? '↓ LIGHTER START' : '↓ DELOAD'}
                 </span>
               {/if}
             </div>
@@ -757,6 +765,9 @@
                 @ {kgToLbs(ex.suggestedWeightKg)} lbs
               {/if}
             </div>
+            {#if ex.layoffDays != null}
+              <div class="text-xs mt-1" style="color: #f59e0b;">{layoffHint(ex.layoffDays)}</div>
+            {/if}
             {#if !ex.exerciseId}
               <span class="text-xs text-amber-500/60 mt-1">Unmatched — will create new exercise</span>
             {/if}

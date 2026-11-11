@@ -34,6 +34,8 @@ export interface Progression {
   repRange: RepRange;
   classification: 'barbell_compound' | 'dumbbell_compound' | 'accessory' | 'bodyweight' | 'cardio';
   isEstimate?: boolean;
+  /** Whole days off when the weight was lowered for a return from layoff (directive is 'deload'). */
+  layoffDays?: number;
 }
 
 /** GET /exercises/:id/last-performance */

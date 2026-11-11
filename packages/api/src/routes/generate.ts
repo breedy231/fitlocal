@@ -251,6 +251,7 @@ export async function generateRoutes(app: FastifyInstance) {
         isCardio: false,
         restSeconds: e.rest_seconds ?? 60,
         progression: prog.directive,
+        ...(prog.layoffDays != null ? { layoffDays: prog.layoffDays } : {}),
         repRange: { min: prog.repRange.min, max: prog.repRange.max },
         _daysSince: daysSince,
       };
