@@ -289,3 +289,61 @@ describe('generateWorkout — equipment filtering (#33)', () => {
     expect(cardio).toContain('Treadmill');
   });
 });
+
+describe('return-from-layoff in generated workouts', () => {
+  let ctx: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    ctx = createTestDb();
+    seedExerciseLibrary(ctx);
+  });
+  afterEach(() => ctx.cleanup());
+
+  const idOf = (name: string) => (ctx.sqlite.prepare('SELECT id FROM exercises WHERE name = ?').get(name) as any).id as number;
+
+  it('generateWorkout: stale weighted exercise gets a lighter weight, deload, layoffDays', () => {
+    const id = idOf('Barbell Bench Press');
+    ctx.seedSessions(id, [
+      { daysAgo: 100, sets: [{ reps: 6, weightKg: 100 }, { reps: 6, weightKg: 100 }] },
+      { daysAgo: 107, sets: [{ reps: 6, weightKg: 100 }, { reps: 6, weightKg: 100 }] },
+    ]);
+    const w = generateWorkout('push', null, ctx.db, { supersets: false });
+    const bench = w.exercises.find(e => e.name === 'Barbell Bench Press')!;
+    expect(bench).toBeDefined();
+    expect(bench.progression).toBe('deload');
+    expect(bench.suggestedWeightKg).toBe(70);
+    expect(bench.layoffDays).toBeGreaterThanOrEqual(99);
+    expect(w.exercises.some(e => e.progression === 'up' && e.name === 'Barbell Bench Press')).toBe(false);
+  });
+
+  it('generateFromProgram: layoff applies, also in cut mode (no up to suppress, no double reduction)', () => {
+    const id = idOf('Barbell Bench Press');
+    ctx.seedSessions(id, [
+      { daysAgo: 60, sets: [{ reps: 6, weightKg: 100 }] },
+      { daysAgo: 67, sets: [{ reps: 6, weightKg: 100 }] },
+    ]);
+    const input: ProgramExerciseInput[] = [
+      { exerciseId: id, exerciseName: 'Barbell Bench Press', targetSets: 3, targetReps: '8', restSeconds: null },
+    ];
+    for (const isInCut of [false, true]) {
+      const w = generateFromProgram('push', input, ctx.db, { isInCut });
+      const bench = w.exercises[0];
+      expect(bench.progression).toBe('deload');
+      expect(bench.suggestedWeightKg).toBe(80);
+      expect(bench.layoffDays).toBeGreaterThanOrEqual(59);
+      expect(bench.isFocus).toBe(false);
+    }
+  });
+
+  it('generateFromProgram: exercise done last week is unchanged and has no layoffDays', () => {
+    const id = idOf('Barbell Bench Press');
+    ctx.seedSessions(id, [{ daysAgo: 7, sets: [{ reps: 5, weightKg: 100 }] }]);
+    const input: ProgramExerciseInput[] = [
+      { exerciseId: id, exerciseName: 'Barbell Bench Press', targetSets: 3, targetReps: '8', restSeconds: null },
+    ];
+    const bench = generateFromProgram('push', input, ctx.db).exercises[0];
+    expect(bench.suggestedWeightKg).toBe(100);
+    expect(bench.progression).toBe('hold');
+    expect(bench.layoffDays).toBeUndefined();
+  });
+});

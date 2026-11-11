@@ -5,6 +5,9 @@ import {
   computeProgression,
   computeProgressionBatch,
   estimateWeightForNewExercise,
+  layoffFactor,
+  daysSinceDate,
+  LAYOFF_BANDS,
 } from './progression.js';
 import { createTestDb } from './test-helpers.js';
 
@@ -185,5 +188,135 @@ describe('computeProgressionBatch', () => {
   it('handles empty exercise list', () => {
     const result = computeProgressionBatch([], ctx.db);
     expect(result.size).toBe(0);
+  });
+});
+
+describe('return-from-layoff rule', () => {
+  let ctx: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => { ctx = createTestDb(); });
+  afterEach(() => { ctx.cleanup(); });
+
+  // Fixed clock: 13:00 Chicago, so UTC and Chicago dates agree.
+  const NOW = new Date('2026-06-15T18:00:00Z');
+  function dateAgo(days: number): string {
+    return new Date(NOW.getTime() - days * 86_400_000).toISOString().slice(0, 10);
+  }
+  function seed(exId: number, days: number, sets: { reps: number; weightKg: number }[]) {
+    const wId = ctx.seedWorkout(dateAgo(days));
+    const weId = ctx.seedWorkoutExercise(wId, exId);
+    for (const s of sets) ctx.seedSet(weId, s.reps, s.weightKg);
+  }
+
+  it('has one named table of thresholds and factors', () => {
+    expect(LAYOFF_BANDS.map(b => [b.minDays, b.factor])).toEqual([[84, 0.7], [42, 0.8], [21, 0.9]]);
+  });
+
+  it('layoffFactor picks the right band at each boundary', () => {
+    expect(layoffFactor(0)).toBeNull();
+    expect(layoffFactor(20)).toBeNull();
+    expect(layoffFactor(21)).toBe(0.9);
+    expect(layoffFactor(41)).toBe(0.9);
+    expect(layoffFactor(42)).toBe(0.8);
+    expect(layoffFactor(83)).toBe(0.8);
+    expect(layoffFactor(84)).toBe(0.7);
+    expect(layoffFactor(400)).toBe(0.7);
+  });
+
+  it('daysSinceDate counts calendar days in the user timezone', () => {
+    expect(daysSinceDate('2026-06-15', NOW)).toBe(0);
+    expect(daysSinceDate('2026-05-25', NOW)).toBe(21);
+    // 03:00 UTC on the 16th is still the evening of the 15th in Chicago
+    expect(daysSinceDate('2026-06-15', new Date('2026-06-16T03:00:00Z'))).toBe(0);
+  });
+
+  const cases: [number, number][] = [
+    [21, 0.9], [41, 0.9], [42, 0.8], [83, 0.8], [84, 0.7], [89, 0.7],
+  ];
+  for (const [days, factor] of cases) {
+    it(`${days} days off scales weight x${factor}, aims mid-range, directive deload + layoffDays`, () => {
+      const exId = ctx.seedExercise('Dumbbell Row'); // dumbbell_compound 6-10
+      seed(exId, days, [{ reps: 10, weightKg: 15.88 }, { reps: 10, weightKg: 15.88 }]);
+      const single = computeProgression(exId, 'Dumbbell Row', ctx.db, NOW);
+      const batch = computeProgressionBatch([{ id: exId, name: 'Dumbbell Row' }], ctx.db, NOW).get(exId)!;
+      for (const r of [single, batch]) {
+        expect(r.weightKg).toBe(Math.round(15.88 * factor * 100) / 100);
+        expect(r.reps).toBe(8);
+        expect(r.directive).toBe('deload');
+        expect(r.layoffDays).toBe(days);
+      }
+    });
+  }
+
+  it('never returns up after 21+ days even when history says progress', () => {
+    const exId = ctx.seedExercise('Barbell Bench Press'); // 4-6
+    seed(exId, 30, [{ reps: 6, weightKg: 100 }, { reps: 6, weightKg: 100 }]);
+    seed(exId, 37, [{ reps: 6, weightKg: 100 }, { reps: 6, weightKg: 100 }]);
+    const r = computeProgression(exId, 'Barbell Bench Press', ctx.db, NOW);
+    expect(r.directive).toBe('deload');
+    expect(r.weightKg).toBe(90);
+    expect(r.reps).toBe(5);
+  });
+
+  it('does not stack with the missed-reps deload (scaled once from last weight)', () => {
+    const exId = ctx.seedExercise('Barbell Bench Press');
+    seed(exId, 50, [{ reps: 2, weightKg: 100 }]);
+    seed(exId, 57, [{ reps: 2, weightKg: 100 }]);
+    expect(computeProgression(exId, 'Barbell Bench Press', ctx.db, NOW).weightKg).toBe(80);
+  });
+
+  it('20 days off behaves exactly as before (no layoff fields)', () => {
+    const exId = ctx.seedExercise('Barbell Bench Press');
+    seed(exId, 20, [{ reps: 6, weightKg: 100 }]);
+    seed(exId, 27, [{ reps: 6, weightKg: 100 }]);
+    const r = computeProgression(exId, 'Barbell Bench Press', ctx.db, NOW);
+    expect(r.directive).toBe('up');
+    expect(r.weightKg).toBe(102.5);
+    expect(r.layoffDays).toBeUndefined();
+  });
+
+  it('exercise done last week is unchanged', () => {
+    const exId = ctx.seedExercise('Barbell Bench Press');
+    seed(exId, 7, [{ reps: 5, weightKg: 100 }]);
+    const r = computeProgression(exId, 'Barbell Bench Press', ctx.db, NOW);
+    expect(r).toMatchObject({ directive: 'hold', weightKg: 100, reps: 5 });
+    expect(r.layoffDays).toBeUndefined();
+  });
+
+  it('unweighted bodyweight exercises are untouched after a long layoff', () => {
+    const exId = ctx.seedExercise('Pull Up');
+    seed(exId, 100, [{ reps: 15, weightKg: 0 }]);
+    seed(exId, 107, [{ reps: 15, weightKg: 0 }]);
+    const r = computeProgression(exId, 'Pull Up', ctx.db, NOW);
+    expect(r.weightKg).toBe(0);
+    expect(r.layoffDays).toBeUndefined();
+    expect(r.directive).toBe('up');
+  });
+
+  it('weighted bodyweight movements (e.g. added-load pull-up) are scaled', () => {
+    const exId = ctx.seedExercise('Pull Up');
+    seed(exId, 100, [{ reps: 8, weightKg: 10 }]);
+    const r = computeProgression(exId, 'Pull Up', ctx.db, NOW);
+    expect(r.weightKg).toBe(7);
+    expect(r.directive).toBe('deload');
+  });
+
+  it('cardio is untouched', () => {
+    const exId = ctx.seedExercise('Treadmill');
+    seed(exId, 100, [{ reps: 1, weightKg: 0 }]);
+    const r = computeProgressionBatch([{ id: exId, name: 'Treadmill' }], ctx.db, NOW).get(exId)!;
+    expect(r).toMatchObject({ directive: 'hold', weightKg: 0 });
+    expect(r.layoffDays).toBeUndefined();
+  });
+
+  it('applies per exercise: recent exercise unchanged while old one is lowered', () => {
+    const rowId = ctx.seedExercise('Dumbbell Row');
+    const curlId = ctx.seedExercise('Dumbbell Curl');
+    seed(rowId, 89, [{ reps: 8, weightKg: 20 }]);
+    seed(curlId, 5, [{ reps: 8, weightKg: 12 }]);
+    const m = computeProgressionBatch(
+      [{ id: rowId, name: 'Dumbbell Row' }, { id: curlId, name: 'Dumbbell Curl' }], ctx.db, NOW);
+    expect(m.get(rowId)!.weightKg).toBe(14);
+    expect(m.get(curlId)).toMatchObject({ weightKg: 12, directive: 'hold' });
   });
 });

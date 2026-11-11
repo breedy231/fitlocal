@@ -52,6 +52,7 @@ export interface ProgramDetail extends Program {
 /** One program exercise enriched with progression for the active-program day. */
 export interface ActiveProgramExercise extends ProgramExercise {
   progression: ProgressionDirective | null;
+  layoffDays?: number | null;
   suggestedWeightKg: number | null;
   suggestedReps: number | null;
   repRange: RepRange | null;

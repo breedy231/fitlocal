@@ -117,12 +117,14 @@ export async function routineRoutes(app: FastifyInstance) {
       let suggestedReps: number | null = null;
       let repRange: { min: number; max: number } | null = null;
       let directive: string | null = null;
+      let layoffDays: number | null = null;
 
       if (prog) {
         suggestedWeightKg = prog.weightKg;
         suggestedReps = prog.reps;
         repRange = { min: prog.repRange.min, max: prog.repRange.max };
         directive = prog.directive;
+        layoffDays = prog.layoffDays ?? null;
       } else if (ex.exerciseId) {
         // New exercise — estimate weight
         const est = estimateWeightForNewExercise(ex.exerciseName, db);
@@ -143,6 +145,7 @@ export async function routineRoutes(app: FastifyInstance) {
         suggestedReps,
         repRange,
         progression: directive,
+        layoffDays,
         isEstimate,
       };
     });

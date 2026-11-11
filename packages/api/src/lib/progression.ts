@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type * as schemaTypes from '../schema/index.js';
 import { getMusclesForExercise } from './recovery.js';
+import { localDate } from './session-window.js';
 
 type DB = BetterSQLite3Database<typeof schemaTypes>;
 
@@ -22,6 +23,63 @@ export interface ProgressionResult {
   repRange: RepRange;
   classification: ExerciseClass;
   isEstimate?: boolean;
+  /** Set when the weight was lowered because of time off (whole days since last performed). */
+  layoffDays?: number;
+}
+
+// --- Return-from-layoff rule ---
+
+/**
+ * Conservative defaults, not PT guidance. Applied per exercise from the days
+ * since it was last performed. Bands are checked from the largest minDays down.
+ */
+export const LAYOFF_MIN_DAYS = 21;
+export const LAYOFF_BANDS: readonly { minDays: number; factor: number }[] = [
+  { minDays: 84, factor: 0.7 },
+  { minDays: 42, factor: 0.8 },
+  { minDays: LAYOFF_MIN_DAYS, factor: 0.9 },
+];
+
+/** Whole calendar days from `date` (YYYY-MM-DD) to today in the user's timezone. */
+export function daysSinceDate(date: string, now: Date = new Date()): number {
+  const a = Date.parse(`${date}T12:00:00Z`);
+  const b = Date.parse(`${localDate(now)}T12:00:00Z`);
+  return Math.round((b - a) / 86_400_000);
+}
+
+export function layoffFactor(daysSince: number): number | null {
+  for (const band of LAYOFF_BANDS) {
+    if (daysSince >= band.minDays) return band.factor;
+  }
+  return null;
+}
+
+/**
+ * Returns a lighter-start result when the exercise has been off for 21+ days,
+ * else null. Unweighted exercises (bodyweight with no load, cardio) are never
+ * touched. Reuses the 'deload' directive; `layoffDays` tells the UI why.
+ */
+function layoffResult(
+  lastDate: string,
+  lastWeight: number,
+  classification: ExerciseClass,
+  repRange: RepRange,
+  sets: number,
+  now: Date,
+): ProgressionResult | null {
+  if (classification === 'cardio' || !(lastWeight > 0)) return null;
+  const days = daysSinceDate(lastDate, now);
+  const factor = layoffFactor(days);
+  if (factor === null) return null;
+  return {
+    weightKg: round(lastWeight * factor),
+    reps: repRange.min + Math.floor((repRange.max - repRange.min) / 2),
+    sets,
+    directive: 'deload',
+    repRange,
+    classification,
+    layoffDays: days,
+  };
 }
 
 // --- Classification ---
@@ -92,7 +150,7 @@ function getRecentSessions(exerciseId: number, db: DB, count = 3): SessionSummar
 
 // --- Progression logic ---
 
-export function computeProgression(exerciseId: number, exerciseName: string, db: DB): ProgressionResult {
+export function computeProgression(exerciseId: number, exerciseName: string, db: DB, now: Date = new Date()): ProgressionResult {
   const classification = classifyExercise(exerciseName);
   const repRange = getRepRange(classification);
   const defaultSets = classification === 'cardio' ? 1 : 3;
@@ -127,6 +185,9 @@ export function computeProgression(exerciseId: number, exerciseName: string, db:
       classification,
     };
   }
+
+  const layoff = layoffResult(latest.date, lastWeight, classification, repRange, defaultSets, now);
+  if (layoff) return layoff;
 
   // Evaluate recent sessions against rep range
   const hitTarget = sessions.map(session => {
@@ -319,7 +380,8 @@ function getRecentSessionsBatch(exerciseIds: number[], db: DB, count = 3): Map<n
  */
 export function computeProgressionBatch(
   exercises: { id: number; name: string }[],
-  db: DB
+  db: DB,
+  now: Date = new Date(),
 ): Map<number, ProgressionResult> {
   const ids = exercises.map(e => e.id);
   const sessionsByExercise = getRecentSessionsBatch(ids, db);
@@ -351,6 +413,12 @@ export function computeProgressionBatch(
 
     if (classification === 'cardio') {
       results.set(ex.id, { weightKg: 0, reps: 1, sets: 1, directive: 'hold', repRange, classification });
+      continue;
+    }
+
+    const layoff = layoffResult(latest.date, lastWeight, classification, repRange, defaultSets, now);
+    if (layoff) {
+      results.set(ex.id, layoff);
       continue;
     }
 
