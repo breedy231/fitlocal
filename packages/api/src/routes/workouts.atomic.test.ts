@@ -61,6 +61,17 @@ describe('POST /workouts/:id/exercises with sets', () => {
     expect(setCount(body.id)).toBe(3);
   });
 
+  it('extends the live workout HR window (ended_at) like POST /sets', async () => {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
+    const wid = (await app.inject({ method: 'POST', url: '/workouts', payload: { date: today } })).json().id;
+    const endedBefore = (sqlite.prepare('SELECT ended_at e FROM workouts WHERE id = ?').get(wid) as { e: string | null }).e;
+    expect(endedBefore).toBeNull();
+    const res = await app.inject({ method: 'POST', url: `/workouts/${wid}/exercises`, payload: { exerciseId: exA, sets: [{ reps: 5, weightKg: 10 }] } });
+    expect(res.statusCode).toBe(201);
+    const endedAfter = (sqlite.prepare('SELECT ended_at e FROM workouts WHERE id = ?').get(wid) as { e: string | null }).e;
+    expect(endedAfter).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
   it('swap: removes the old exercise and its sets', async () => {
     const wid = await newWorkout();
     const old = (await app.inject({ method: 'POST', url: `/workouts/${wid}/exercises`, payload: { exerciseId: exA, sets: [{ reps: 5, weightKg: 10 }] } })).json();

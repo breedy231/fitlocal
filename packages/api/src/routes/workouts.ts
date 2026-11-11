@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { eq, desc, like, sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
-import { startedAtForNewWorkout } from '../lib/session-window.js';
+import { startedAtForNewWorkout, touchWorkoutEnd } from '../lib/session-window.js';
 import { idParams } from '../lib/http.js';
 import { CARDIO_PATTERN } from 'fitlocal-shared';
 
@@ -533,6 +533,8 @@ export async function workoutRoutes(app: FastifyInstance) {
       if (outcome === null) {
         return reply.status(404).send({ error: 'replaceWorkoutExerciseId not found in this workout' });
       }
+      // Heartbeat (#59), same as POST /sets: extend the live workout's HR window.
+      if (sets !== undefined && sets.length > 0) touchWorkoutEnd(outcome.id);
       return reply.status(201).send(outcome);
     }
   );
