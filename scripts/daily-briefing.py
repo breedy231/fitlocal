@@ -57,6 +57,7 @@ CLAUDE_TIMEOUT = 60   # seconds
 # Cut data older than this (latest weigh-in) is treated as stale: no cut numbers in the
 # note or the LLM prompt.
 STALE_WEIGHIN_DAYS = 14
+LAYOFF_RIR = "3-4 reps in reserve"   # effort cap while returning from a layoff
 
 # PPL rotation order
 PPL_ROTATION = ["push", "pull", "legs"]
@@ -205,8 +206,12 @@ def render_exercise_obsidian(ex):
         rep_range = ex.get("repRange")
         # Only show RIR for weighted non-cardio exercises
         if weight_kg > 0 and rep_range:
-            # Approximate RIR from rep range (mid-point heuristic: 1-2 RIR)
-            lines.append("1-2 reps in reserve")
+            # The generator sets layoffDays when it lowered the weight for a
+            # return from 21+ days off: leave more in the tank on those lifts.
+            if ex.get("layoffDays"):
+                lines.append(f"{LAYOFF_RIR} (first sessions back)")
+            else:
+                lines.append("1-2 reps in reserve")
 
     return "\n".join(lines)
 
@@ -227,8 +232,14 @@ def build_session_section(generate_data, next_day):
     return "\n".join(blocks).rstrip()
 
 
-def rule_based_recommendation(rec, dl):
+def rule_based_recommendation(rec, dl, layoff_days=None, injury=None):
     """Deterministic fallback recommendation from recovery + deload flag."""
+    if layoff_days:
+        weeks = max(1, round(layoff_days / 7))
+        guard = (f" Respect the {injury.get('label', 'injury')} restriction and stop any set that brings on symptoms."
+                 if injury else "")
+        return (f"First session back after about {weeks} weeks: do the planned session at the reduced "
+                f"weights, {LAYOFF_RIR}, and add nothing extra.{guard}")
     if not rec:
         return None
     majors = ["chest", "back", "quads", "hamstrings", "shoulders"]
@@ -245,7 +256,7 @@ def rule_based_recommendation(rec, dl):
     return f"{todo}{caveat}{deload}"
 
 
-def claude_recommendation(rec, dl, tl, cut_line, injury=None, session_summary=None):
+def claude_recommendation(rec, dl, tl, cut_line, injury=None, session_summary=None, layoff_days=None):
     """Coaching rec from the Claude API (claude-sonnet-5-5). Returns clean prose, or None
     to trigger the rule-based fallback. Any missing key, API error, or empty/junk
     response falls back — never raises."""
@@ -267,6 +278,20 @@ def claude_recommendation(rec, dl, tl, cut_line, injury=None, session_summary=No
             f"{injury.get('notes') or ''} Never recommend movements that violate this.\n"
         )
     cut_line_prompt = f"- {cut_line}\n" if cut_line else ""
+    # The recovery model only measures time since a muscle was trained. After
+    # weeks off it reads 100% everywhere, which is detraining, not readiness.
+    layoff_line = ""
+    if layoff_days:
+        weeks = max(1, round(layoff_days / 7))
+        layoff_line = (
+            f"- RETURN FROM LAYOFF: he has not trained these lifts for about {weeks} weeks "
+            f"({layoff_days} days). The planned weights are already reduced for this. The 100% "
+            "recovery numbers reflect time off, NOT readiness. Treat this as a re-entry session: "
+            f"conservative effort ({LAYOFF_RIR}), no added sets, weight or extra cardio beyond the "
+            "plan, and stop any set that brings on symptoms. Never say to push it.\n"
+        )
+    cut_goal = ("perform well while on a calorie-deficit cut — don't overreach or dig a recovery hole in the deficit"
+                if cut_line else "train consistently without overreaching")
     session_prompt = (
         f"- Today's planned session is already chosen: {session_summary}. Build on it (how hard to "
         "push it, what to add or skip around it, whether to add cardio); do NOT prescribe a "
@@ -275,17 +300,19 @@ def claude_recommendation(rec, dl, tl, cut_line, injury=None, session_summary=No
     prompt = (
         "You are Brendan's strength & running coach. Write today's training recommendation.\n\n"
         "His standing goals: (1) build his running — increase distance and consistency, and protect "
-        "impact tissue (calves, shins) so he doesn't get injured; (2) perform well while on a "
-        "calorie-deficit cut — don't overreach or dig a recovery hole in the deficit.\n\n"
+        f"impact tissue (calves, shins) so he doesn't get injured; (2) {cut_goal}.\n\n"
         f"Today's data:\n"
-        f"- Muscle recovery (higher = fresher): {recs}\n"
+        f"- Muscle recovery from a time-since-trained model (higher = longer since trained; it does "
+        f"not know about injuries or detraining): {recs}\n"
         f"- {load} {deload}\n"
         f"{cut_line_prompt}"
+        f"{layoff_line}"
         f"{injury_line}"
         f"{session_prompt}\n"
         "Recommend what to train today and how hard. Decide which muscle groups are recovered enough "
         "to lift, and whether to run / cross-train on the bike / rest given impact-tissue recovery and "
-        "the training load. Keep it aligned with the cut.\n\n"
+        "the training load. An active injury restriction or a return from layoff overrides the "
+        "goals above: be conservative, and state the effort cap and the injury precaution plainly.\n\n"
         "Respond with ONLY 2-3 sentences (hard maximum 3) of direct recommendation. Do NOT restate the numbers, do NOT "
         "explain your reasoning, do NOT write a preamble. Start with the recommendation itself."
     )
@@ -488,8 +515,11 @@ def main():
         session_summary = f"{next_day.capitalize()} day ({names})"
 
     # Recommendation: Claude Sonnet 5 first, deterministic fallback if it fails/errors.
-    claude_rec = claude_recommendation(rec, dl, tl, cut_line, injury, session_summary)
-    rec_text = claude_rec or rule_based_recommendation(rec, dl)
+    # Longest layoff among today's planned lifts (the generator reports it per exercise).
+    layoff_days = max((e.get("layoffDays") or 0 for e in (generate_data or {}).get("exercises", [])), default=0) or None
+
+    claude_rec = claude_recommendation(rec, dl, tl, cut_line, injury, session_summary, layoff_days)
+    rec_text = claude_rec or rule_based_recommendation(rec, dl, layoff_days, injury)
     rec_source = "Claude Sonnet 5" if claude_rec else "rule-based fallback"
 
     today = datetime.date.today()
