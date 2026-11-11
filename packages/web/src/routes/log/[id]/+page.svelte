@@ -17,6 +17,7 @@
   import WorkoutSummary, { type WorkoutSummaryData, type ExerciseSummary } from '$lib/workout/WorkoutSummary.svelte';
   import CelebrationOverlay from '$lib/workout/CelebrationOverlay.svelte';
   import ExerciseSearchSheet from '$lib/workout/ExerciseSearchSheet.svelte';
+  import { isWorkoutStarted, resolveStartTime, readWarmupDoneAt, writeWarmupDoneAt } from '$lib/workout/session-state';
   import { planFinish, unfinishedSummary, type FinishPlan } from '$lib/workout/unfinished-sets';
 
   type SetData = WorkoutSet;
@@ -31,6 +32,7 @@
     id: number;
     date: string;
     notes?: string;
+    startedAt?: string | null;
     exercises: WorkoutExercise[];
   }
 
@@ -415,9 +417,15 @@
         loadAllLastPerformance(workout, parseInt(id));
         // Pre-fetch swap candidates for all exercises so inline swap is instant
         prefetchSwapCandidates(workout);
-        const muscles = getWorkoutMuscles();
-        const stretchList = await loadStretches(muscles);
-        beginStretchPhase('warmup', stretchList);
+        // iOS kills backgrounded PWAs, so a reopen mid-workout must resume, not
+        // restart: skip the warm-up and count time from the persisted start.
+        const warmupDoneAt = readWarmupDoneAt(id);
+        if (isWorkoutStarted(workout.exercises, warmupDoneAt)) {
+          startTime = resolveStartTime(warmupDoneAt, workout.startedAt, Date.now());
+        } else {
+          const stretchList = await loadStretches(getWorkoutMuscles());
+          beginStretchPhase('warmup', stretchList);
+        }
       }
     } catch (e: any) {
       // Try loading from cache if offline
@@ -425,6 +433,10 @@
         workout = cached.workout;
         dirtySets = cached.dirty;
         initWorkout(workout);
+        const warmupDoneAt = readWarmupDoneAt(id);
+        if (isWorkoutStarted(workout.exercises, warmupDoneAt)) {
+          startTime = resolveStartTime(warmupDoneAt, workout.startedAt, Date.now());
+        }
         showToast('Loaded from offline cache', 'info');
       } else {
         showToast('Could not load workout — check that the server is running', 'error');
@@ -853,8 +865,10 @@
     const phase = stretchPhase;
     stretchPhase = null;
     if (phase === 'warmup') {
-      // Warm-up done — start the workout timer now
+      // Warm-up done — start the workout timer now, and remember when so a
+      // reopen after an iOS kill resumes instead of restarting the warm-up.
       startTime = Date.now();
+      writeWarmupDoneAt($page.params.id!, startTime);
     } else {
       // Cool-down done — show summary
       summaryData = computeSummary();
