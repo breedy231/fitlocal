@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ReentryCard from '$lib/ReentryCard.svelte';
   import { api } from '$lib/api';
   import { cachedGet } from '$lib/api-cache.svelte';
   import { goto } from '$app/navigation';
@@ -576,6 +577,9 @@
 
 <div class="p-4 max-w-lg md:max-w-2xl mx-auto">
   <h1 class="text-2xl font-bold mb-6">Generate Workout</h1>
+
+  <!-- Return from layoff + PT restriction (hidden when neither applies) -->
+  <div class="mb-4"><ReentryCard /></div>
 
   {#if programLoading}
     <div class="flex justify-center py-4 mb-4">
