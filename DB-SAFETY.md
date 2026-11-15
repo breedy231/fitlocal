@@ -45,7 +45,7 @@ and can make the WAL-recovery problem worse. Stop it first.
    ```
    If integrity check passes on the copy, move it into place — don't open the
    original until you have a verified good candidate.
-4. **If integrity fails**, look at the most recent online backup:
+4. **If integrity fails**, look at the most recent manual or pre-start backup:
    ```bash
    ls -lt ~/fitlocal-backups/ | head
    ```
@@ -63,17 +63,22 @@ and can make the WAL-recovery problem worse. Stop it first.
 
 ## What's protecting the DB now
 
-After Stream 5 and Stream 5b, there are five independent safety nets:
+**Production is the source of truth, and its backup is Litestream → R2** (see
+[Production](#production)). The local `fitlocal.db` is a dev copy that is not
+kept in sync with production, so it has no scheduled backup. The hourly launchd
+job that used to snapshot it was removed in June 2026 (#34) and is not coming
+back.
+
+What still protects the local dev DB:
 
 | Layer | What it does | Failure window |
 |---|---|---|
 | `wal_autocheckpoint = 100` (db.ts) | Merges WAL into main DB every ~400 KB of writes | Minutes of data |
 | Graceful shutdown checkpoint (server.ts) | `wal_checkpoint(TRUNCATE)` on SIGTERM/SIGINT, 100 ms busy timeout (falls back to PASSIVE if another process holds a read lock, so it never stalls shutdown) | Only ungraceful kills bypass |
-| Pre-start backup (`npm run backup`) | Snapshot before every dev restart | — |
-| Scheduled backup (`scripts/backup-db.sh`) | Online `.backup` to `~/fitlocal-backups/` | 1 hour |
-| Tiered retention (prune-backups.py) | 24 hourly + 14 daily + 8 weekly | — |
+| Pre-start backup (`npm run dev` runs `npm run backup` first) | Online `.backup` to `~/fitlocal-backups/`, tiered retention via `prune-backups.py` | Since the last `npm run dev` |
 
-If any one layer fails, another one covers you.
+There is no scheduled local backup. Run `npm run backup` by hand before risky
+local work.
 
 In production, the primary safety net is **Litestream**, which streams WAL changes
 to Cloudflare R2 every second and restores on container start (see `litestream.yml`
@@ -90,7 +95,7 @@ and `scripts/docker-entrypoint.sh`). See [Production](#production) below.
 - **Schema mismatch after checkout**: run `npm run build -w packages/api` to
   re-run migrations on boot. Not a corruption issue.
 - **Unexpected row count after "recovery"**: you lost writes to WAL-recovery
-  discarding pages. Compare against most recent hourly backup; if the backup
+  discarding pages. Compare against the most recent backup; if the backup
   has more rows, restore it.
 
 ## Finding out what was lost
@@ -98,7 +103,7 @@ and `scripts/docker-entrypoint.sh`). See [Production](#production) below.
 Every backup is a full snapshot. To see what existed at a given point:
 
 ```bash
-# How many workouts in the hourly backup from 3am today?
+# How many workouts in a given backup?
 sqlite3 ~/fitlocal-backups/fitlocal-20260423-030000.db "SELECT COUNT(*) FROM workouts;"
 
 # Which workouts are in the backup but not in the current DB?
@@ -209,8 +214,7 @@ is gone, and so is a replica wiped with the production credentials. Instead:
 - Make the token in Fly's secrets an R2 token scoped to `fitlocal-db` with
   object read/write only, not an account-wide admin token.
 - Keep a copy outside Litestream's control: periodically run the restore above
-  and keep the dated file (e.g. with the dev backups in `~/fitlocal-backups/`),
-  or upload it to a separate bucket protected by an R2 bucket lock.
+  and keep the dated file outside the repo, or upload it to a separate bucket protected by an R2 bucket lock.
 - Don't put a bucket lock on the `fitlocal/` prefix itself. Litestream deletes
   its own files there (L0 files after ~5 min, snapshots past retention), and a
   lock would refuse those deletes.

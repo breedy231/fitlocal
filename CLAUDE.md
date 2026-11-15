@@ -32,7 +32,7 @@ npm run test:run -w packages/web  # Web single run (needs shared built first)
 npx vitest run packages/api/src/lib/generator.test.ts  # Single file
 
 # Database
-npm run backup           # Manual SQLite backup (scripts/backup-db.sh)
+npm run backup           # Manual SQLite backup of the local dev DB (scripts/backup-db.sh); nothing runs it on a schedule
 ```
 
 **IMPORTANT: Cloud sessions (Claude Code on the web)** start from a fresh clone
@@ -194,6 +194,6 @@ Exercise Name
 - SQLite with WAL mode, foreign keys ON. Dev DB at `fitlocal.db` (project root). Prod DB at `/app/fitlocal.db` inside the Fly.io container, set via `DATABASE_PATH` env var.
 - Migrations live in `packages/api/src/migrate.ts` and run on every API boot. The pattern is `CREATE TABLE IF NOT EXISTS`, plus `ALTER TABLE … ADD COLUMN` in try/catch, plus one-shot data migrations gated by a key in the `migrations` table (add a new key; never edit one that has already run). The existing bare `catch {}` blocks swallow *every* error, so a typo'd ALTER silently does nothing. In new ones, ignore only `duplicate column name` and rethrow the rest. Ignore the drizzle-kit `db:generate`/`db:migrate` scripts; they aren't the migration path. Always check existing migrations before adding new ones.
 - **Production replication:** Litestream streams WAL changes to Cloudflare R2 (`fitlocal-db` bucket) every second. On Fly.io redeploy/restart, `scripts/docker-entrypoint.sh` restores from R2 before starting Node. Config in `litestream.yml`.
-- Local dev (Mac only): hourly automated backups via launchd (`scripts/backup-db.sh`). Tiered retention policy (`scripts/prune-backups.py`).
+- **Backups:** production is the source of truth, and Litestream → R2 is its only backup (see `DB-SAFETY.md`). The local dev DB has **no scheduled backup**: the hourly launchd job was removed in #34. `npm run dev` takes a pre-start snapshot (`scripts/backup-db.sh`, tiered retention via `scripts/prune-backups.py`), and `npm run backup` takes one by hand.
 - Never modify the DB file directly — always go through the API.
 - **Scratch DB for write-testing:** `npm run dev:api:scratch` (`scripts/scratch-db.sh`) copies the live `fitlocal.db` to `/tmp/fitlocal-scratch.db` via the SQLite online-backup API and runs the API with `DATABASE_PATH` pointed at that copy. The real DB is only ever read, so any mutating test (logging workouts, weigh-ins, the AI assistant's tools, Playwright/curl flows) is fully isolated. The scratch file is re-copied fresh from real data on every launch. This is the default for `/playwright-test` and any other write-testing. It doesn't work in cloud sessions, which have no `fitlocal.db` to copy; there, seed a scratchpad DB instead (`docs/cloud-sessions.md`).

@@ -16,7 +16,7 @@ the app. Last verified 2026-09-27 on Node 22.22 against `main` @ 4041df6.
 | `FITLOCAL_API_KEY`, `ANTHROPIC_API_KEY` | Unset | No authenticated production calls, and the AI assistant can't be exercised. |
 | Production (`fitlocal-app.fly.dev`) | **Not reachable**: the host isn't in the environment's network allowlist, so requests hang or get a proxy 403 | `/workout`, `/cut-status`, `/gym-swap`, `/deploy` and `scripts/check-active-workout.sh` can't run. Always pass `curl -m 20` so a blocked call fails fast. |
 | `gh` CLI | Missing (installing it doesn't help: the proxy blocks GitHub GraphQL) | Use the `mcp__github__*` tools. |
-| `fly`, `sqlite3`, `litestream`, `tailscale`, `todoist` | Missing | Deploys, `npm run backup` and launchd backups are Mac-only. Inspect a DB copy with `better-sqlite3` from `node -e`. Litestream can be downloaded from its GitHub release for testing with a `file` replica. Never point it at R2. |
+| `fly`, `sqlite3`, `litestream`, `tailscale`, `todoist` | Missing | Deploys and `npm run backup` are Mac-only. Inspect a DB copy with `better-sqlite3` from `node -e`. Litestream can be downloaded from its GitHub release for testing with a `file` replica. Never point it at R2. |
 | Playwright | Global 1.56 at `/opt/node22/lib/node_modules/playwright`, Chromium at `/opt/pw-browsers`. No Playwright MCP, no WebKit | See [Screenshots](#screenshots-at-430932). Never run `playwright install`. |
 | Docker | CLI only, no daemon | The Fly image can't be built here. |
 | Clock | UTC (TZ unset), same as production | See [Dates](#dates-and-the-utc-clock). |
@@ -125,7 +125,7 @@ environment's settings, not in the repo. Deploys stay Mac-only either way (no
 
 ## Mac-only
 
-`fly deploy/logs/status`, `npm run backup` and the launchd backups,
+`fly deploy/logs/status`, `npm run backup`,
 `scripts/daily-briefing.py` (local Ollama and a vault checkout),
 `HEALTHKIT.md`'s Shortcut and VAPID setup, Tailscale HTTPS certs, and anything
 that needs the real `fitlocal.db`.
