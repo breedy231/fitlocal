@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
-import { parseHealthExportZip, computeLatestByMetric } from '../lib/health-xml-parser.js';
+import { parseHealthExportZip, computeLatestByMetric, computeMissingMetrics } from '../lib/health-xml-parser.js';
 import { lbsToKg } from 'fitlocal-shared';
 
 // Runtime validation (#82) — see routes/sets.ts for the conventions.
@@ -306,6 +306,7 @@ export async function healthRoutes(app: FastifyInstance) {
   });
 
   // Import Apple Health export zip (Settings > Health > Export All Health Data)
+  const MISSING_METRIC_WINDOW_DAYS = 14;
   app.post('/health/import-apple', { bodyLimit: 500 * 1024 * 1024 }, async (req, reply) => {
     const zipBuffer = Buffer.isBuffer(req.body)
       ? req.body
@@ -355,6 +356,13 @@ export async function healthRoutes(app: FastifyInstance) {
 
     const dateRange = `${snapshots[0].date} to ${snapshots[snapshots.length - 1].date}`;
     const latestByMetric = computeLatestByMetric(snapshots);
+    const missingMetrics = computeMissingMetrics(snapshots, MISSING_METRIC_WINDOW_DAYS);
+    if (missingMetrics.length > 0) {
+      req.log.warn(
+        { missingMetrics, sampleCounts: stats },
+        `health/import-apple: no ${missingMetrics.map(m => m.metric).join(', ')} in the last ${MISSING_METRIC_WINDOW_DAYS} days of the export`,
+      );
+    }
 
     return reply.status(200).send({
       daysProcessed: snapshots.length,
@@ -362,6 +370,7 @@ export async function healthRoutes(app: FastifyInstance) {
       ...results,
       sampleCounts: stats,
       latestByMetric,
+      missingMetrics,
     });
   });
 }

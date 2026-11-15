@@ -348,6 +348,34 @@ export function computeLatestByMetric(snapshots: DaySnapshot[]): Record<string, 
   return latest;
 }
 
+export interface MissingMetric {
+  metric: string; // same keys as computeLatestByMetric
+  latestDate: string | null; // last date with data anywhere in the export, or null if never
+  windowStart: string;
+  windowEnd: string;
+}
+
+const EXPECTED_METRICS = ['bodyWeight', 'steps', 'calories', 'protein', 'hrv', 'restingHr', 'sleep'] as const;
+
+/**
+ * Expected metrics with no data in the last `windowDays` days of the export.
+ * The window ends at the export's own last date, not today, so an old export
+ * doesn't flag everything. Issue #90: a scale or the MyFitnessPal Shortcut can
+ * stop writing to HealthKit silently, and a "successful" import hid it for months.
+ */
+export function computeMissingMetrics(snapshots: DaySnapshot[], windowDays = 14): MissingMetric[] {
+  if (snapshots.length === 0) return [];
+  const windowEnd = snapshots.reduce((max, s) => (s.date > max ? s.date : max), snapshots[0].date);
+  const start = new Date(windowEnd + 'T12:00:00Z');
+  start.setUTCDate(start.getUTCDate() - (windowDays - 1));
+  const windowStart = start.toISOString().slice(0, 10);
+
+  const latest = computeLatestByMetric(snapshots);
+  return EXPECTED_METRICS
+    .filter(metric => !latest[metric] || latest[metric] < windowStart)
+    .map(metric => ({ metric, latestDate: latest[metric] ?? null, windowStart, windowEnd }));
+}
+
 function findFile(dir: string, name: string): string[] {
   const results: string[] = [];
   try {
