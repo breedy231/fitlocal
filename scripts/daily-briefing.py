@@ -64,24 +64,76 @@ LAYOFF_RIR = "3-4 reps in reserve"   # a lift not done since the layoff (the API
 PPL_ROTATION = ["push", "pull", "legs"]
 
 
+# Failure alerts go to Discord through home-ai's shared script (a macOS
+# notification if Discord is down). Missing script = alerts skipped, logged.
+ALERT_SCRIPT = os.path.expanduser("~/Projects/home-ai/scripts/job-alert.sh")
+
+
+def alert(detail):
+    """Tell a person the briefing is degraded. Never raises: the note matters more."""
+    print(f"ALERT: {detail}", file=sys.stderr)
+    if not os.access(ALERT_SCRIPT, os.X_OK):
+        print(f"alert skipped: {ALERT_SCRIPT} not found", file=sys.stderr)
+        return
+    try:
+        subprocess.run([ALERT_SCRIPT, "FitLocal briefing degraded"], input=detail,
+                       text=True, timeout=60, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"alert failed: {e}", file=sys.stderr)
+
+
+def days_ago(date_str, today=None):
+    """'3 days ago' for an ISO date, or None if it doesn't parse."""
+    try:
+        n = ((today or datetime.date.today()) - datetime.date.fromisoformat(str(date_str)[:10])).days
+    except ValueError:
+        return None
+    if n <= 0:
+        return "today"
+    return "yesterday" if n == 1 else f"{n} days ago"
+
+
+def intake_line(n, today=None):
+    """Nutrition intake sentence, dated by the snapshot it really came from.
+    When today's snapshot is missing the API falls back to the newest one with
+    calories, which can be weeks old; calling that "yesterday" was wrong
+    (Nov 11 and Nov 14 2026 both showed the same Nov 1 numbers)."""
+    cur = n.get("calories", {}).get("current")
+    prot = n.get("protein", {}).get("current")
+    if cur is None and prot is None:
+        return " No intake logged."
+    snap = n.get("snapshotDate")
+    age = days_ago(snap, today) if snap else None
+    # The API's "today" is UTC, so in the evening here it calls the local day's
+    # own snapshot stale. Trust the snapshot date over the flag.
+    if not n.get("isStale") or age == "today":
+        return f" Today so far: {cur} cal / {prot}g protein."
+    when = f"{snap} ({age})" if age else "an earlier day"
+    return f" Nothing logged today; last logged intake was {when}: {cur} cal / {prot}g protein."
+
+
 def git_sync(repo, filepath, message):
-    """Pull latest, stage the note, commit if changed, and push. Best-effort."""
+    """Pull latest, stage the note, commit if changed, and push.
+    Returns an error string if the note did not reach the remote, else None."""
     def run(*args):
         return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True)
     pull = run("pull", "--rebase", "--autostash")
     if pull.returncode != 0:
         print(f"WARN: git pull failed: {pull.stderr.strip()}", file=sys.stderr)
     run("add", filepath)
-    if not run("status", "--porcelain").stdout.strip():
+    if not run("status", "--porcelain", "--", filepath).stdout.strip():
         print("git: no change to commit")
-        return
-    commit = run("commit", "-m", message)
+        return None
+    commit = run("commit", "-m", message, "--", filepath)
     if commit.returncode != 0:
         print(f"WARN: git commit failed: {commit.stderr.strip()}", file=sys.stderr)
-        return
+        return f"git commit failed: {commit.stderr.strip()[:200]}"
     push = run("push")
-    print("git: pushed" if push.returncode == 0 else f"WARN: git push failed: {push.stderr.strip()}",
-          file=sys.stderr if push.returncode != 0 else sys.stdout)
+    if push.returncode != 0:
+        print(f"WARN: git push failed: {push.stderr.strip()}", file=sys.stderr)
+        return f"git push failed (note is committed locally): {push.stderr.strip()[:200]}"
+    print("git: pushed")
+    return None
 
 
 def read_env_value(var_name):
@@ -103,14 +155,16 @@ def read_key():
     return key
 
 
-def get(path, key, timeout=25, retries=1):
+def get(path, key, timeout=25, retries=1, expect=None):
     """GET {BASE}{path} via curl. Returns parsed JSON, or None on failure.
     Retries once: the Fly machine auto-stops when idle and a cold start (Litestream
-    restore + boot) can exceed a short timeout on the first request."""
+    restore + boot) can exceed a short timeout on the first request.
+    curl -f turns a 401/500 into a failure; without it the error body parsed as
+    "data". `expect` (dict or list) rejects a body of the wrong shape the same way."""
     r = None
     for attempt in range(retries + 1):
         r = subprocess.run(
-            ["curl", "-sS", "-m", str(timeout), "-H", f"Authorization: Bearer {key}", BASE + path],
+            ["curl", "-sS", "-f", "-m", str(timeout), "-H", f"Authorization: Bearer {key}", BASE + path],
             capture_output=True, text=True,
         )
         if r.returncode == 0 and r.stdout.strip():
@@ -122,10 +176,14 @@ def get(path, key, timeout=25, retries=1):
         print(f"WARN: fetch {path} failed: {r.stderr.strip()}", file=sys.stderr)
         return None
     try:
-        return json.loads(r.stdout)
+        data = json.loads(r.stdout)
     except json.JSONDecodeError:
         print(f"WARN: fetch {path} returned non-JSON", file=sys.stderr)
         return None
+    if expect is not None and not isinstance(data, expect):
+        print(f"WARN: fetch {path} returned {type(data).__name__}, expected {expect.__name__}", file=sys.stderr)
+        return None
+    return data
 
 
 def infer_next_ppl_day(workouts_data):
@@ -519,10 +577,13 @@ def main():
     # Warm-up: wake the auto-stopped Fly machine with a long first timeout so the
     # real fetches below don't time out on a cold start.
     get("/health", key, timeout=90, retries=0)
-    g = get("/goals", key)
-    n = get("/goals/daily-nutrition", key)
-    snaps = get("/health-snapshots", key)
-    rec_raw = get("/recovery-summary", key)
+    g = get("/goals", key, expect=dict)
+    n = get("/goals/daily-nutrition", key, expect=dict)
+    snaps = get("/health-snapshots", key, expect=list)
+    rec_raw = get("/recovery-summary", key, expect=dict)
+    if rec_raw is not None and not isinstance(rec_raw.get("muscles"), list):
+        print("WARN: /recovery-summary has no muscles list", file=sys.stderr)
+        rec_raw = None
     dl = get("/deload-check", key)
     tl = get("/training-load", key)
     injury = get("/injury", key)
@@ -545,12 +606,13 @@ def main():
                if v is None]
     rec = {m["name"]: m["recoveryPct"] for m in rec_raw["muscles"]} if rec_raw else {}
 
-    # Latest logged weight + short trend (current-year rows with a body weight).
+    # Latest logged weight + short trend: the last 12 months of rows with a body
+    # weight. (Not "this calendar year": that dropped every weigh-in on Jan 1.)
     ws = []
     if snaps:
+        since = (datetime.date.today() - datetime.timedelta(days=365)).isoformat()
         ws = [s for s in snaps
-              if str(s.get("date", "")).startswith(str(datetime.date.today().year))
-              and s.get("bodyWeightKg")]
+              if isinstance(s, dict) and str(s.get("date", "")) >= since and s.get("bodyWeightKg")]
         ws.sort(key=lambda s: s["date"])
 
     # Compute cut figures up front so the recommendation can reference them.
@@ -558,10 +620,13 @@ def main():
     # out of the LLM prompt, so the rec doesn't reason from an old weight.
     cut_block = None
     cut_line = None          # None = omit from the LLM prompt
-    weighin_line = "**Weigh-in:** no body-weight log found."
+    # "Couldn't read" and "nothing logged" are different facts; say which.
+    weighin_line = ("**Weigh-in:** unknown, the weight log could not be read." if snaps is None
+                    else "**Weigh-in:** no body-weight log in the last 12 months.")
     if ws and not (g and g.get("targetWeightKg")):
         # No cut set (goals cleared): no cut block, just when the last weigh-in was.
-        weighin_line = f"**Weigh-in:** latest log is {ws[-1]['date']}."
+        age = days_ago(ws[-1]["date"])
+        weighin_line = f"**Weigh-in:** latest log is {ws[-1]['date']}" + (f" ({age})." if age else ".")
     elif ws and g:
         last = ws[-1]
         kg = last["bodyWeightKg"]
@@ -621,10 +686,7 @@ def main():
     if g:
         intake = ""
         if n:
-            cur = n.get("calories", {}).get("current")
-            prot = n.get("protein", {}).get("current")
-            intake = (f" Yesterday's logged intake (Apple Health not synced today yet): {cur} cal / {prot}g protein."
-                      if n.get("isStale") else f" Today so far: {cur} cal / {prot}g protein.")
+            intake = intake_line(n)
         # Goals are nullable: with no cut set there is no calorie target, only maintenance.
         tgt, prot_t, maint = g.get("targetCalories"), g.get("targetProteinG"), g.get("maintenanceCalories")
         prot_s = f" / {prot_t:.0f}g protein" if prot_t else ""
@@ -677,13 +739,29 @@ def main():
         f.write("\n".join(lines) + "\n")
     print(f"{datetime.datetime.now().isoformat(timespec='seconds')} wrote {path} [rec: {rec_source}]"
           + (f" (missing: {', '.join(missing)})" if missing else ""))
-    git_sync(VAULT_REPO, path, f"Daily briefing {today.month}-{today.day}-{str(today.year)[2:]}")
+    sync_error = git_sync(VAULT_REPO, path, f"Daily briefing {today.month}-{today.day}-{str(today.year)[2:]}")
+
+    # The note labels its own gaps, but a note is only seen if it is opened:
+    # Oct 16 to Nov 9 2026 ran on the fallback and nobody knew. Say it out loud.
+    problems = []
+    if missing:
+        problems.append(f"FitLocal API data unavailable: {', '.join(missing)}")
+    if not claude_rec:
+        problems.append("Claude recommendation failed, rule-based fallback used")
+    if sync_error:
+        problems.append(sync_error)
+    if problems:
+        alert("\n".join(problems) + f"\nNote: {fname}. Log: ~/Library/Logs/fitlocal-briefing.err.log")
 
     # Part 2: Web Push — send after the note is committed so a push failure never blocks the note.
     # First line only, truncated: iOS clips notification bodies around ~150 chars.
     push_body = (rec_text or f"{next_day.capitalize()} day — check the briefing note.").strip().splitlines()[0][:160]
     push_title = f"Daily Briefing — {next_day.capitalize()} Day"
     send_push_notifications(key, push_title, push_body, url="/")
+    # launchd records the exit code: non-zero when the note is missing data or
+    # never left this machine. (A fallback rec alone is still a usable note.)
+    if missing or sync_error:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
