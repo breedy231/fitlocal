@@ -17,3 +17,4 @@ export * from './exercise-description.js';
 export * from './units.js';
 export * from './injury.js';
 export * from './weight-trend.js';
+export * from './reentry.js';

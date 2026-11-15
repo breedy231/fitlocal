@@ -35,7 +35,8 @@ import datetime
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_PATH = os.path.join(REPO, ".env")
-BASE = "https://fitlocal-app.fly.dev/api"
+# FITLOCAL_API_BASE points the briefing at a local scratch API for testing.
+BASE = os.environ.get("FITLOCAL_API_BASE", "https://fitlocal-app.fly.dev/api")
 # Obsidian vault is a git clone of github.com/breedy231/vault (cross-device sync).
 # Kept OUTSIDE iCloud (~/vault, not ~/Documents) so git is the only sync mechanism.
 VAULT_REPO = "/Users/brendanreed/vault"
@@ -52,12 +53,12 @@ KG_TO_LBS = LB_PER_KG  # alias — same conversion, both names used below
 # and api.anthropic.com has verified fine over urllib in testing here.
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL = "claude-sonnet-5-5"
-CLAUDE_MAX_TOKENS = 300
+CLAUDE_MAX_TOKENS = 1024   # headroom; the 3-sentence cap is enforced below
 CLAUDE_TIMEOUT = 60   # seconds
 # Cut data older than this (latest weigh-in) is treated as stale: no cut numbers in the
 # note or the LLM prompt.
 STALE_WEIGHIN_DAYS = 14
-LAYOFF_RIR = "3-4 reps in reserve"   # effort cap while returning from a layoff
+LAYOFF_RIR = "3-4 reps in reserve"   # a lift not done since the layoff (the API's re-entry phase 1 cap)
 
 # PPL rotation order
 PPL_ROTATION = ["push", "pull", "legs"]
@@ -165,7 +166,7 @@ def format_duration(seconds):
     return f"{m}:{s:02d}"
 
 
-def render_exercise_obsidian(ex):
+def render_exercise_obsidian(ex, reentry=None):
     """
     Render a GeneratedExercise in Obsidian workout format:
       Exercise Name
@@ -208,15 +209,20 @@ def render_exercise_obsidian(ex):
         if weight_kg > 0 and rep_range:
             # The generator sets layoffDays when it lowered the weight for a
             # return from 21+ days off: leave more in the tank on those lifts.
+            # `reentry` (GET /reentry status) keeps the return-from-layoff effort cap
+            # for the whole plan, not just until each lift has been done once.
             if ex.get("layoffDays"):
-                lines.append(f"{LAYOFF_RIR} (first sessions back)")
+                lines.append(f"{LAYOFF_RIR} (first time back on this lift)")
+            elif reentry:
+                lines.append(f"{reentry['phase']['rir']} ({reentry['phase']['name'].lower()}, "
+                             f"week {reentry['week']} back)")
             else:
                 lines.append("1-2 reps in reserve")
 
     return "\n".join(lines)
 
 
-def build_session_section(generate_data, next_day):
+def build_session_section(generate_data, next_day, reentry=None):
     """Build the 'Today's session' Markdown block from /generate-workout response."""
     if not generate_data:
         return None
@@ -227,13 +233,65 @@ def build_session_section(generate_data, next_day):
     day_label = next_day.capitalize()
     blocks = [f"## Today's Session — {day_label} Day", ""]
     for ex in exercises:
-        blocks.append(render_exercise_obsidian(ex))
+        blocks.append(render_exercise_obsidian(ex, reentry))
         blocks.append("")
     return "\n".join(blocks).rstrip()
 
 
-def rule_based_recommendation(rec, dl, layoff_days=None, injury=None):
+def fmt_date(iso):
+    d = datetime.date.fromisoformat(str(iso)[:10])
+    return f"{d.strftime('%b')} {d.day}"
+
+
+def time_off(gap_days):
+    return f"{round(gap_days / 7)} weeks" if gap_days >= 14 else f"{gap_days} days"
+
+
+def build_reentry_section(reentry_data):
+    """'## Return to Training' block: time off, phase, effort, and the PT restriction.
+    Returns None when there's neither an active return plan nor an injury."""
+    if not reentry_data:
+        return None
+    st = reentry_data.get("status")
+    inj = reentry_data.get("injury")
+    if not st and not inj:
+        return None
+    out = ["## Return to Training", ""]
+    if st:
+        ph = st["phase"]
+        if st.get("returnDate"):
+            n = st.get("sessionsSinceReturn", 0)
+            back = (f"back since {fmt_date(st['returnDate'])} "
+                    f"({n} strength session{'s' if n != 1 else ''})")
+        else:
+            back = "next session is your first one back"
+        out += [
+            f"**Time off:** {time_off(st['gapDays'])} (last strength session "
+            f"{fmt_date(st['lastBeforeGap'])}); {back}.",
+            f"**Phase:** {ph['name']}, week {st['week']} of {st['totalWeeks']}. "
+            f"Effort: {ph['rir']}. {ph['load']} {ph['progression']}",
+            f"**Symptoms:** {st['symptomRule']}",
+        ]
+    if inj:
+        avoid = list(inj.get("avoid") or []) + list(inj.get("avoidMuscles") or []) + list(inj.get("avoidExercises") or [])
+        out.append(f"**PT restriction ({inj['label']}):** avoid "
+                   + ("; ".join(a.split(" — ")[0] for a in avoid) if avoid else "see notes") + ".")
+        if inj.get("notes"):
+            out.append(f"**PT notes:** {inj['notes']}")
+    if st:
+        out += ["", "*Effort, load and progression steps are inferred defaults, not from your PT.*"]
+    return "\n".join(out)
+
+
+def rule_based_recommendation(rec, dl, layoff_days=None, injury=None, reentry=None):
     """Deterministic fallback recommendation from recovery + deload flag."""
+    if reentry and reentry.get("returnDate"):
+        ph = reentry["phase"]
+        guard = (f" Respect the {injury.get('label', 'injury')} restriction." if injury else "")
+        return (f"Week {reentry['week']} back after {time_off(reentry['gapDays'])} off ({ph['name'].lower()} phase): "
+                f"do the planned session at {ph['rir']}. {ph['progression']} {reentry['symptomRule']}{guard}")
+    if reentry and not layoff_days:
+        layoff_days = reentry["gapDays"]
     if layoff_days:
         weeks = max(1, round(layoff_days / 7))
         guard = (f" Respect the {injury.get('label', 'injury')} restriction and stop any set that brings on symptoms."
@@ -256,7 +314,7 @@ def rule_based_recommendation(rec, dl, layoff_days=None, injury=None):
     return f"{todo}{caveat}{deload}"
 
 
-def claude_recommendation(rec, dl, tl, cut_line, injury=None, session_summary=None, layoff_days=None):
+def claude_recommendation(rec, dl, tl, cut_line, injury=None, session_summary=None, layoff_days=None, reentry=None):
     """Coaching rec from the Claude API (claude-sonnet-5-5). Returns clean prose, or None
     to trigger the rule-based fallback. Any missing key, API error, or empty/junk
     response falls back — never raises."""
@@ -281,7 +339,17 @@ def claude_recommendation(rec, dl, tl, cut_line, injury=None, session_summary=No
     # The recovery model only measures time since a muscle was trained. After
     # weeks off it reads 100% everywhere, which is detraining, not readiness.
     layoff_line = ""
-    if layoff_days:
+    if reentry:
+        ph = reentry["phase"]
+        back = (f"returned {reentry['returnDate']} ({reentry['sessionsSinceReturn']} strength sessions since)"
+                if reentry.get("returnDate") else "today is the first session back")
+        layoff_line = (
+            f"- RETURN FROM LAYOFF: {reentry['gapDays']} days off; {back}. Week {reentry['week']} of a "
+            f"{reentry['totalWeeks']}-week return plan, {ph['name']} phase: effort {ph['rir']}. {ph['load']} "
+            f"{ph['progression']} {reentry['symptomRule']} Recovery numbers near 100% reflect time off, "
+            "NOT readiness. Never say to push it.\n"
+        )
+    elif layoff_days:
         weeks = max(1, round(layoff_days / 7))
         layoff_line = (
             f"- RETURN FROM LAYOFF: he has not trained these lifts for about {weeks} weeks "
@@ -319,6 +387,11 @@ def claude_recommendation(rec, dl, tl, cut_line, injury=None, session_summary=No
     body = json.dumps({
         "model": CLAUDE_MODEL,
         "max_tokens": CLAUDE_MAX_TOKENS,
+        # Thinking is on by default on this model and spent the whole token budget
+        # before any text came out (stop_reason max_tokens, empty rec). A 2-3 sentence
+        # answer doesn't need it; `between_tools` is how Sonnet 5.5 turns it off
+        # ({"type": "disabled"} is a 400 on this model).
+        "thinking": {"type": "between_tools"},
         "messages": [{"role": "user", "content": prompt}],
     }).encode("utf-8")
     req = urllib.request.Request(
@@ -344,6 +417,9 @@ def claude_recommendation(rec, dl, tl, cut_line, injury=None, session_summary=No
         print("WARN: claude returned non-JSON; using fallback", file=sys.stderr)
         return None
 
+    if data.get("stop_reason") in ("refusal", "max_tokens"):
+        print(f"WARN: claude stop_reason={data.get('stop_reason')}; using fallback", file=sys.stderr)
+        return None
     text = "".join(
         block.get("text", "") for block in data.get("content", []) if block.get("type") == "text"
     ).strip()
@@ -450,6 +526,8 @@ def main():
     dl = get("/deload-check", key)
     tl = get("/training-load", key)
     injury = get("/injury", key)
+    reentry_data = get("/reentry", key)
+    reentry = (reentry_data or {}).get("status")
 
     # Fetch recent workouts to infer next PPL day
     workouts_data = get("/workouts?limit=10", key)
@@ -520,19 +598,22 @@ def main():
         names = ", ".join(e.get("name", "?") for e in generate_data["exercises"][:8])
         session_summary = f"{next_day.capitalize()} day ({names})"
 
-    # Recommendation: Claude Sonnet 5 first, deterministic fallback if it fails/errors.
+    # Recommendation: Claude Sonnet 5.5 first, deterministic fallback if it fails/errors.
     # Longest layoff among today's planned lifts (the generator reports it per exercise).
     layoff_days = max((e.get("layoffDays") or 0 for e in (generate_data or {}).get("exercises", [])), default=0) or None
 
-    claude_rec = claude_recommendation(rec, dl, tl, cut_line, injury, session_summary, layoff_days)
-    rec_text = claude_rec or rule_based_recommendation(rec, dl, layoff_days, injury)
-    rec_source = "Claude Sonnet 5" if claude_rec else "rule-based fallback"
+    claude_rec = claude_recommendation(rec, dl, tl, cut_line, injury, session_summary, layoff_days, reentry)
+    rec_text = claude_rec or rule_based_recommendation(rec, dl, layoff_days, injury, reentry)
+    rec_source = "Claude Sonnet 5.5" if claude_rec else "rule-based fallback"
 
     today = datetime.date.today()
     fname = f"Daily Briefing {today.month}-{today.day}-{str(today.year)[2:]}.md"
     lines = [f"# Daily Briefing — {today.strftime('%A, %B %-d, %Y')}", ""]
     if rec_text:
         lines += [f"**Today:** {rec_text}", ""]
+    reentry_section = build_reentry_section(reentry_data)
+    if reentry_section:
+        lines += [reentry_section, ""]
     if cut_block:
         lines += [cut_block, ""]
 
@@ -557,7 +638,7 @@ def main():
     lines += [weighin_line, ""]
 
     # Today's session plan.
-    session_section = build_session_section(generate_data, next_day)
+    session_section = build_session_section(generate_data, next_day, reentry)
     if session_section:
         lines += [session_section, ""]
     else:
@@ -570,7 +651,7 @@ def main():
     if args.json:
         # Consumed by ~/Projects/home-ai/scripts/morning-briefing.js at 07:00. Same rec as the
         # note (one prompt, one fallback); only the output shape differs.
-        session = [{"name": ex.get("name", "?"), "plan": render_exercise_obsidian(ex).split("\n")[1:]}
+        session = [{"name": ex.get("name", "?"), "plan": render_exercise_obsidian(ex, reentry).split("\n")[1:]}
                    for ex in (generate_data or {}).get("exercises", [])]
         print(json.dumps({
             "day": next_day,
@@ -578,6 +659,7 @@ def main():
             "recSource": rec_source,
             "session": session,
             "layoffDays": layoff_days,
+            "reentry": reentry,
             "injury": (injury or {}).get("label") if injury else None,
             "missing": missing + ([] if generate_data else ["session plan"]),
         }))

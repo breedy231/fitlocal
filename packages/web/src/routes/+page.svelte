@@ -7,6 +7,7 @@
   import ChallengeCard from '$lib/ChallengeCard.svelte';
   import NutritionCard from '$lib/NutritionCard.svelte';
   import CutProgressCard from '$lib/CutProgressCard.svelte';
+  import ReentryCard from '$lib/ReentryCard.svelte';
   import Expandable from '$lib/Expandable.svelte';
   import BarChart from '$lib/BarChart.svelte';
   import type {
@@ -240,6 +241,11 @@
       </svg>
     {/if}
   </button>
+
+  <!-- Return from layoff + PT restriction (hidden when neither applies) -->
+  <section class="mb-6">
+    <ReentryCard />
+  </section>
 
   {#if loading}
     <div class="flex justify-center py-12">
