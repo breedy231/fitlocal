@@ -31,7 +31,7 @@ interface WgerPaged<T> {
 // translations, images, and (fully-expanded) equipment objects.
 interface WgerExerciseInfo {
   id: number;
-  translations: Array<{ language: number; name: string; description: string }>;
+  translations: Array<{ language: number; name: string; description: string | null }>;
   images: Array<{ image: string; is_main: boolean }>;
   equipment: Array<{ id: number; name: string }>;
 }
@@ -142,7 +142,7 @@ async function main() {
     // pickBestDescription filters non-Latin text and prefers instructional copy.
     const candidates = (info.translations ?? [])
       .sort((a, b) => (a.language === ENGLISH ? -1 : 0) - (b.language === ENGLISH ? -1 : 0))
-      .map((t) => stripHtml(t.description));
+      .map((t) => stripHtml(t.description ?? ''));
     const description = pickBestDescription(candidates);
 
     const mainImage = info.images?.find((img) => img.is_main);
