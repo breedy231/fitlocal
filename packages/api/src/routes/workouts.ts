@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { eq, desc, like, sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
-import { startedAtForNewWorkout } from '../lib/session-window.js';
+import { startedAtForNewWorkout, touchWorkoutEnd } from '../lib/session-window.js';
 import { idParams } from '../lib/http.js';
 import { CARDIO_PATTERN } from 'fitlocal-shared';
 
@@ -79,6 +79,21 @@ const addWorkoutExerciseBody = {
     displayOrder: { type: ['integer', 'null'] },
     supersetGroup: { type: ['integer', 'null'] },
     swapReason: { type: ['string', 'null'] },
+    // Optional atomic extras: create the sets in the same transaction, and/or
+    // delete the workout_exercise being swapped out (must be in this workout).
+    sets: {
+      type: 'array',
+      maxItems: 20,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          reps: { type: ['integer', 'null'] },
+          weightKg: { type: ['number', 'null'] },
+        },
+      },
+    },
+    replaceWorkoutExerciseId: { type: 'integer' },
   },
 } as const;
 
@@ -460,19 +475,67 @@ export async function workoutRoutes(app: FastifyInstance) {
     }
   );
 
-  // Add exercise to existing workout
-  app.post<{ Params: { id: string }; Body: { exerciseId: number; displayOrder?: number; supersetGroup?: number | null; swapReason?: string } }>(
+  // Add exercise to existing workout. Optional `sets` creates the sets and
+  // optional `replaceWorkoutExerciseId` deletes the exercise being swapped out,
+  // all in ONE transaction so a dropped connection can't leave a half-swap.
+  app.post<{
+    Params: { id: string };
+    Body: {
+      exerciseId: number;
+      displayOrder?: number;
+      supersetGroup?: number | null;
+      swapReason?: string;
+      sets?: Array<{ reps?: number | null; weightKg?: number | null }>;
+      replaceWorkoutExerciseId?: number;
+    };
+  }>(
     '/workouts/:id/exercises',
     { schema: { params: idParams, body: addWorkoutExerciseBody } },
     async (req, reply) => {
       const workoutId = parseInt(req.params.id);
-      const { exerciseId, displayOrder = 0, supersetGroup, swapReason } = req.body;
-      const result = db
-        .insert(schema.workoutExercises)
-        .values({ workoutId, exerciseId, displayOrder, supersetGroup: supersetGroup ?? null, swapReason: swapReason ?? null })
-        .returning()
-        .get();
-      return reply.status(201).send(result);
+      const { exerciseId, displayOrder = 0, supersetGroup, swapReason, sets, replaceWorkoutExerciseId } = req.body;
+
+      const outcome = db.transaction((tx) => {
+        if (replaceWorkoutExerciseId !== undefined) {
+          const old = tx
+            .select({ workoutId: schema.workoutExercises.workoutId })
+            .from(schema.workoutExercises)
+            .where(eq(schema.workoutExercises.id, replaceWorkoutExerciseId))
+            .get();
+          if (!old || old.workoutId !== workoutId) return null;
+        }
+        const we = tx
+          .insert(schema.workoutExercises)
+          .values({ workoutId, exerciseId, displayOrder, supersetGroup: supersetGroup ?? null, swapReason: swapReason ?? null })
+          .returning()
+          .get();
+        if (sets === undefined) {
+          // Legacy shape: exactly the bare workout_exercise row.
+          if (replaceWorkoutExerciseId !== undefined) {
+            tx.delete(schema.workoutExercises).where(eq(schema.workoutExercises.id, replaceWorkoutExerciseId)).run();
+          }
+          return we;
+        }
+        const created = sets.map((s) =>
+          tx
+            .insert(schema.sets)
+            .values({ workoutExerciseId: we.id, reps: s.reps ?? null, weightKg: s.weightKg ?? null })
+            .returning()
+            .get(),
+        );
+        if (replaceWorkoutExerciseId !== undefined) {
+          // FK ON DELETE CASCADE removes the old exercise's sets.
+          tx.delete(schema.workoutExercises).where(eq(schema.workoutExercises.id, replaceWorkoutExerciseId)).run();
+        }
+        return { ...we, sets: created };
+      });
+
+      if (outcome === null) {
+        return reply.status(404).send({ error: 'replaceWorkoutExerciseId not found in this workout' });
+      }
+      // Heartbeat (#59), same as POST /sets: extend the live workout's HR window.
+      if (sets !== undefined && sets.length > 0) touchWorkoutEnd(outcome.id);
+      return reply.status(201).send(outcome);
     }
   );
 
