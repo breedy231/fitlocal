@@ -4,6 +4,7 @@
 /// <reference lib="webworker" />
 
 import { build, files, version } from '$service-worker';
+import { fetchWithSoftTimeout } from '$lib/sw-network';
 
 const CACHE = `cache-${version}`;
 const API_CACHE = `api-cache-${version}`;
@@ -13,7 +14,11 @@ const ASSETS = [...build, ...files];
 // same page, so it has to be precached for the PWA to cold-start offline.
 const APP_SHELL = '/';
 const API_CACHE_MAX = 50;
+// Soft: after this, serve a cached copy if one exists. Hard: give up on the
+// network entirely. Slow gym connections routinely take longer than the soft
+// timeout, so an uncached request must not fail there.
 const NETWORK_TIMEOUT_MS = 3000;
+const NETWORK_HARD_TIMEOUT_MS = 20000;
 
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
@@ -43,36 +48,33 @@ sw.addEventListener('activate', (event) => {
 });
 
 /**
- * Network-first with timeout: try network, fall back to cache.
- * On success, cache the response for future offline/slow use.
+ * Network-first with a soft timeout (see lib/sw-network.ts): a slow response
+ * falls back to cache, but with nothing cached we keep waiting on the live
+ * request instead of inventing a 503. Successful responses refresh the cache.
  */
 async function networkFirstWithTimeout(request: Request): Promise<Response> {
   const cache = await caches.open(API_CACHE);
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
+  const response = await fetchWithSoftTimeout({
+    fetch: async (signal) => {
+      const res = await fetch(request, { signal });
+      if (res.ok) {
+        // Cache the response (clone since body can only be read once)
+        cache.put(request, res.clone()).then(() => evictApiCache(cache));
+      }
+      return res;
+    },
+    cached: () => cache.match(request),
+    softTimeoutMs: NETWORK_TIMEOUT_MS,
+    hardTimeoutMs: NETWORK_HARD_TIMEOUT_MS,
+  });
+  if (response) return response;
 
-    const response = await fetch(request, { signal: controller.signal });
-    clearTimeout(timeoutId);
-
-    if (response.ok) {
-      // Cache the response (clone since body can only be read once)
-      cache.put(request, response.clone()).then(() => evictApiCache(cache));
-    }
-
-    return response;
-  } catch {
-    // Network failed or timed out — try cache
-    const cached = await cache.match(request);
-    if (cached) return cached;
-
-    // Nothing in cache either — return a proper error response
-    return new Response(JSON.stringify({ error: 'Offline' }), {
-      status: 503,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  // Network really failed and nothing is cached
+  return new Response(JSON.stringify({ error: 'Offline' }), {
+    status: 503,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 /** Keep API cache under max size by evicting oldest entries */
@@ -92,16 +94,13 @@ async function evictApiCache(cache: Cache) {
  * fall back to the precached shell when there's no (or a dead) connection.
  */
 async function navigate(request: Request): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
-  try {
-    return await fetch(request, { signal: controller.signal });
-  } catch {
-    const shell = await caches.match(APP_SHELL, { cacheName: CACHE });
-    return shell ?? Response.error();
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  const response = await fetchWithSoftTimeout({
+    fetch: (signal) => fetch(request, { signal }),
+    cached: () => caches.match(APP_SHELL, { cacheName: CACHE }),
+    softTimeoutMs: NETWORK_TIMEOUT_MS,
+    hardTimeoutMs: NETWORK_HARD_TIMEOUT_MS,
+  });
+  return response ?? Response.error();
 }
 
 sw.addEventListener('fetch', (event) => {
