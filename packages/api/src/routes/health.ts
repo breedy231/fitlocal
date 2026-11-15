@@ -2,8 +2,8 @@ import { FastifyInstance } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db, schema } from '../db.js';
 import { parseHealthExportZip, computeLatestByMetric } from '../lib/health-xml-parser.js';
-import { localDate } from '../lib/session-window.js';
 import { lbsToKg } from 'fitlocal-shared';
+import { localDate } from '../lib/session-window.js';
 
 // Runtime validation (#82) — see routes/sets.ts for the conventions.
 // steps is number (not integer): HealthKit sends float aggregates.
